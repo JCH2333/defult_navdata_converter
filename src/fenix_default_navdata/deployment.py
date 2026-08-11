@@ -51,6 +51,8 @@ def deploy(candidate: Path, target: Path, *, allow_test_build: bool = False, bac
     validation = validate_candidate(candidate)
     if not validation["valid"]:
         raise RuntimeError("候选缺少 BGL、bglIndex.bout 或包元数据，拒绝覆盖")
+    if validation.get("test_build") and not allow_test_build:
+        raise RuntimeError("test build requires explicit --allow-test-build")
     if not validation["deployable"] and not allow_test_build:
         raise RuntimeError("候选不是可部署成品；必须显式使用 --allow-test-build")
     if not target.is_dir():

@@ -479,12 +479,18 @@ def test_package_tool_project_is_deterministic(tmp_path: Path):
         output_dir=r"scenery\test-navdata",
         source_xmls=(source, second_source),
         package_order_hint="CUSTOM_NAVDATA_PATCH",
+        dependencies=("navigraph-nav-base", "navigraph-nav-jepp"),
     )
     parsed = ET.parse(project).getroot()
     assert parsed.tag == "Project"
     assert parsed.findtext("Packages/Package") == r"PackageDefinitions\test-navdata.xml"
     definition = ET.parse(root / "PackageDefinitions" / "test-navdata.xml").getroot()
     assert definition.findtext("PackageOrderHint") == "CUSTOM_NAVDATA_PATCH"
+    assert [
+        item.findtext("Name")
+        for item in definition.findall("Dependencies/Dependency")
+    ] == ["navigraph-nav-base", "navigraph-nav-jepp"]
+    assert definition.findtext("ItemSettings/Creator") == "PMDG DFD v2 converter"
     assert definition.findtext("AssetGroups/AssetGroup/Type") == "BGL"
     assert definition.findtext("AssetGroups/AssetGroup/OutputDir") == r"scenery\test-navdata"
     assert (root / "PackageSources" / "NavData" / "source.xml").read_bytes() == source.read_bytes()

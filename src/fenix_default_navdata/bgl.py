@@ -1490,6 +1490,7 @@ def write_package_project(
     output_dir: str,
     source_xmls: tuple[Path, ...],
     package_order_hint: str,
+    dependencies: tuple[str, ...] = (),
 ) -> Path:
     """生成可由 MSFS 2024 Package Tool 构建的最小项目。"""
     project_root.mkdir(parents=True, exist_ok=True)
@@ -1506,10 +1507,19 @@ def write_package_project(
     ET.SubElement(settings, "ContentType").text = "SCENERY"
     ET.SubElement(settings, "Title").text = title
     ET.SubElement(settings, "Manufacturer").text = "User NavData"
-    ET.SubElement(settings, "Creator").text = "Fenix to Default NavData Converter"
+    ET.SubElement(settings, "Creator").text = "PMDG DFD v2 converter"
     flags = ET.SubElement(package, "Flags")
     ET.SubElement(flags, "VisibleInStore").text = "false"
     ET.SubElement(flags, "CanBeReferenced").text = "false"
+    if dependencies:
+        dependency_root = ET.SubElement(package, "Dependencies")
+        for dependency in dependencies:
+            dependency_element = ET.SubElement(
+                dependency_root,
+                "Dependency",
+                {"Version": "0.1.0"},
+            )
+            ET.SubElement(dependency_element, "Name").text = dependency
     groups = ET.SubElement(package, "AssetGroups")
     group = ET.SubElement(groups, "AssetGroup", {"Name": "NavData"})
     ET.SubElement(group, "Type").text = "BGL"

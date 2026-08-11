@@ -48,8 +48,8 @@ def _manifest(name: str, title: str, dependencies: list[dict[str, str]], size: i
         "content_type": "SCENERY",
         "title": title,
         "manufacturer": "User NavData",
-        "creator": "Fenix to Default NavData Converter",
-        "package_version": "0.1.0-test",
+        "creator": "PMDG DFD v2 converter",
+        "package_version": "0.1.0",
         "minimum_game_version": "1.7.35",
         "minimum_compatibility_version": "7.26.0.214",
         "export_type": "Community",
@@ -91,6 +91,7 @@ def _compile_xml_package(
     duplicate_terminal_waypoints: bool,
     dependencies: list[dict[str, str]],
     package_order_hint: str,
+    title: str,
 ) -> dict[str, object]:
     work = package_root.parent / "_work" / "sdk-projects" / package_root.name
     work.mkdir(parents=True, exist_ok=True)
@@ -117,10 +118,11 @@ def _compile_xml_package(
         project_path = write_package_project(
             work,
             package_name=package_root.name,
-            title=f"China NavData AIRAC {cycle.number}",
+            title=title,
             output_dir=f"scenery\\{package_name}",
             source_xmls=tuple(xml_paths),
             package_order_hint=package_order_hint,
+            dependencies=tuple(item["name"] for item in dependencies),
         )
         compile_report = compile_package(
             project_path,
@@ -222,6 +224,7 @@ def build_candidate(
             (
                 NAV_PACKAGE,
                 "pmdg-china-navdata",
+                "China NavData AIRAC 2608",
                 True,
                 True,
                 [
@@ -233,6 +236,7 @@ def build_candidate(
             (
                 AIRPORT_PACKAGE,
                 "pmdg-china-airport-patch",
+                "China NavData AIRAC 2608 Airport Procedure Patch",
                 False,
                 False,
                 [{"name": NAV_PACKAGE, "package_version": "0.1.0"}],
@@ -242,6 +246,7 @@ def build_candidate(
         for (
             output_name,
             package_name,
+            title,
             include_enroute,
             duplicate_terminal_waypoints,
             dependencies,
@@ -261,6 +266,7 @@ def build_candidate(
                     duplicate_terminal_waypoints=duplicate_terminal_waypoints,
                     dependencies=dependencies,
                     package_order_hint=package_order_hint,
+                    title=title,
                 )
             except CompilerUnavailable as error:
                 report["packages"][output_name] = {

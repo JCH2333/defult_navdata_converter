@@ -57,6 +57,7 @@ def validate_candidate(candidate: Path, reference: Path | None = None) -> dict[s
         "package_contract": package_contract,
         "bgl_count": len(bgls),
         "report_status": report.get("status"),
+        "test_build": bool(report.get("test_build")),
         "compiler": report.get("compiler"),
         "reference": None,
     }
