@@ -1082,10 +1082,11 @@ def _waypoint_identity(
     country: str,
     latitude: float,
     longitude: float,
+    source_type: str = "",
 ) -> tuple[str, str, str]:
     normalized_ident = _normalized_waypoint_ident(ident, latitude, longitude)
     return (
-        _waypoint_type(normalized_ident),
+        _route_point_type(source_type),
         (country or "CN").upper()[:2],
         normalized_ident,
     )
@@ -1105,6 +1106,7 @@ def _append_enroute(
                 "longitude": leg.start_longitude,
                 "name": leg.start_ident,
                 "key": f"airway-start:{leg.airway}:{leg.sequence}",
+                "source_type": leg.start_type,
             })())
         if leg.end_latitude is not None and leg.end_longitude is not None:
             points.append(type("_Point", (), {
@@ -1114,6 +1116,7 @@ def _append_enroute(
                 "longitude": leg.end_longitude,
                 "name": leg.end_ident,
                 "key": f"airway-end:{leg.airway}:{leg.sequence}",
+                "source_type": leg.end_type,
             })())
     deduped: dict[tuple[str, str, str], object] = {}
     for point in sorted(
@@ -1131,6 +1134,7 @@ def _append_enroute(
             str(point.country or "CN"),
             float(point.latitude),
             float(point.longitude),
+            str(getattr(point, "source_type", "")),
         ), point)
     route_children: dict[
         tuple[str, str, str],
@@ -1147,12 +1151,14 @@ def _append_enroute(
             leg.start_country,
             leg.start_latitude,
             leg.start_longitude,
+            leg.start_type,
         )
         end_key = _waypoint_identity(
             leg.end_ident,
             leg.end_country,
             leg.end_latitude,
             leg.end_longitude,
+            leg.end_type,
         )
         route_children.setdefault(start_key, []).append((
             leg.airway,
@@ -1183,6 +1189,7 @@ def _append_enroute(
             str(point.country or "CN"),
             float(point.latitude),
             float(point.longitude),
+            str(getattr(point, "source_type", "")),
         )
         point_element = ET.SubElement(root, "Waypoint", _attrs(
             lat=_float(point.latitude),

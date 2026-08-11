@@ -274,6 +274,31 @@ def test_enroute_projection_normalizes_sdk_identity_and_route_requirements(tmp_p
     }
 
 
+def test_enroute_projection_preserves_route_endpoint_types(tmp_path: Path):
+    model = NavModel(Path("source"))
+    source = SourceRef("RTE_SEG.csv", 2)
+    model.airway_legs.append(AirwayLeg(
+        "A1", 1, "VOR01", "NDB01", source,
+        start_latitude=30.0, start_longitude=110.0,
+        end_latitude=31.0, end_longitude=111.0,
+        start_country="ZH", end_country="ZH",
+        start_type="VORDME", end_type="NDB",
+    ))
+
+    output = tmp_path / "enroute-types.xml"
+    write_bglcomp_xml(model, DEFAULT_CYCLE, output, scope="enroute")
+
+    root = ET.parse(output).getroot()
+    start = root.find("Waypoint[@waypointIdent='VOR01']")
+    end = root.find("Waypoint[@waypointIdent='NDB01']")
+    assert start is not None
+    assert end is not None
+    assert start.attrib["waypointType"] == "VOR"
+    assert end.attrib["waypointType"] == "NDB"
+    assert start.find("Route/Next").attrib["waypointType"] == "NDB"
+    assert end.find("Route/Previous").attrib["waypointType"] == "VOR"
+
+
 def test_leg_projection_uses_type_specific_semantic_fields(tmp_path: Path):
     model = NavModel(Path("source"))
     source = SourceRef("fixture", 1)
