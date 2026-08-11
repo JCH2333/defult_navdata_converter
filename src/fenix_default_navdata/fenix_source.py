@@ -4,6 +4,7 @@ import math
 import re
 import sqlite3
 from contextlib import closing
+from dataclasses import replace
 from pathlib import Path
 
 from .model import (
@@ -214,34 +215,142 @@ def _load_ilses(
 
 
 def _load_enroute_points(connection: sqlite3.Connection, model: NavModel) -> None:
-    countries = {
-        int(row["ID"]): str(row["Country"] or "")
-        for row in connection.execute("SELECT ID, Country FROM WaypointLookup")
+    by_location: dict[tuple[float, float], list[int]] = {}
+    for index, point in enumerate(model.waypoints):
+        by_location.setdefault(_point_location_key(point.latitude, point.longitude), []).append(index)
+    route_locations = {
+        _point_location_key(latitude, longitude)
+        for leg in model.airway_legs
+        for latitude, longitude in (
+            (leg.start_latitude, leg.start_longitude),
+            (leg.end_latitude, leg.end_longitude),
+        )
+        if latitude is not None and longitude is not None
     }
-    existing = {
-        (point.ident.upper(), round(point.latitude, 6), round(point.longitude, 6))
-        for point in model.waypoints
-    }
-    for row in connection.execute(
-        "SELECT * FROM Waypoints WHERE ID>=? AND NavaidID IS NULL ORDER BY ID",
-        (FENIX_ENROUTE_WAYPOINT_START,),
-    ):
+    query = """
+        WITH waypoint_country AS (
+            SELECT ID, MIN(Country) AS Country
+            FROM WaypointLookup
+            GROUP BY ID
+        )
+        SELECT w.*, waypoint_country.Country AS LookupCountry
+        FROM Waypoints AS w
+        JOIN waypoint_country ON waypoint_country.ID = w.ID
+        WHERE w.NavaidID IS NULL
+          AND SUBSTR(waypoint_country.Country, 1, 2) IN (
+              'ZB', 'ZG', 'ZH', 'ZJ', 'ZL', 'ZP', 'ZS', 'ZU', 'ZW', 'ZY'
+          )
+        ORDER BY w.ID
+    """
+    for row in connection.execute(query):
         ident = str(row["Ident"] or "").strip().upper()
         if not ident:
             continue
-        key = (ident, round(float(row["Latitude"]), 6), round(float(row["Longtitude"]), 6))
-        if key in existing:
+        latitude = float(row["Latitude"])
+        longitude = float(row["Longtitude"])
+        location = _point_location_key(latitude, longitude)
+        country = str(row["LookupCountry"] or "")
+        candidate_indexes = by_location.get(location, [])
+        if (
+            int(row["ID"]) < FENIX_ENROUTE_WAYPOINT_START
+            and not candidate_indexes
+            and location not in route_locations
+        ):
             continue
-        existing.add(key)
+        same_ident = next(
+            (
+                index
+                for index in candidate_indexes
+                if model.waypoints[index].ident.upper() == ident
+            ),
+            None,
+        )
+        if same_ident is not None:
+            point = model.waypoints[same_ident]
+            model.waypoints[same_ident] = replace(
+                point,
+                country=country or point.country,
+            )
+            continue
+        if len(candidate_indexes) == 1:
+            # Fenix owns the current-cycle identity and region. The structured
+            # 424 point remains the coordinate evidence when its older label
+            # differs, such as the raw ``****`` placeholder.
+            index = candidate_indexes[0]
+            point = model.waypoints[index]
+            model.waypoints[index] = replace(
+                point,
+                ident=ident,
+                name=str(row["Name"] or ident),
+                country=country or point.country,
+                source=SourceRef("Fenix:Waypoints", int(row["ID"])),
+            )
+            continue
         model.waypoints.append(Waypoint(
             key=f"fenix-waypoint:{row['ID']}",
             ident=ident,
             name=str(row["Name"] or ident),
-            latitude=float(row["Latitude"]),
-            longitude=float(row["Longtitude"]),
+            latitude=latitude,
+            longitude=longitude,
             source=SourceRef("Fenix:Waypoints", int(row["ID"])),
-            country=countries.get(int(row["ID"]), ""),
+            country=country,
         ))
+        by_location.setdefault(location, []).append(len(model.waypoints) - 1)
+
+
+def _point_location_key(latitude: float, longitude: float) -> tuple[float, float]:
+    """Return the shared 424/Fenix physical-point key at source precision."""
+    return round(float(latitude), 5), round(float(longitude), 5)
+
+
+def _canonicalize_airway_endpoints(model: NavModel) -> None:
+    by_location: dict[tuple[float, float], Waypoint] = {}
+    for point in sorted(
+        model.waypoints,
+        key=lambda item: (
+            not item.source.file.startswith("Fenix:"),
+            item.ident,
+            item.country,
+            item.key,
+        ),
+    ):
+        by_location.setdefault(_point_location_key(point.latitude, point.longitude), point)
+
+    def endpoint(
+        ident: str,
+        country: str,
+        latitude: float | None,
+        longitude: float | None,
+    ) -> tuple[str, str]:
+        if latitude is None or longitude is None:
+            return ident, country
+        point = by_location.get(_point_location_key(latitude, longitude))
+        if point is None:
+            return ident, country
+        return point.ident, point.country or country
+
+    canonicalized = []
+    for leg in model.airway_legs:
+        start_ident, start_country = endpoint(
+            leg.start_ident,
+            leg.start_country,
+            leg.start_latitude,
+            leg.start_longitude,
+        )
+        end_ident, end_country = endpoint(
+            leg.end_ident,
+            leg.end_country,
+            leg.end_latitude,
+            leg.end_longitude,
+        )
+        canonicalized.append(replace(
+            leg,
+            start_ident=start_ident,
+            start_country=start_country,
+            end_ident=end_ident,
+            end_country=end_country,
+        ))
+    model.airway_legs = canonicalized
 
 
 def _load_navaids(connection: sqlite3.Connection, model: NavModel) -> None:
@@ -532,6 +641,7 @@ def load_fenix_model(fenix_db: Path, raw_root: Path, cycle: Cycle) -> NavModel:
         runways = _load_runways(connection, model, airport_keys)
         _load_ilses(connection, model, runways)
         _load_enroute_points(connection, model)
+        _canonicalize_airway_endpoints(model)
         _load_navaids(connection, model)
         _load_procedures(connection, model, airport_keys)
         _load_holdings(connection, model)
