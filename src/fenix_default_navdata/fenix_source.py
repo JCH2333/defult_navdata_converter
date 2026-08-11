@@ -39,6 +39,9 @@ SDK_FIX_REQUIRED_LEG_TYPES = {
     "AF", "CF", "DF", "FA", "FC", "FD", "FM", "HA", "HF", "HM", "IF", "PI",
     "RF", "TF",
 }
+FENIX_PROCEDURE_LABEL_REPAIRS = {
+    ("ZLZY", "arrival", "29R", "P91A\u95c1?"): "P9119A",
+}
 
 
 class FenixSourceError(RuntimeError):
@@ -115,6 +118,20 @@ def _leg_type(track_code: str | None) -> str | None:
     if value.startswith("RWY"):
         value = value.removeprefix("RWY")
     return value if value in SDK_LEG_TYPES else None
+
+
+def _procedure_label(
+    airport: str,
+    kind: str,
+    runway: str,
+    value: str | None,
+) -> str:
+    raw = str(value or "").strip().upper()
+    repaired = FENIX_PROCEDURE_LABEL_REPAIRS.get(
+        (airport, kind, runway, raw),
+        raw,
+    )
+    return repaired[:6]
 
 
 def _load_airports(connection: sqlite3.Connection, model: NavModel) -> dict[int, str]:
@@ -449,12 +466,19 @@ def _load_procedures(
         if airport_key is None or kind is None:
             return
         airport = model.airports[airport_key]
+        runway = str(active_header["runway"] or "").strip().upper()
+        label = _procedure_label(
+            airport.icao,
+            kind,
+            runway,
+            active_header["procedure_name"] or active_header["full_name"],
+        )
         transition = active_key[2]
         model.procedure_segments.append(ProcedureSegment(
             airport=airport.icao,
-            label=str(active_header["procedure_name"] or active_header["full_name"] or "")[:6],
+            label=label,
             kind=kind,
-            runway=str(active_header["runway"] or "").strip().upper(),
+            runway=runway,
             transition="" if transition == "ALL" else transition,
             legs=tuple(active_legs),
             source=SourceRef("Fenix:Terminals", int(active_header["terminal_id"])),
@@ -476,6 +500,14 @@ def _load_procedures(
         active_key = key
         active_header = row
         airport = model.airports[airport_key]
+        procedure_kind = PROCEDURE_KINDS.get(str(row["proc"] or ""), "")
+        procedure_runway = str(row["runway"] or "").strip().upper()
+        procedure_label = _procedure_label(
+            airport.icao,
+            procedure_kind,
+            procedure_runway,
+            row["procedure_name"] or row["full_name"],
+        )
         fix_ident = str(row["fix_ident"] or "").strip().upper() or None
         fix_country = str(row["fix_country"] or airport.icao[:2])
         center_ident = str(row["center_ident"] or "").strip().upper() or None
@@ -509,12 +541,12 @@ def _load_procedures(
             ))
             continue
         active_legs.append(ChartTerminalLeg(
-            procedure_label=str(row["procedure_name"] or "")[:6],
-            runway=str(row["runway"] or "").strip().upper(),
+            procedure_label=procedure_label,
+            runway=procedure_runway,
             leg_type=leg_type,
             fix_ident=fix_ident,
             raw=f"Fenix TerminalLegs.ID={row['ID']}",
-            procedure_kind=PROCEDURE_KINDS.get(str(row["proc"] or ""), ""),
+            procedure_kind=procedure_kind,
             course_degrees=float(row["Course"]) if row["Course"] is not None else None,
             turn_direction=str(row["TurnDir"] or "") or None,
             speed_limit_knots=(

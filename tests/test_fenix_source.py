@@ -215,3 +215,32 @@ def test_fenix_loader_rejects_wrong_cycle(
 
     with pytest.raises(FenixSourceError, match="周期不匹配"):
         load_fenix_model(database, raw, DEFAULT_CYCLE)
+
+
+def test_fenix_loader_repairs_known_zlzy_arrival_label(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database = tmp_path / "nd.db3"
+    _database(database)
+    with sqlite3.connect(database) as connection:
+        connection.execute("UPDATE Airports SET ICAO='ZLZY' WHERE ID=1")
+        connection.execute(
+            "UPDATE Terminals SET Proc='1', Name=?, FullName=?, Rwy='29R' WHERE ID=30",
+            ("P91A\u95c1?", "P91A\u95c1?"),
+        )
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    monkeypatch.setattr(
+        "fenix_default_navdata.fenix_source.load_naip",
+        lambda root, include_terminal_documents=False: NavModel(root),
+    )
+
+    model = load_fenix_model(database, raw, DEFAULT_CYCLE)
+
+    assert {segment.label for segment in model.procedure_segments} == {"P9119A"}
+    assert {
+        leg.procedure_label
+        for segment in model.procedure_segments
+        for leg in segment.legs
+    } == {"P9119A"}
