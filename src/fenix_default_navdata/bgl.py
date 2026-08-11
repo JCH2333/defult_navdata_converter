@@ -488,10 +488,12 @@ _REQUIRED_RECOMMENDED_LEG_TYPES = {
     "AF", "CD", "CF", "CR", "FA", "FC", "FD", "FM", "PI", "VD", "VR",
 }
 _THETA_LEG_TYPES = {
-    "AF", "CF", "DF", "FA", "FC", "FD", "FM", "HA", "HF", "HM", "IF", "PI",
-    "RF", "TF", "VR",
+    "AF", "CF", "CR", "DF", "FA", "FC", "FD", "FM", "HA", "HF", "HM", "IF",
+    "PI", "RF", "TF", "VR",
 }
-_REQUIRED_THETA_LEG_TYPES = {"AF", "CF", "FA", "FC", "FD", "FM", "PI", "VR"}
+_REQUIRED_THETA_LEG_TYPES = {
+    "AF", "CF", "CR", "FA", "FC", "FD", "FM", "PI", "VR",
+}
 _RHO_LEG_TYPES = {
     "AF", "CF", "DF", "FA", "FC", "FD", "FM", "HA", "HF", "HM", "IF", "PI",
     "TF",
