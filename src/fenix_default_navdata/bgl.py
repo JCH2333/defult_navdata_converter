@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import io
+import math
 import os
 import re
 import shutil
@@ -241,36 +242,196 @@ def _speed_descriptor(value: str | None) -> str | None:
     )
 
 
-def _leg_attrs(leg) -> dict[str, str]:
+_FIX_LEG_TYPES = {
+    "AF", "CF", "DF", "FA", "FC", "FD", "FM", "HA", "HF", "HM", "IF", "PI",
+    "RF", "TF",
+}
+_FLY_OVER_LEG_TYPES = _FIX_LEG_TYPES
+_TURN_LEG_TYPES = {
+    "AF", "DF", "FA", "FC", "FD", "FM", "HA", "HF", "HM", "IF", "PI", "RF",
+    "TF", "VR",
+}
+_RECOMMENDED_LEG_TYPES = {"AF", "CD", "CF", "CR", "FC", "FD", "VD", "VR"}
+_THETA_LEG_TYPES = {"AF", "CD", "CF", "CR", "FC", "FD", "VR"}
+_RHO_LEG_TYPES = {"AF", "CF", "FC"}
+_COURSE_LEG_TYPES = {
+    "AF", "CA", "CD", "CF", "CI", "CR", "FA", "FC", "FD", "FM", "HA", "HF",
+    "HM", "IF", "PI", "RF", "TF", "VA", "VD", "VI", "VM", "VR",
+}
+_DISTANCE_LEG_TYPES = {"CD", "CF", "FC", "HA", "HF", "HM", "PI", "RF", "VD"}
+
+
+def _initial_bearing(
+    start_latitude: float,
+    start_longitude: float,
+    end_latitude: float,
+    end_longitude: float,
+) -> float:
+    start_lat = math.radians(float(start_latitude))
+    end_lat = math.radians(float(end_latitude))
+    delta_lon = math.radians(float(end_longitude) - float(start_longitude))
+    y = math.sin(delta_lon) * math.cos(end_lat)
+    x = (
+        math.cos(start_lat) * math.sin(end_lat)
+        - math.sin(start_lat) * math.cos(end_lat) * math.cos(delta_lon)
+    )
+    return (math.degrees(math.atan2(y, x)) + 360.0) % 360.0
+
+
+def _fallback_true_course(legs, index: int) -> float | None:
+    leg = legs[index]
+    if leg.leg_type not in {"IF", "TF"}:
+        return None
+    if leg.fix_latitude is None or leg.fix_longitude is None:
+        return None
+    for previous in reversed(legs[:index]):
+        if previous.fix_latitude is not None and previous.fix_longitude is not None:
+            if (
+                previous.fix_latitude != leg.fix_latitude
+                or previous.fix_longitude != leg.fix_longitude
+            ):
+                return _initial_bearing(
+                    previous.fix_latitude,
+                    previous.fix_longitude,
+                    leg.fix_latitude,
+                    leg.fix_longitude,
+                )
+    for following in legs[index + 1:]:
+        if following.fix_latitude is not None and following.fix_longitude is not None:
+            if (
+                following.fix_latitude != leg.fix_latitude
+                or following.fix_longitude != leg.fix_longitude
+            ):
+                return _initial_bearing(
+                    leg.fix_latitude,
+                    leg.fix_longitude,
+                    following.fix_latitude,
+                    following.fix_longitude,
+                )
+    return 0.0
+
+
+def _leg_distance(leg) -> float | None:
+    if leg.leg_type in {"CD", "VD"}:
+        return leg.rho_nm
+    return leg.distance_nm
+
+
+def _description_flag(code: str, marker: str) -> str | None:
+    return "TRUE" if marker in (code or "").upper() else None
+
+
+def _leg_attrs(legs, index: int) -> dict[str, str]:
+    leg = legs[index]
+    leg_type = leg.leg_type
+    source_course = leg.course_degrees if leg_type in _COURSE_LEG_TYPES else None
+    true_course = (
+        _fallback_true_course(legs, index)
+        if source_course is None
+        else None
+    )
+    distance = _leg_distance(leg) if leg_type in _DISTANCE_LEG_TYPES else None
     attrs = _attrs(
-        type=leg.leg_type,
-        fixType=leg.fix_type if leg.fix_ident else None,
-        fixRegion=leg.fix_region[:2] if leg.fix_ident else None,
-        fixIdent=leg.fix_ident[:8] if leg.fix_ident else None,
-        flyOver="TRUE" if leg.fly_over else "FALSE",
-        turnDirection=leg.turn_direction,
-        recommendedType=leg.recommended_type if leg.recommended_ident else None,
-        recommendedIdent=leg.recommended_ident[:8] if leg.recommended_ident else None,
-        recommendedRegion=leg.recommended_region[:2] if leg.recommended_ident else None,
-        magneticCourse=_float(leg.course_degrees, 3) if leg.course_degrees is not None else None,
-        distance=_nautical_miles(leg.distance_nm) if leg.distance_nm is not None else None,
+        type=leg_type,
+        fixType=(
+            leg.fix_type
+            if leg_type in _FIX_LEG_TYPES and leg.fix_ident
+            else None
+        ),
+        fixRegion=(
+            leg.fix_region[:2]
+            if leg_type in _FIX_LEG_TYPES and leg.fix_ident
+            else None
+        ),
+        fixIdent=(
+            leg.fix_ident[:8]
+            if leg_type in _FIX_LEG_TYPES and leg.fix_ident
+            else None
+        ),
+        flyOver=(
+            "TRUE"
+            if leg.fly_over and leg_type in _FLY_OVER_LEG_TYPES
+            else None
+        ),
+        turnDirection=(
+            leg.turn_direction
+            if leg_type in _TURN_LEG_TYPES
+            else None
+        ),
+        recommendedType=(
+            leg.recommended_type
+            if leg_type in _RECOMMENDED_LEG_TYPES and leg.recommended_ident
+            else None
+        ),
+        recommendedIdent=(
+            leg.recommended_ident[:8]
+            if leg_type in _RECOMMENDED_LEG_TYPES and leg.recommended_ident
+            else None
+        ),
+        recommendedRegion=(
+            leg.recommended_region[:2]
+            if leg_type in _RECOMMENDED_LEG_TYPES and leg.recommended_ident
+            else None
+        ),
+        theta=(
+            _float(leg.theta_degrees, 3)
+            if leg_type in _THETA_LEG_TYPES and leg.theta_degrees is not None
+            else None
+        ),
+        rho=(
+            _nautical_miles(leg.rho_nm)
+            if leg_type in _RHO_LEG_TYPES and leg.rho_nm is not None
+            else None
+        ),
+        magneticCourse=(
+            _float(source_course, 3)
+            if source_course is not None
+            else None
+        ),
+        trueCourse=(
+            _float(true_course, 3)
+            if true_course is not None
+            else None
+        ),
+        distance=_nautical_miles(distance) if distance is not None else None,
         altitudeDescriptor=leg.altitude_descriptor,
         altitude1=_feet(leg.altitude1_ft) if leg.altitude1_ft is not None else None,
         altitude2=_feet(leg.altitude2_ft) if leg.altitude2_ft is not None else None,
         speedLimit=leg.speed_limit_knots,
         verticalAngle=_float(leg.vertical_angle, 3) if leg.vertical_angle is not None else None,
-        arcCenterFixType="TERMINAL_WAYPOINT" if leg.center_ident else None,
-        arcCenterFixIdent=leg.center_ident[:8] if leg.center_ident else None,
-        arcCenterFixRegion=leg.center_region[:2] if leg.center_ident else None,
-        arcRadius=_nautical_miles(leg.arc_radius_nm) if leg.arc_radius_nm is not None else None,
+        arcCenterFixType=(
+            "TERMINAL_WAYPOINT"
+            if leg_type == "RF" and leg.center_ident
+            else None
+        ),
+        arcCenterFixIdent=(
+            leg.center_ident[:8]
+            if leg_type == "RF" and leg.center_ident
+            else None
+        ),
+        arcCenterFixRegion=(
+            leg.center_region[:2]
+            if leg_type == "RF" and leg.center_ident
+            else None
+        ),
+        isIAF=_description_flag(leg.waypoint_description_code, "A"),
+        isIF=_description_flag(leg.waypoint_description_code, "I"),
+        isFAF=_description_flag(leg.waypoint_description_code, "F"),
+        isMAP=_description_flag(leg.waypoint_description_code, "M"),
+        arcRadius=(
+            _nautical_miles(leg.arc_radius_nm)
+            if leg_type == "RF" and leg.arc_radius_nm is not None
+            else None
+        ),
         speedLimitDescriptor=_speed_descriptor(leg.speed_limit_descriptor),
     )
     return attrs
 
 
 def _append_legs(parent: ET.Element, legs) -> None:
-    for leg in sorted(legs, key=lambda item: item.sequence):
-        ET.SubElement(parent, "Leg", _leg_attrs(leg))
+    ordered = sorted(legs, key=lambda item: item.sequence)
+    for index, _ in enumerate(ordered):
+        ET.SubElement(parent, "Leg", _leg_attrs(ordered, index))
 
 
 def _append_departures(airport_element: ET.Element, segments: list) -> None:
@@ -724,13 +885,11 @@ def write_bglcomp_xml(
     terminal_waypoint_count = len(selected_terminal_points)
     root_terminal_waypoint_count = 0
     if duplicate_terminal_waypoints and scope in {"all", "airports"}:
-        deduped_terminal_points: dict[tuple[str, str, float, float], object] = {}
+        deduped_terminal_points: dict[tuple[str, str], object] = {}
         for point in selected_terminal_points:
             key = (
                 point.ident.upper()[:8],
                 (point.country or point.airport[:2]).upper()[:2],
-                round(float(point.latitude), 6),
-                round(float(point.longitude), 6),
             )
             deduped_terminal_points.setdefault(key, point)
         root_terminal_waypoint_count = len(deduped_terminal_points)

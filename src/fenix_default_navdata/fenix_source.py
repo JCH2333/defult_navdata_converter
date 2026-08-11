@@ -34,6 +34,10 @@ SDK_LEG_TYPES = {
     "AF", "CA", "CD", "CF", "CI", "CR", "DF", "FA", "FC", "FD", "FM",
     "HA", "HF", "HM", "IF", "PI", "RF", "TF", "VA", "VD", "VI", "VM", "VR",
 }
+SDK_FIX_REQUIRED_LEG_TYPES = {
+    "AF", "CF", "DF", "FA", "FC", "FD", "FM", "HA", "HF", "HM", "IF", "PI",
+    "RF", "TF",
+}
 
 
 class FenixSourceError(RuntimeError):
@@ -387,6 +391,14 @@ def _load_procedures(
                 source=SourceRef("Fenix:TerminalLegs", int(row["ID"])),
             ))
             continue
+        if leg_type in SDK_FIX_REQUIRED_LEG_TYPES and fix_ident is None:
+            model.rejected_records.append(RejectedRecord(
+                kind="terminal-leg",
+                key=str(row["ID"]),
+                reason=f"{leg_type} leg is missing its required fix",
+                source=SourceRef("Fenix:TerminalLegs", int(row["ID"])),
+            ))
+            continue
         active_legs.append(ChartTerminalLeg(
             procedure_label=str(row["procedure_name"] or "")[:6],
             runway=str(row["runway"] or "").strip().upper(),
@@ -428,6 +440,10 @@ def _load_procedures(
             recommended_longitude=(
                 float(row["NavLon"]) if row["NavLon"] is not None else None
             ),
+            theta_degrees=(
+                float(row["NavBear"]) if row["NavBear"] is not None else None
+            ),
+            rho_nm=float(row["NavDist"]) if row["NavDist"] is not None else None,
             distance_nm=float(row["Distance"]) if row["Distance"] is not None else None,
             altitude_descriptor=altitude_descriptor,
             altitude1_ft=altitude1,

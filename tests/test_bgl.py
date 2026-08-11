@@ -89,7 +89,12 @@ def test_airport_projection_filters_prefix_and_emits_ils_and_procedure(tmp_path:
     assert [airport.attrib["ident"] for airport in root.findall("Airport")] == ["ZBCF"]
     assert root.find("Airport/Runway/Ils/GlideSlope") is not None
     assert root.find("Airport/Runway/Ils/Dme") is not None
-    assert root.find("Airport/Departure/RunwayTransitions/RunwayTransitionLegs/Leg").attrib["fixIdent"] == "FIX01"
+    leg_attributes = root.find(
+        "Airport/Departure/RunwayTransitions/RunwayTransitionLegs/Leg"
+    ).attrib
+    assert leg_attributes["fixIdent"] == "FIX01"
+    assert leg_attributes["trueCourse"] == "0"
+    assert "flyOver" not in leg_attributes
     assert len(root.findall("Waypoint")) == 1
     assert projection.waypoints == 2
 
@@ -105,7 +110,7 @@ def test_root_terminal_waypoints_are_deduplicated_across_airports(tmp_path: Path
     )
     model.terminal_waypoints.extend([
         TerminalWaypoint("one:fix", "ZBAA", "FIX01", 40.1, 116.1, source, "ZB"),
-        TerminalWaypoint("two:fix", "ZBAD", "FIX01", 40.1, 116.1, source, "ZB"),
+        TerminalWaypoint("two:fix", "ZBAD", "FIX01", 40.2, 116.2, source, "ZB"),
     ])
 
     output = tmp_path / "ZB_airports.xml"
@@ -122,6 +127,46 @@ def test_root_terminal_waypoints_are_deduplicated_across_airports(tmp_path: Path
     assert len(root.findall("Waypoint")) == 1
     assert len(root.findall("Airport/Waypoint")) == 2
     assert projection.waypoints == 3
+
+
+def test_leg_projection_uses_type_specific_semantic_fields(tmp_path: Path):
+    model = NavModel(Path("source"))
+    source = SourceRef("fixture", 1)
+    model.airports["a"] = Airport(
+        "a", "ZBCF", "ZBCF", 35.0, 105.0, 1000, 18000, 180, source,
+    )
+    model.procedure_segments.append(ProcedureSegment(
+        "ZBCF",
+        "SID01",
+        "departure",
+        "",
+        "",
+        (
+            ChartTerminalLeg(
+                "SID01", "", "CF", "FIX01", "fixture",
+                sequence=1, fix_region="ZB", fix_type="TERMINAL_WAYPOINT",
+                fix_latitude=35.1, fix_longitude=105.1,
+                recommended_ident="VOR01", recommended_region="ZB",
+                recommended_type="VOR", theta_degrees=123.4, rho_nm=12.5,
+                course_degrees=90, distance_nm=8, center_ident="IGNORED",
+                fly_over=False,
+            ),
+        ),
+        source,
+    ))
+
+    output = tmp_path / "procedures.xml"
+    write_bglcomp_xml(model, DEFAULT_CYCLE, output, scope="airports")
+
+    attributes = ET.parse(output).getroot().find(
+        "Airport/Departure/CommonRouteLegs/Leg"
+    ).attrib
+    assert attributes["theta"] == "123.4"
+    assert attributes["rho"] == "12.5N"
+    assert attributes["magneticCourse"] == "90"
+    assert attributes["distance"] == "8N"
+    assert "flyOver" not in attributes
+    assert "arcCenterFixIdent" not in attributes
 
 
 def test_missing_compiler_is_reported():

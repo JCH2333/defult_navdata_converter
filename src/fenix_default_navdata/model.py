@@ -206,6 +206,8 @@ class ChartTerminalLeg:
     recommended_type: str = ""
     recommended_latitude: float | None = None
     recommended_longitude: float | None = None
+    theta_degrees: float | None = None
+    rho_nm: float | None = None
     distance_nm: float | None = None
     altitude_descriptor: str | None = None
     altitude1_ft: int | None = None
