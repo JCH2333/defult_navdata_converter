@@ -10,7 +10,7 @@ from urllib.request import Request, urlopen
 from .version import __version__
 
 
-REPOSITORY = "JCH2333/fenix_to_default_navdata"
+REPOSITORY = "JCH2333/defult_navdata_converter"
 API_URL = f"https://api.github.com/repos/{REPOSITORY}/releases"
 
 
