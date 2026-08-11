@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fenix-to-default-navdata"
+version = "0.1.0"
+description = "Fenix/2608 到 MSFS 2024 默认 Navigraph 数据的测试版转换器"
+requires-python = ">=3.11"
+dependencies = ["pypdf>=5.0", "pypinyin>=0.55", "PyMuPDF>=1.28"]
+
+[project.scripts]
+fenix-default-navdata = "fenix_default_navdata.cli:main"
+
+[project.gui-scripts]
+fenix-default-navdata-gui = "fenix_default_navdata.gui:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+asyncio_default_fixture_loop_scope = "function"

@@ -1,0 +1,32 @@
+name: prerelease
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -e . pytest
+      - run: python -m pytest -q
+      - run: python build_update_package.py
+      - name: Publish test prerelease
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $asset = Get-ChildItem dist\fenix-to-default-navdata-v*.zip | Select-Object -First 1
+          gh release create "${{ github.ref_name }}" $asset.FullName `
+            --repo "${{ github.repository }}" `
+            --title "${{ github.ref_name }} 测试版" `
+            --notes "自动构建测试包。未完成实机验证，不得视为正式版本。" `
+            --prerelease
