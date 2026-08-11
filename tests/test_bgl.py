@@ -50,7 +50,12 @@ def test_bgl_xml_is_deterministic(tmp_path: Path):
     route = root.find("./Waypoint[@waypointIdent='START']/Route")
     assert route is not None
     assert route.attrib == {"name": "W1", "routeType": "BOTH"}
-    assert route.find("Next").attrib["waypointIdent"] == "END"
+    assert route.find("Next").attrib == {
+        "waypointRegion": "ZB",
+        "waypointIdent": "END",
+        "waypointType": "NAMED",
+        "altitudeMinimum": "0F",
+    }
 
 
 def test_airport_projection_filters_prefix_and_emits_ils_and_procedure(tmp_path: Path):
@@ -179,6 +184,44 @@ def test_root_terminal_waypoints_are_deduplicated_across_airports(tmp_path: Path
     assert len(root.findall("Waypoint")) == 1
     assert len(root.findall("Airport/Waypoint")) == 2
     assert projection.waypoints == 3
+
+
+def test_enroute_projection_normalizes_sdk_identity_and_route_requirements(tmp_path: Path):
+    model = NavModel(Path("source"))
+    source = SourceRef("fixture", 1)
+    model.waypoints.extend([
+        Waypoint("invalid", "AIWD50/CH", "invalid", 21.521667, 113.533333, source, "ZG"),
+        Waypoint("duplicate-one", "DUP", "duplicate", 30.0, 110.0, source, "ZB"),
+        Waypoint("duplicate-two", "DUP", "duplicate", 31.0, 111.0, source, "ZB"),
+        Waypoint("unicode", "香港", "unicode", 22.31, 113.911667, source, "CN"),
+    ])
+    model.airway_legs.append(AirwayLeg(
+        "A1", 1, "AIWD50/CH", "DUP", source,
+        start_latitude=21.521667, start_longitude=113.533333,
+        end_latitude=30.0, end_longitude=110.0,
+        start_country="ZG", end_country="ZB",
+    ))
+
+    output = tmp_path / "enroute.xml"
+    write_bglcomp_xml(model, DEFAULT_CYCLE, output, scope="enroute")
+
+    root = ET.parse(output).getroot()
+    waypoints = root.findall("Waypoint")
+    assert len([point for point in waypoints if point.attrib["waypointIdent"] == "DUP"]) == 1
+    assert root.find("Waypoint[@waypointIdent='AIWD5']") is not None
+    unicode_point = next(
+        point for point in waypoints if point.attrib["waypointRegion"] == "CN"
+    )
+    assert unicode_point.attrib["waypointIdent"].startswith("P")
+    assert len(unicode_point.attrib["waypointIdent"]) == 8
+    next_leg = root.find("Waypoint[@waypointIdent='AIWD5']/Route/Next")
+    assert next_leg is not None
+    assert next_leg.attrib == {
+        "waypointRegion": "ZB",
+        "waypointIdent": "DUP",
+        "waypointType": "NAMED",
+        "altitudeMinimum": "0F",
+    }
 
 
 def test_leg_projection_uses_type_specific_semantic_fields(tmp_path: Path):

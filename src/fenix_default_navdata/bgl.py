@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 import math
 import os
@@ -881,8 +882,39 @@ def _append_airport_procedures(
     return len(segments)
 
 
-def _point_key(ident: str, latitude: float, longitude: float) -> tuple[str, float, float]:
-    return ident.upper(), round(float(latitude), 6), round(float(longitude), 6)
+def _normalized_waypoint_ident(
+    ident: str,
+    latitude: float,
+    longitude: float,
+) -> str:
+    value = str(ident or "").strip().upper()
+    if re.fullmatch(r"[A-Z0-9]{1,8}", value):
+        return value
+    if "/" in value:
+        stem = value.split("/", maxsplit=1)[0]
+        if re.fullmatch(r"[A-Z0-9]+", stem):
+            return stem[:5]
+    cleaned = re.sub(r"[^A-Z0-9]", "", value)
+    if cleaned:
+        return cleaned[:8]
+    digest = hashlib.sha1(
+        f"{value}|{float(latitude):.6f}|{float(longitude):.6f}".encode("utf-8")
+    ).hexdigest().upper()
+    return f"P{digest[:7]}"
+
+
+def _waypoint_identity(
+    ident: str,
+    country: str,
+    latitude: float,
+    longitude: float,
+) -> tuple[str, str, str]:
+    normalized_ident = _normalized_waypoint_ident(ident, latitude, longitude)
+    return (
+        _waypoint_type(normalized_ident),
+        (country or "CN").upper()[:2],
+        normalized_ident,
+    )
 
 
 def _append_enroute(
@@ -909,14 +941,25 @@ def _append_enroute(
                 "name": leg.end_ident,
                 "key": f"airway-end:{leg.airway}:{leg.sequence}",
             })())
-    deduped: dict[tuple[str, float, float], object] = {}
-    for point in points:
-        deduped.setdefault(
-            _point_key(str(point.ident), float(point.latitude), float(point.longitude)),
-            point,
-        )
+    deduped: dict[tuple[str, str, str], object] = {}
+    for point in sorted(
+        points,
+        key=lambda item: (
+            str(item.ident).upper(),
+            str(item.country or "CN").upper(),
+            float(item.latitude),
+            float(item.longitude),
+            str(item.key),
+        ),
+    ):
+        deduped.setdefault(_waypoint_identity(
+            str(point.ident),
+            str(point.country or "CN"),
+            float(point.latitude),
+            float(point.longitude),
+        ), point)
     route_children: dict[
-        tuple[str, float, float],
+        tuple[str, str, str],
         list[tuple[str, str, str, dict[str, str]]],
     ] = {}
     for leg in sorted(model.airway_legs, key=lambda item: (item.airway, item.sequence)):
@@ -925,50 +968,57 @@ def _append_enroute(
             leg.end_latitude, leg.end_longitude,
         }:
             continue
-        start_key = _point_key(leg.start_ident, leg.start_latitude, leg.start_longitude)
-        end_key = _point_key(leg.end_ident, leg.end_latitude, leg.end_longitude)
+        start_key = _waypoint_identity(
+            leg.start_ident,
+            leg.start_country,
+            leg.start_latitude,
+            leg.start_longitude,
+        )
+        end_key = _waypoint_identity(
+            leg.end_ident,
+            leg.end_country,
+            leg.end_latitude,
+            leg.end_longitude,
+        )
         route_children.setdefault(start_key, []).append((
             leg.airway,
             _route_type(leg.route_type),
             "Next",
             _attrs(
-            waypointRegion=(leg.end_country or "CN")[:2],
-            waypointIdent=leg.end_ident[:8],
+            waypointRegion=end_key[1],
+            waypointIdent=end_key[2],
             waypointType=_route_point_type(leg.end_type),
-            altitudeMinimum=(
-                _feet(leg.minimum_altitude_ft)
-                if leg.minimum_altitude_ft is not None
-                else None
-            ),
+            altitudeMinimum=_feet(leg.minimum_altitude_ft or 0),
         )))
         route_children.setdefault(end_key, []).append((
             leg.airway,
             _route_type(leg.route_type),
             "Previous",
             _attrs(
-            waypointRegion=(leg.start_country or "CN")[:2],
-            waypointIdent=leg.start_ident[:8],
+            waypointRegion=start_key[1],
+            waypointIdent=start_key[2],
             waypointType=_route_point_type(leg.start_type),
-            altitudeMinimum=(
-                _feet(leg.minimum_altitude_ft)
-                if leg.minimum_altitude_ft is not None
-                else None
-            ),
+            altitudeMinimum=_feet(leg.minimum_altitude_ft or 0),
         )))
     ordered_points = sorted(deduped.values(), key=lambda item: (
         str(item.ident).upper(), float(item.latitude), float(item.longitude), str(item.key),
     ))
     for point in ordered_points:
+        identity = _waypoint_identity(
+            str(point.ident),
+            str(point.country or "CN"),
+            float(point.latitude),
+            float(point.longitude),
+        )
         point_element = ET.SubElement(root, "Waypoint", _attrs(
             lat=_float(point.latitude),
             lon=_float(point.longitude),
-            waypointType=_waypoint_type(point.ident),
-            waypointRegion=(point.country or "CN")[:2],
-            waypointIdent=str(point.ident).upper()[:8],
+            waypointType=identity[0],
+            waypointRegion=identity[1],
+            waypointIdent=identity[2],
         ))
         grouped_routes: dict[str, tuple[str, list[tuple[str, dict[str, str]]]]] = {}
-        key = _point_key(str(point.ident), float(point.latitude), float(point.longitude))
-        for route_name, route_type, direction, attrs in route_children.get(key, []):
+        for route_name, route_type, direction, attrs in route_children.get(identity, []):
             grouped_routes.setdefault(route_name, (route_type, []))[1].append(
                 (direction, attrs)
             )
