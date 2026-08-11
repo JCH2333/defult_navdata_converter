@@ -583,9 +583,138 @@ def _description_flag(code: str, marker: str) -> str | None:
     return "TRUE" if marker in (code or "").upper() else None
 
 
-def _leg_attrs(legs, index: int) -> dict[str, str]:
+def _terminal_waypoint_key(
+    airport: str,
+    region: str,
+    ident: str,
+    latitude: float,
+    longitude: float,
+) -> tuple[str, str, str, str, str]:
+    return (
+        airport.upper(),
+        (region or airport[:2]).upper()[:2],
+        _normalized_waypoint_ident(ident, latitude, longitude),
+        f"{float(latitude):.6f}",
+        f"{float(longitude):.6f}",
+    )
+
+
+def _terminal_waypoint_identities(points) -> tuple[dict[tuple[str, str, str, str, str], str], dict[tuple[str, str, str, str, str], object]]:
+    """Return SDK-safe identities and one deterministic record per coordinate."""
+    representatives: dict[tuple[str, str, str, str, str], object] = {}
+    for point in sorted(
+        points,
+        key=lambda item: (
+            item.airport,
+            item.country or item.airport[:2],
+            item.ident,
+            float(item.latitude),
+            float(item.longitude),
+            item.key,
+        ),
+    ):
+        key = _terminal_waypoint_key(
+            point.airport,
+            point.country,
+            point.ident,
+            point.latitude,
+            point.longitude,
+        )
+        representatives.setdefault(key, point)
+
+    grouped: dict[tuple[str, str, str], list[tuple[str, str, str, str, str]]] = {}
+    reserved: set[tuple[str, str, str]] = set()
+    for key in representatives:
+        group_key = key[:3]
+        grouped.setdefault(group_key, []).append(key)
+        reserved.add(group_key)
+
+    identities: dict[tuple[str, str, str, str, str], str] = {}
+    for (airport, region, base_ident), keys in sorted(grouped.items()):
+        for index, key in enumerate(sorted(keys)):
+            if index == 0:
+                identities[key] = base_ident
+                continue
+            suffix = 1
+            while True:
+                candidate = f"{base_ident[:5]}{suffix:03d}"
+                identity = (airport, region, candidate)
+                if identity not in reserved:
+                    reserved.add(identity)
+                    identities[key] = candidate
+                    break
+                suffix += 1
+    return identities, representatives
+
+
+def _terminal_waypoint_ident(
+    identities: dict[tuple[str, str, str, str, str], str],
+    airport: str,
+    ident: str | None,
+    region: str,
+    latitude: float | None,
+    longitude: float | None,
+) -> str | None:
+    if not ident:
+        return ident
+    if latitude is not None and longitude is not None:
+        key = _terminal_waypoint_key(airport, region, ident, latitude, longitude)
+        mapped = identities.get(key)
+        if mapped is not None:
+            return mapped
+    return ident[:8]
+
+
+def _leg_fix_ident(
+    leg,
+    airport: str,
+    identities: dict[tuple[str, str, str, str, str], str],
+) -> str | None:
+    return _terminal_waypoint_ident(
+        identities,
+        airport,
+        leg.fix_ident,
+        leg.fix_region,
+        leg.fix_latitude,
+        leg.fix_longitude,
+    )
+
+
+def _leg_recommended_ident(
+    leg,
+    airport: str,
+    identities: dict[tuple[str, str, str, str, str], str],
+) -> str | None:
+    return _terminal_waypoint_ident(
+        identities,
+        airport,
+        leg.recommended_ident,
+        leg.recommended_region,
+        leg.recommended_latitude,
+        leg.recommended_longitude,
+    )
+
+
+def _leg_center_ident(
+    leg,
+    airport: str,
+    identities: dict[tuple[str, str, str, str, str], str],
+) -> str | None:
+    return _terminal_waypoint_ident(
+        identities,
+        airport,
+        leg.center_ident,
+        leg.center_region,
+        leg.center_latitude,
+        leg.center_longitude,
+    )
+
+
+def _leg_attrs(legs, index: int, airport: str, identities) -> dict[str, str]:
     leg = legs[index]
     leg_type = leg.leg_type
+    fix_ident = _leg_fix_ident(leg, airport, identities)
+    center_ident = _leg_center_ident(leg, airport, identities)
     source_course = leg.course_degrees if leg_type in _COURSE_LEG_TYPES else None
     true_course = (
         _fallback_true_course(legs, index)
@@ -593,15 +722,15 @@ def _leg_attrs(legs, index: int) -> dict[str, str]:
         else None
     )
     distance = _leg_distance(leg) if leg_type in _DISTANCE_LEG_TYPES else None
-    recommended_ident = leg.recommended_ident
+    recommended_ident = _leg_recommended_ident(leg, airport, identities)
     recommended_region = leg.recommended_region
     recommended_type = leg.recommended_type
     if not recommended_ident and leg_type in _REQUIRED_RECOMMENDED_LEG_TYPES:
-        recommended_ident = leg.center_ident or leg.fix_ident
+        recommended_ident = center_ident or fix_ident
         recommended_region = leg.center_region or leg.fix_region
         recommended_type = (
             "TERMINAL_WAYPOINT"
-            if leg.center_ident
+            if center_ident
             else leg.fix_type
         )
     theta = leg.theta_degrees
@@ -623,17 +752,17 @@ def _leg_attrs(legs, index: int) -> dict[str, str]:
         type=leg_type,
         fixType=(
             leg.fix_type
-            if leg_type in _FIX_LEG_TYPES and leg.fix_ident
+            if leg_type in _FIX_LEG_TYPES and fix_ident
             else None
         ),
         fixRegion=(
             leg.fix_region[:2]
-            if leg_type in _FIX_LEG_TYPES and leg.fix_ident
+            if leg_type in _FIX_LEG_TYPES and fix_ident
             else None
         ),
         fixIdent=(
-            leg.fix_ident[:8]
-            if leg_type in _FIX_LEG_TYPES and leg.fix_ident
+            fix_ident
+            if leg_type in _FIX_LEG_TYPES and fix_ident
             else None
         ),
         flyOver=(
@@ -689,17 +818,17 @@ def _leg_attrs(legs, index: int) -> dict[str, str]:
         verticalAngle=_float(leg.vertical_angle, 3) if leg.vertical_angle is not None else None,
         arcCenterFixType=(
             "TERMINAL_WAYPOINT"
-            if leg_type == "RF" and leg.center_ident
+            if leg_type == "RF" and center_ident
             else None
         ),
         arcCenterFixIdent=(
-            leg.center_ident[:8]
-            if leg_type == "RF" and leg.center_ident
+            center_ident
+            if leg_type == "RF" and center_ident
             else None
         ),
         arcCenterFixRegion=(
             leg.center_region[:2]
-            if leg_type == "RF" and leg.center_ident
+            if leg_type == "RF" and center_ident
             else None
         ),
         isIAF=_description_flag(leg.waypoint_description_code, "A"),
@@ -716,13 +845,18 @@ def _leg_attrs(legs, index: int) -> dict[str, str]:
     return attrs
 
 
-def _append_legs(parent: ET.Element, legs) -> None:
+def _append_legs(parent: ET.Element, legs, airport: str, identities) -> None:
     ordered = sorted(legs, key=lambda item: item.sequence)
     for index, _ in enumerate(ordered):
-        ET.SubElement(parent, "Leg", _leg_attrs(ordered, index))
+        ET.SubElement(parent, "Leg", _leg_attrs(ordered, index, airport, identities))
 
 
-def _append_departures(airport_element: ET.Element, segments: list) -> None:
+def _append_departures(
+    airport_element: ET.Element,
+    airport: str,
+    segments: list,
+    identities,
+) -> None:
     labels = sorted({segment.label for segment in segments})
     for label in labels:
         selected = [segment for segment in segments if segment.label == label]
@@ -747,10 +881,15 @@ def _append_departures(airport_element: ET.Element, segments: list) -> None:
                 )
             else:
                 target = common
-            _append_legs(target, segment.legs)
+            _append_legs(target, segment.legs, airport, identities)
 
 
-def _append_arrivals(airport_element: ET.Element, segments: list) -> None:
+def _append_arrivals(
+    airport_element: ET.Element,
+    airport: str,
+    segments: list,
+    identities,
+) -> None:
     labels = sorted({segment.label for segment in segments})
     for label in labels:
         selected = [segment for segment in segments if segment.label == label]
@@ -775,7 +914,7 @@ def _append_arrivals(airport_element: ET.Element, segments: list) -> None:
                 )
             else:
                 target = common
-            _append_legs(target, segment.legs)
+            _append_legs(target, segment.legs, airport, identities)
 
 
 def _approach_type(label: str) -> str:
@@ -797,6 +936,7 @@ def _append_approaches(
     airport: str,
     segments: list,
     runways: list,
+    identities,
 ) -> None:
     runway_headings = {runway.ident: runway.true_heading for runway in runways}
     keys = sorted({(segment.label, segment.runway) for segment in segments})
@@ -829,7 +969,11 @@ def _append_approaches(
             gpsOverlay="TRUE" if _approach_type(label) in {"GPS", "RNAV"} else "FALSE",
             fixType=(first_fix.fix_type if first_fix else "AIRPORT"),
             fixRegion=(first_fix.fix_region[:2] if first_fix else airport[:2]),
-            fixIdent=(first_fix.fix_ident[:8] if first_fix else airport[:8]),
+            fixIdent=(
+                _leg_fix_ident(first_fix, airport, identities)
+                if first_fix
+                else airport[:8]
+            ),
             altitude=_feet(first_altitude),
             heading=_float(heading or 0, 3),
             missedAltitude=_feet(missed_altitude),
@@ -838,7 +982,12 @@ def _append_approaches(
             leg for segment in selected if not segment.transition for leg in segment.legs
         ]
         if common_legs:
-            _append_legs(ET.SubElement(approach, "ApproachLegs"), common_legs)
+            _append_legs(
+                ET.SubElement(approach, "ApproachLegs"),
+                common_legs,
+                airport,
+                identities,
+            )
         for segment in selected:
             if not segment.transition:
                 continue
@@ -850,7 +999,11 @@ def _append_approaches(
                 transitionType="FULL",
                 fixType=first_transition_fix.fix_type if first_transition_fix else None,
                 fixRegion=first_transition_fix.fix_region[:2] if first_transition_fix else None,
-                fixIdent=first_transition_fix.fix_ident[:8] if first_transition_fix else None,
+                fixIdent=(
+                    _leg_fix_ident(first_transition_fix, airport, identities)
+                    if first_transition_fix
+                    else None
+                ),
                 altitude=(
                     _feet(first_transition_fix.altitude1_ft)
                     if first_transition_fix and first_transition_fix.altitude1_ft is not None
@@ -858,7 +1011,12 @@ def _append_approaches(
                 ),
                 name=segment.transition[:5],
             ))
-            _append_legs(ET.SubElement(transition, "TransitionLegs"), segment.legs)
+            _append_legs(
+                ET.SubElement(transition, "TransitionLegs"),
+                segment.legs,
+                airport,
+                identities,
+            )
 
 
 def _append_airport_procedures(
@@ -866,6 +1024,7 @@ def _append_airport_procedures(
     airport: str,
     model: NavModel,
     runways: list,
+    identities,
 ) -> int:
     segments = [
         segment for segment in model.procedure_segments
@@ -873,17 +1032,22 @@ def _append_airport_procedures(
     ]
     _append_departures(
         airport_element,
+        airport,
         [segment for segment in segments if segment.kind == "departure"],
+        identities,
     )
     _append_arrivals(
         airport_element,
+        airport,
         [segment for segment in segments if segment.kind == "arrival"],
+        identities,
     )
     _append_approaches(
         airport_element,
         airport,
         [segment for segment in segments if segment.kind == "approach"],
         runways,
+        identities,
     )
     return len(segments)
 
@@ -1118,6 +1282,9 @@ def write_bglcomp_xml(
         raise ValueError(f"未知机场分区: {airport_prefix}")
     projected_airports = airports if scope in {"all", "airports"} else []
     projected_runways = runways if scope in {"all", "airports"} else []
+    terminal_identities, terminal_representatives = _terminal_waypoint_identities(
+        model.terminal_waypoints
+    )
     projected_procedures = 0
     for airport in projected_airports:
         airport_element = ET.SubElement(root, "Airport", _attrs(
@@ -1171,24 +1338,31 @@ def write_bglcomp_xml(
                 )
         terminal_points = sorted(
             (
-                point for point in model.terminal_waypoints
+                (key, point)
+                for key, point in terminal_representatives.items()
                 if point.airport == airport.icao
             ),
-            key=lambda item: (item.ident, item.latitude, item.longitude, item.key),
+            key=lambda item: (
+                terminal_identities[item[0]],
+                item[1].latitude,
+                item[1].longitude,
+                item[1].key,
+            ),
         )
-        for point in terminal_points:
+        for point_key, point in terminal_points:
             ET.SubElement(airport_element, "Waypoint", _attrs(
                 lat=_float(point.latitude),
                 lon=_float(point.longitude),
                 waypointType="NAMED",
                 waypointRegion=(point.country or airport.icao[:2])[:2],
-                waypointIdent=point.ident[:8],
+                waypointIdent=terminal_identities[point_key],
             ))
         projected_procedures += _append_airport_procedures(
             airport_element,
             airport.icao,
             model,
             airport_runway_ends,
+            terminal_identities,
         )
         airport_holdings = [
             holding for holding in model.holdings
@@ -1198,7 +1372,14 @@ def write_bglcomp_xml(
             ET.SubElement(airport_element, "HoldingPattern", _attrs(
                 name=holding.name,
                 fixType="TERMINAL_WAYPOINT",
-                fixIdent=holding.fix_ident[:8],
+                fixIdent=_terminal_waypoint_ident(
+                    terminal_identities,
+                    airport.icao,
+                    holding.fix_ident,
+                    holding.fix_region,
+                    holding.latitude,
+                    holding.longitude,
+                ),
                 fixRegion=holding.fix_region[:2],
                 inboundHoldingCourse=(
                     _float(holding.inbound_course, 3)
@@ -1226,30 +1407,36 @@ def write_bglcomp_xml(
             ))
 
     selected_terminal_points = [
-        point for point in model.terminal_waypoints
+        (key, point)
+        for key, point in terminal_representatives.items()
         if airport_prefix is None or point.airport.startswith(airport_prefix)
     ] if scope in {"all", "airports"} else []
     terminal_waypoint_count = len(selected_terminal_points)
     root_terminal_waypoint_count = 0
     if duplicate_terminal_waypoints and scope in {"all", "airports"}:
-        deduped_terminal_points: dict[tuple[str, str], object] = {}
-        for point in selected_terminal_points:
+        deduped_terminal_points: dict[tuple[str, str], tuple[tuple[str, str, str, str, str], object]] = {}
+        for point_key, point in selected_terminal_points:
             key = (
-                point.ident.upper()[:8],
+                terminal_identities[point_key],
                 (point.country or point.airport[:2]).upper()[:2],
             )
-            deduped_terminal_points.setdefault(key, point)
+            deduped_terminal_points.setdefault(key, (point_key, point))
         root_terminal_waypoint_count = len(deduped_terminal_points)
-        for point in sorted(
+        for point_key, point in sorted(
             deduped_terminal_points.values(),
-            key=lambda item: (item.ident, item.latitude, item.longitude, item.key),
+            key=lambda item: (
+                terminal_identities[item[0]],
+                item[1].latitude,
+                item[1].longitude,
+                item[1].key,
+            ),
         ):
             ET.SubElement(root, "Waypoint", _attrs(
                 lat=_float(point.latitude),
                 lon=_float(point.longitude),
                 waypointType="NAMED",
                 waypointRegion=(point.country or point.airport[:2])[:2],
-                waypointIdent=point.ident[:8],
+                waypointIdent=terminal_identities[point_key],
             ))
 
     enroute_waypoints = 0

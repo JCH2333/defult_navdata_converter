@@ -186,6 +186,56 @@ def test_root_terminal_waypoints_are_deduplicated_across_airports(tmp_path: Path
     assert projection.waypoints == 3
 
 
+def test_airport_terminal_waypoint_collisions_are_renamed_with_all_references(tmp_path: Path):
+    model = NavModel(Path("source"))
+    source = SourceRef("fixture", 1)
+    model.airports["a"] = Airport(
+        "a", "ZBCF", "ZBCF", 35.0, 105.0, 1000, 18000, 180, source,
+    )
+    model.terminal_waypoints.extend([
+        TerminalWaypoint("first", "ZBCF", "DUP", 35.1, 105.1, source, "ZB"),
+        TerminalWaypoint("second", "ZBCF", "DUP", 35.2, 105.2, source, "ZB"),
+        TerminalWaypoint("same-second", "ZBCF", "DUP", 35.2, 105.2, source, "ZB"),
+    ])
+    mapped_leg = ChartTerminalLeg(
+        "SID01", "", "CF", "DUP", "fixture",
+        sequence=1, fix_region="ZB", fix_type="TERMINAL_WAYPOINT",
+        fix_latitude=35.2, fix_longitude=105.2,
+        recommended_ident="DUP", recommended_region="ZB",
+        recommended_type="WAYPOINT", recommended_latitude=35.2,
+        recommended_longitude=105.2, course_degrees=90, distance_nm=1,
+    )
+    arc_leg = ChartTerminalLeg(
+        "SID01", "", "RF", "DUP", "fixture",
+        sequence=2, fix_region="ZB", fix_type="TERMINAL_WAYPOINT",
+        fix_latitude=35.2, fix_longitude=105.2, center_ident="DUP",
+        center_region="ZB", center_latitude=35.2, center_longitude=105.2,
+        arc_radius_nm=1, course_degrees=90,
+    )
+    model.procedure_segments.extend([
+        ProcedureSegment("ZBCF", "SID01", "departure", "", "", (mapped_leg, arc_leg), source),
+        ProcedureSegment("ZBCF", "R03", "approach", "03", "", (mapped_leg,), source),
+        ProcedureSegment("ZBCF", "R03", "approach", "03", "TRANS", (mapped_leg,), source),
+    ])
+
+    output = tmp_path / "terminal-collisions.xml"
+    write_bglcomp_xml(model, DEFAULT_CYCLE, output, scope="airports")
+
+    root = ET.parse(output).getroot()
+    point_idents = [
+        point.attrib["waypointIdent"] for point in root.findall("Airport/Waypoint")
+    ]
+    assert point_idents == ["DUP", "DUP001"]
+    departure_legs = root.findall("Airport/Departure/CommonRouteLegs/Leg")
+    assert departure_legs[0].attrib["fixIdent"] == "DUP001"
+    assert departure_legs[0].attrib["recommendedIdent"] == "DUP001"
+    assert departure_legs[1].attrib["arcCenterFixIdent"] == "DUP001"
+    approach = root.find("Airport/Approach")
+    assert approach is not None
+    assert approach.attrib["fixIdent"] == "DUP001"
+    assert approach.find("Transition").attrib["fixIdent"] == "DUP001"
+
+
 def test_enroute_projection_normalizes_sdk_identity_and_route_requirements(tmp_path: Path):
     model = NavModel(Path("source"))
     source = SourceRef("fixture", 1)
