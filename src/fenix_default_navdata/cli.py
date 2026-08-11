@@ -15,21 +15,26 @@ def _path(value: str | None) -> Path | None:
     return Path(value).expanduser() if value else None
 
 
-def _defaults(args: argparse.Namespace) -> tuple[Path, Path, Path, Path | None]:
+def _defaults(args: argparse.Namespace) -> tuple[Path, Path, Path, Path, Path | None]:
     detected = detect_paths()
+    fenix = _path(args.fenix) or detected.fenix_db
     raw = _path(args.raw) or detected.raw_root
     base = _path(args.nav_base) or detected.nav_base
     jepp = _path(args.nav_jepp) or detected.nav_jepp
     reference = _path(args.reference) or detected.reference_root
-    if not raw or not base or not jepp:
-        raise SystemExit("无法自动检测 raw_root、navigraph-nav-base 或 navigraph-nav-jepp，请显式传参")
-    return raw, base, jepp, reference
+    if not fenix or not raw or not base or not jepp:
+        raise SystemExit(
+            "无法自动检测 Fenix nd.db3、raw_root、navigraph-nav-base 或 "
+            "navigraph-nav-jepp，请显式传参"
+        )
+    return fenix, raw, base, jepp, reference
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="fenix-default-navdata", description="Fenix/2608 到 MSFS 2024 默认 Navigraph 数据转换器")
     sub = parser.add_subparsers(dest="command", required=True)
     build = sub.add_parser("build", help="生成隔离候选")
+    build.add_argument("--fenix", help="Fenix 2608 nd.db3")
     build.add_argument("--raw", help="2608 原始 CSV/PDF 目录")
     build.add_argument("--nav-base", help="官方 navigraph-nav-base 目录")
     build.add_argument("--nav-jepp", help="官方 navigraph-nav-jepp 目录")
@@ -57,8 +62,17 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(detected.__dict__, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "build":
-        raw, base, jepp, reference = _defaults(args)
-        report = convert(raw, base, jepp, Path(args.output), cycle=DEFAULT_CYCLE, reference=reference, compiler=_path(args.bglcomp))
+        fenix, raw, base, jepp, reference = _defaults(args)
+        report = convert(
+            fenix,
+            raw,
+            base,
+            jepp,
+            Path(args.output),
+            cycle=DEFAULT_CYCLE,
+            reference=reference,
+            compiler=_path(args.bglcomp),
+        )
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "validate":

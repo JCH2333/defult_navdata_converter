@@ -197,7 +197,12 @@ def _validate_pdf_cache(root: Path, pdf_cache: Path | None) -> Path | None:
     return resolved_cache
 
 
-def load_naip(root: Path, pdf_cache: Path | None = None) -> NavModel:
+def load_naip(
+    root: Path,
+    pdf_cache: Path | None = None,
+    *,
+    include_terminal_documents: bool = True,
+) -> NavModel:
     """Load only structured data; PDFs are inspected separately and never guessed."""
     root = root.resolve()
     pdf_cache = _validate_pdf_cache(root, pdf_cache)
@@ -274,20 +279,24 @@ def load_naip(root: Path, pdf_cache: Path | None = None) -> NavModel:
                 row.get("TXT_DESIG") or "", _number(row.get("VAL_SORT") or "0"),
                 start_ident, end_ident, SourceRef("RTE_SEG.csv", row_number), row.get("CODE_DIR") or "",
                 start_latitude, start_longitude, end_latitude, end_longitude, start_country, end_country,
+                route_type=row.get("CODE_TYPE") or "",
+                start_type=row.get("CODE_TYPE_START") or "",
+                end_type=row.get("CODE_TYPE_END") or "",
             ))
         except ValueError:
             model.rejected_records.append(RejectedRecord(
                 kind="airway-leg", key=row.get("TXT_DESIG") or "", reason="invalid airway endpoint coordinate",
                 source=SourceRef("RTE_SEG.csv", row_number),
             ))
-    _load_terminal_coordinate_pages(model, pdf_cache)
-    _load_terminal_landing_aids(model)
-    _load_terminal_database_charts(model, pdf_cache)
-    _load_terminal_standard_procedure_charts(model, pdf_cache)
-    _build_database_procedure_segments(model)
-    _retain_database_referenced_terminal_waypoints(model)
-    _load_terminal_approach_charts(model, pdf_cache)
-    _reject_unparsed_charts(model)
+    if include_terminal_documents:
+        _load_terminal_coordinate_pages(model, pdf_cache)
+        _load_terminal_landing_aids(model)
+        _load_terminal_database_charts(model, pdf_cache)
+        _load_terminal_standard_procedure_charts(model, pdf_cache)
+        _build_database_procedure_segments(model)
+        _retain_database_referenced_terminal_waypoints(model)
+        _load_terminal_approach_charts(model, pdf_cache)
+        _reject_unparsed_charts(model)
     return model
 
 

@@ -9,6 +9,7 @@ from .profile import Cycle, validate_cycle
 
 
 def convert(
+    fenix_db: Path,
     raw_root: Path,
     nav_base: Path,
     nav_jepp: Path,
@@ -20,6 +21,7 @@ def convert(
 ) -> dict[str, object]:
     validate_cycle(cycle)
     result = build_candidate(
+        fenix_db=fenix_db.resolve(),
         raw_root=raw_root.resolve(),
         nav_base=nav_base.resolve(),
         nav_jepp=nav_jepp.resolve(),

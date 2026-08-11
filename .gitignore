@@ -10,6 +10,7 @@ dist/
 output/
 backups/
 diagnostics/
+abarthel-navdatareader*.log
 *.db3
 *.s3db
 *-wal

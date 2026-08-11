@@ -6,7 +6,8 @@
 
 ## 当前能力
 
-- 解析 2608 CSV/PDF，并建立带来源证据的统一中间模型。
+- 只读解析 Fenix 2608 `nd.db3`，以机场、跑道、ILS、终端程序和主要导航内容建立统一中间模型。
+- 解析匹配的 424 CSV，将 `RTE_SEG.csv` 航路与端点作为结构化补充。
 - 只读复制官方 `navigraph-nav-base` 与 `navigraph-nav-jepp` 全球基线。
 - 生成符合 SDK `bglcomp.xsd` 的确定性设施 XML。
 - 自动探测 MSFS 2024 SDK `fspackagetool.exe`。
@@ -42,9 +43,13 @@ python -m fenix_default_navdata.gui
 
 ```powershell
 python -m fenix_default_navdata.cli build `
+  --fenix "F:\...\Navdata\nd.db3" `
   --bglcomp "C:\MSFS 2024 SDK\Tools\bin\fspackagetool.exe" `
   --output output/candidate-2608-default
 ```
+
+`detect` 与 GUI 会自动查找当前工作区的 Fenix 2608 `nd.db3`。构建时会校验
+`CycleName=2608n1`，不匹配时拒绝继续。
 
 ## 安全边界
 

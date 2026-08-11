@@ -44,6 +44,8 @@ class Runway:
     surface: str
     elevation_ft: int
     source: SourceRef
+    latitude: float | None = None
+    longitude: float | None = None
 
 
 @dataclass(frozen=True)
@@ -125,6 +127,11 @@ class AirwayLeg:
     end_longitude: float | None = None
     start_country: str = ""
     end_country: str = ""
+    route_type: str = ""
+    level: str = ""
+    start_type: str = ""
+    end_type: str = ""
+    minimum_altitude_ft: int | None = None
 
 
 @dataclass(frozen=True)
@@ -187,6 +194,45 @@ class ChartTerminalLeg:
     speed_limit_knots: int | None = None
     transition: str = ""
     center_ident: str | None = None
+    sequence: int = 0
+    fix_region: str = ""
+    fix_type: str = ""
+    fix_latitude: float | None = None
+    fix_longitude: float | None = None
+    fly_over: bool = False
+    recommended_ident: str | None = None
+    recommended_region: str = ""
+    recommended_type: str = ""
+    recommended_latitude: float | None = None
+    recommended_longitude: float | None = None
+    distance_nm: float | None = None
+    altitude_descriptor: str | None = None
+    altitude1_ft: int | None = None
+    altitude2_ft: int | None = None
+    vertical_angle: float | None = None
+    center_region: str = ""
+    center_latitude: float | None = None
+    center_longitude: float | None = None
+    arc_radius_nm: float | None = None
+    waypoint_description_code: str = ""
+    speed_limit_descriptor: str | None = None
+
+
+@dataclass(frozen=True)
+class Holding:
+    name: str
+    fix_ident: str
+    fix_region: str
+    latitude: float
+    longitude: float
+    inbound_course: float | None
+    turn_direction: str
+    length_nm: float | None
+    time_minutes: float | None
+    minimum_altitude_ft: int | None
+    maximum_altitude_ft: int | None
+    speed_limit_knots: int | None
+    source: SourceRef
 
 
 @dataclass(frozen=True)
@@ -235,3 +281,4 @@ class NavModel:
     rejected_procedures: list[RejectedProcedure] = field(default_factory=list)
     procedure_charts: list[ProcedureChart] = field(default_factory=list)
     procedure_segments: list[ProcedureSegment] = field(default_factory=list)
+    holdings: list[Holding] = field(default_factory=list)

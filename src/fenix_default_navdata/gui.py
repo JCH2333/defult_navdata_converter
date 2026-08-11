@@ -31,6 +31,7 @@ class App:
         self.root.geometry("1120x760")
         self.root.minsize(900, 620)
         self.root.configure(bg=BG)
+        self.fenix = tk.StringVar()
         self.raw = tk.StringVar()
         self.base = tk.StringVar()
         self.jepp = tk.StringVar()
@@ -57,6 +58,7 @@ class App:
         paths = tk.Frame(self.root, bg=PANEL, highlightthickness=1, highlightbackground="#263544", padx=16, pady=14)
         paths.pack(fill=tk.X, padx=26, pady=14)
         rows = [
+            ("Fenix 2608 nd.db3", self.fenix, "file"),
             ("2608 原始目录", self.raw, "dir"),
             ("官方 nav-base", self.base, "dir"),
             ("官方 nav-jepp", self.jepp, "dir"),
@@ -67,7 +69,15 @@ class App:
         for row, (label, variable, kind) in enumerate(rows):
             tk.Label(paths, text=label, bg=PANEL, fg=MUTED, width=18, anchor=tk.E, font=("Microsoft YaHei UI", 9)).grid(row=row, column=0, sticky=tk.E, pady=5)
             tk.Entry(paths, textvariable=variable, bg="#0b1118", fg=TEXT, insertbackground=TEXT, relief=tk.FLAT, highlightthickness=1, highlightbackground="#314657").grid(row=row, column=1, sticky=tk.EW, padx=10, pady=5)
-            tk.Button(paths, text="浏览", command=lambda v=variable: self._browse(v), bg="#203447", fg=TEXT, relief=tk.FLAT, padx=12).grid(row=row, column=2, pady=5)
+            tk.Button(
+                paths,
+                text="浏览",
+                command=lambda v=variable, k=kind: self._browse(v, k),
+                bg="#203447",
+                fg=TEXT,
+                relief=tk.FLAT,
+                padx=12,
+            ).grid(row=row, column=2, pady=5)
         paths.columnconfigure(1, weight=1)
         actions = tk.Frame(self.root, bg=BG, padx=26, pady=4)
         actions.pack(fill=tk.X)
@@ -86,22 +96,44 @@ class App:
         self.log = tk.Text(log_frame, bg="#0b1118", fg="#c7d6e5", relief=tk.FLAT, wrap=tk.WORD, state=tk.DISABLED, font=("Consolas", 10))
         self.log.pack(fill=tk.BOTH, expand=True)
 
-    def _browse(self, variable: tk.StringVar) -> None:
-        value = filedialog.askdirectory()
+    def _browse(self, variable: tk.StringVar, kind: str) -> None:
+        value = (
+            filedialog.askopenfilename(
+                filetypes=[("SQLite 数据库", "*.db3"), ("所有文件", "*.*")]
+            )
+            if kind == "file"
+            else filedialog.askdirectory()
+        )
         if value:
             variable.set(value)
 
     def _detect(self) -> None:
         detected = detect_paths()
-        for variable, value in ((self.raw, detected.raw_root), (self.base, detected.nav_base), (self.jepp, detected.nav_jepp), (self.reference, detected.reference_root), (self.target, detected.community_root)):
+        for variable, value in (
+            (self.fenix, detected.fenix_db),
+            (self.raw, detected.raw_root),
+            (self.base, detected.nav_base),
+            (self.jepp, detected.nav_jepp),
+            (self.reference, detected.reference_root),
+            (self.target, detected.community_root),
+        ):
             if value and not variable.get():
                 variable.set(str(value))
         self.status.set("路径检测完成")
         self._write("已检测本机 2608 原始数据、官方基线、参考目录和 Community 路径")
 
     def _required(self) -> bool:
-        values = ((self.raw, "2608 原始目录"), (self.base, "nav-base"), (self.jepp, "nav-jepp"))
-        missing = [label for variable, label in values if not Path(variable.get()).is_dir()]
+        directories = (
+            (self.raw, "2608 原始目录"),
+            (self.base, "nav-base"),
+            (self.jepp, "nav-jepp"),
+        )
+        missing = [
+            label for variable, label in directories
+            if not Path(variable.get()).is_dir()
+        ]
+        if not Path(self.fenix.get()).is_file():
+            missing.insert(0, "Fenix nd.db3")
         if missing:
             messagebox.showerror("输入不完整", "缺少：" + "、".join(missing))
             return False
@@ -123,7 +155,19 @@ class App:
             return
         output = Path(self.output.get())
         self.status.set("正在解析来源并生成候选")
-        self._run(lambda: convert(Path(self.raw.get()), Path(self.base.get()), Path(self.jepp.get()), output, cycle=DEFAULT_CYCLE, reference=Path(self.reference.get()) if Path(self.reference.get()).is_dir() else None))
+        self._run(lambda: convert(
+            Path(self.fenix.get()),
+            Path(self.raw.get()),
+            Path(self.base.get()),
+            Path(self.jepp.get()),
+            output,
+            cycle=DEFAULT_CYCLE,
+            reference=(
+                Path(self.reference.get())
+                if Path(self.reference.get()).is_dir()
+                else None
+            ),
+        ))
 
     def _validate(self) -> None:
         candidate = Path(self.output.get())

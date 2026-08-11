@@ -10,6 +10,7 @@ WORKSPACE_NAME = "导航数据"
 
 @dataclass(frozen=True)
 class DetectedPaths:
+    fenix_db: Path | None
     raw_root: Path | None
     nav_base: Path | None
     nav_jepp: Path | None
@@ -34,6 +35,9 @@ def detect_paths() -> DetectedPaths:
     raw = _first_existing([
         root / "424源数据" / "2608" / "2608",
     ])
+    fenix_db = _first_existing([
+        root / "424源数据" / "2608" / "Navdata（fnx2608N）" / "Navdata" / "nd.db3",
+    ], directory=False)
     nav_base = _first_existing([
         community / "navigraph-nav-base",
         Path(r"F:\games\community\Community\navigraph-nav-base"),
@@ -45,4 +49,11 @@ def detect_paths() -> DetectedPaths:
     reference = _first_existing([
         root / "424源数据" / "2608" / "Default navdata 2608R1",
     ])
-    return DetectedPaths(raw, nav_base, nav_jepp, reference, community if community.is_dir() else None)
+    return DetectedPaths(
+        fenix_db,
+        raw,
+        nav_base,
+        nav_jepp,
+        reference,
+        community if community.is_dir() else None,
+    )

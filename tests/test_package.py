@@ -14,8 +14,12 @@ def test_missing_compiler_blocks_both_overlay_packages(tmp_path: Path, monkeypat
     raw.mkdir()
     base.mkdir()
     jepp.mkdir()
-    monkeypatch.setattr("fenix_default_navdata.source.load_naip", lambda root, cache: NavModel(root))
+    monkeypatch.setattr(
+        "fenix_default_navdata.fenix_source.load_fenix_model",
+        lambda fenix, root, cycle: NavModel(root),
+    )
     report = build_candidate(
+        fenix_db=tmp_path / "nd.db3",
         raw_root=raw,
         nav_base=base,
         nav_jepp=jepp,

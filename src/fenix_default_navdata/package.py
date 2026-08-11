@@ -126,6 +126,7 @@ def _compile_xml_package(
 
 def build_candidate(
     *,
+    fenix_db: Path,
     raw_root: Path,
     nav_base: Path,
     nav_jepp: Path,
@@ -143,9 +144,9 @@ def build_candidate(
     output.mkdir(parents=True)
     _copy_tree(nav_base, output / BASE_PACKAGE)
     _copy_tree(nav_jepp, output / JEPP_PACKAGE)
-    from .source import load_naip
+    from .fenix_source import load_fenix_model
 
-    model = load_naip(raw_root, output / "_work" / "pdf-evidence-cache")
+    model = load_fenix_model(fenix_db, raw_root, cycle)
     report: dict[str, object] = {
         "status": "candidate",
         "deployable": False,
@@ -153,7 +154,7 @@ def build_candidate(
         "airac": cycle.number,
         "revision": cycle.revision,
         "compiler": {"path": str(compiler.path) if compiler.path else None, "kind": compiler.kind, "reason": compiler.reason},
-        "source": str(raw_root),
+        "source": {"fenix": str(fenix_db), "raw_424": str(raw_root)},
         "official_baseline": {"base": str(nav_base), "jepp": str(nav_jepp)},
         "reference": str(reference) if reference else None,
         "model": {
@@ -163,6 +164,9 @@ def build_candidate(
             "waypoints": len(model.waypoints),
             "airway_legs": len(model.airway_legs),
             "procedure_segments": len(model.procedure_segments),
+            "ilses": len(model.ilses),
+            "terminal_waypoints": len(model.terminal_waypoints),
+            "holdings": len(model.holdings),
             "rejected_records": len(model.rejected_records),
             "rejected_procedures": len(model.rejected_procedures),
         },
