@@ -13,7 +13,7 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 
-from .model import NavModel, is_china_icao
+from .model import NavModel, Runway, is_china_icao
 from .profile import Cycle
 
 
@@ -39,6 +39,22 @@ class XmlProjection:
     procedure_segments: int
     rejected_records: int
     rejected_procedures: int
+
+
+@dataclass(frozen=True)
+class _PhysicalRunway:
+    primary: Runway | None
+    secondary: Runway | None
+    number: str
+    primary_designator: str
+    secondary_designator: str
+    latitude: float
+    longitude: float
+    elevation_ft: float
+    true_heading: float
+    length_ft: int
+    width_ft: int
+    surface: str
 
 
 def _simulator_pids() -> set[int]:
@@ -162,6 +178,161 @@ def _runway_parts(ident: str) -> tuple[str, str]:
     return number, designator or "NONE"
 
 
+def _reciprocal_runway_ident(ident: str) -> str:
+    number, designator = _number_designator(ident)
+    reciprocal_number = ((int(number) + 17) % 36) + 1
+    reciprocal_designator = {
+        "": "",
+        "L": "R",
+        "R": "L",
+        "C": "C",
+    }[designator]
+    return f"{reciprocal_number:02d}{reciprocal_designator}"
+
+
+def _destination(
+    latitude: float,
+    longitude: float,
+    heading: float,
+    distance_ft: float,
+) -> tuple[float, float]:
+    angular_distance = distance_ft * 0.3048 / 6_371_000
+    latitude_radians = math.radians(latitude)
+    longitude_radians = math.radians(longitude)
+    heading_radians = math.radians(heading)
+    destination_latitude = math.asin(
+        math.sin(latitude_radians) * math.cos(angular_distance)
+        + math.cos(latitude_radians)
+        * math.sin(angular_distance)
+        * math.cos(heading_radians)
+    )
+    destination_longitude = longitude_radians + math.atan2(
+        math.sin(heading_radians)
+        * math.sin(angular_distance)
+        * math.cos(latitude_radians),
+        math.cos(angular_distance)
+        - math.sin(latitude_radians) * math.sin(destination_latitude),
+    )
+    return (
+        math.degrees(destination_latitude),
+        ((math.degrees(destination_longitude) + 540) % 360) - 180,
+    )
+
+
+def _geographic_midpoint(
+    first_latitude: float,
+    first_longitude: float,
+    second_latitude: float,
+    second_longitude: float,
+) -> tuple[float, float]:
+    first_latitude_radians = math.radians(first_latitude)
+    second_latitude_radians = math.radians(second_latitude)
+    longitude_delta = math.radians(second_longitude - first_longitude)
+    x = math.cos(second_latitude_radians) * math.cos(longitude_delta)
+    y = math.cos(second_latitude_radians) * math.sin(longitude_delta)
+    latitude = math.atan2(
+        math.sin(first_latitude_radians) + math.sin(second_latitude_radians),
+        math.sqrt(
+            (math.cos(first_latitude_radians) + x) ** 2
+            + y ** 2
+        ),
+    )
+    longitude = math.radians(first_longitude) + math.atan2(
+        y,
+        math.cos(first_latitude_radians) + x,
+    )
+    return math.degrees(latitude), ((math.degrees(longitude) + 540) % 360) - 180
+
+
+def _physical_runways(runways: list[Runway]) -> list[_PhysicalRunway]:
+    by_ident: dict[str, Runway] = {}
+    for runway in sorted(runways, key=lambda item: (item.ident, item.key)):
+        by_ident.setdefault(runway.ident, runway)
+
+    result: list[_PhysicalRunway] = []
+    consumed: set[str] = set()
+    for ident in sorted(by_ident):
+        if ident in consumed:
+            continue
+        runway = by_ident[ident]
+        number, _ = _number_designator(ident)
+        reciprocal_ident = _reciprocal_runway_ident(ident)
+        reciprocal = by_ident.get(reciprocal_ident)
+        if int(number) <= 18:
+            primary = runway
+            secondary = reciprocal
+        elif reciprocal is not None:
+            primary = reciprocal
+            secondary = runway
+        else:
+            primary = None
+            secondary = runway
+        consumed.add(ident)
+        if reciprocal is not None:
+            consumed.add(reciprocal_ident)
+
+        source = primary or secondary
+        assert source is not None
+        primary_ident = primary.ident if primary is not None else reciprocal_ident
+        primary_number, primary_designator = _number_designator(primary_ident)
+        secondary_ident = (
+            secondary.ident
+            if secondary is not None
+            else _reciprocal_runway_ident(primary_ident)
+        )
+        _, secondary_designator = _number_designator(secondary_ident)
+        true_heading = (
+            primary.true_heading
+            if primary is not None
+            else (secondary.true_heading + 180) % 360
+        )
+        if (
+            primary is not None
+            and secondary is not None
+            and primary.latitude is not None
+            and primary.longitude is not None
+            and secondary.latitude is not None
+            and secondary.longitude is not None
+        ):
+            latitude, longitude = _geographic_midpoint(
+                primary.latitude,
+                primary.longitude,
+                secondary.latitude,
+                secondary.longitude,
+            )
+            elevation_ft = (primary.elevation_ft + secondary.elevation_ft) / 2
+        else:
+            threshold = primary or secondary
+            assert threshold is not None
+            threshold_heading = (
+                threshold.true_heading
+                if primary is not None
+                else secondary.true_heading
+            )
+            latitude, longitude = _destination(
+                threshold.latitude or 0,
+                threshold.longitude or 0,
+                threshold_heading,
+                threshold.length_ft / 2,
+            )
+            elevation_ft = threshold.elevation_ft
+        result.append(_PhysicalRunway(
+            primary=primary,
+            secondary=secondary,
+            number=primary_number,
+            primary_designator=primary_designator or "NONE",
+            secondary_designator=secondary_designator or "NONE",
+            latitude=latitude,
+            longitude=longitude,
+            elevation_ft=elevation_ft,
+            true_heading=true_heading,
+            length_ft=source.length_ft,
+            width_ft=source.width_ft,
+            surface=source.surface,
+        ))
+    return result
+
+
 def _route_type(value: str) -> str:
     normalized = (value or "").strip().upper()
     if normalized in {"L", "V", "VICTOR"}:
@@ -196,7 +367,61 @@ def _angle_delta(true_heading: float, magnetic_heading: float | None) -> float:
     return ((float(true_heading) - float(magnetic_heading) + 180.0) % 360.0) - 180.0
 
 
-def _append_ils(runway_element: ET.Element, runway, ilses: list) -> None:
+def _great_circle_distance_nm(
+    first_latitude: float,
+    first_longitude: float,
+    second_latitude: float,
+    second_longitude: float,
+) -> float:
+    first_latitude_radians = math.radians(first_latitude)
+    second_latitude_radians = math.radians(second_latitude)
+    latitude_delta = second_latitude_radians - first_latitude_radians
+    longitude_delta = math.radians(second_longitude - first_longitude)
+    haversine = (
+        math.sin(latitude_delta / 2) ** 2
+        + math.cos(first_latitude_radians)
+        * math.cos(second_latitude_radians)
+        * math.sin(longitude_delta / 2) ** 2
+    )
+    return 3440.065 * 2 * math.asin(min(1.0, math.sqrt(haversine)))
+
+
+def _runway_ilses(runway: Runway, ilses: list) -> list:
+    if runway.latitude is None or runway.longitude is None:
+        return []
+    candidates = [
+        ils
+        for ils in ilses
+        if ils.runway == runway.ident
+        and _great_circle_distance_nm(
+            runway.latitude,
+            runway.longitude,
+            ils.localizer_latitude,
+            ils.localizer_longitude,
+        ) <= 5
+    ]
+    return sorted(
+        candidates,
+        key=lambda ils: (
+            _great_circle_distance_nm(
+                runway.latitude,
+                runway.longitude,
+                ils.localizer_latitude,
+                ils.localizer_longitude,
+            ),
+            ils.ident,
+            ils.frequency_mhz,
+        ),
+    )[:1]
+
+
+def _append_ils(
+    runway_element: ET.Element,
+    runway: Runway,
+    ilses: list,
+    *,
+    end: str,
+) -> None:
     for ils in sorted(ilses, key=lambda item: (item.ident, item.frequency_mhz)):
         heading = ils.localizer_course_magnetic
         ils_element = ET.SubElement(runway_element, "Ils", _attrs(
@@ -205,7 +430,7 @@ def _append_ils(runway_element: ET.Element, runway, ilses: list) -> None:
             alt=_feet(runway.elevation_ft),
             heading=_float(heading if heading is not None else runway.true_heading, 3),
             frequency=_float(ils.frequency_mhz, 3),
-            end="PRIMARY",
+            end=end,
             range=_nautical_miles(27),
             magvar=_float(_angle_delta(runway.true_heading, heading), 3),
             ident=ils.ident[:8],
@@ -850,34 +1075,44 @@ def write_bglcomp_xml(
             transitionAltitude=_feet(airport.transition_altitude),
             transitionLevel=_feet(airport.transition_level),
         ))
-        airport_runways = [
+        airport_runway_ends = [
             item for item in projected_runways if item.airport_key == airport.key
         ]
+        airport_runways = _physical_runways(airport_runway_ends)
         airport_ilses = [
             ils for ils in model.ilses if ils.airport == airport.icao
         ]
         for runway in airport_runways:
-            number, designator = _number_designator(runway.ident)
             runway_element = ET.SubElement(airport_element, "Runway", _attrs(
-                lat=_float(runway.latitude if runway.latitude is not None else airport.latitude),
-                lon=_float(runway.longitude if runway.longitude is not None else airport.longitude),
+                lat=_float(runway.latitude),
+                lon=_float(runway.longitude),
                 alt=_feet(runway.elevation_ft),
                 surface=_surface(runway.surface),
                 heading=_float(runway.true_heading, 3),
                 length=_feet(runway.length_ft),
                 width=_feet(runway.width_ft),
-                number=number,
-                designator=designator,
+                number=runway.number,
+                primaryDesignator=runway.primary_designator,
+                secondaryDesignator=runway.secondary_designator,
                 primaryTakeoff="TRUE",
                 primaryLanding="TRUE",
                 secondaryTakeoff="TRUE",
                 secondaryLanding="TRUE",
             ))
-            _append_ils(
-                runway_element,
-                runway,
-                [ils for ils in airport_ilses if ils.runway == runway.ident],
-            )
+            if runway.primary is not None:
+                _append_ils(
+                    runway_element,
+                    runway.primary,
+                    _runway_ilses(runway.primary, airport_ilses),
+                    end="PRIMARY",
+                )
+            if runway.secondary is not None:
+                _append_ils(
+                    runway_element,
+                    runway.secondary,
+                    _runway_ilses(runway.secondary, airport_ilses),
+                    end="SECONDARY",
+                )
         terminal_points = sorted(
             (
                 point for point in model.terminal_waypoints
@@ -897,7 +1132,7 @@ def write_bglcomp_xml(
             airport_element,
             airport.icao,
             model,
-            airport_runways,
+            airport_runway_ends,
         )
         airport_holdings = [
             holding for holding in model.holdings
@@ -972,7 +1207,14 @@ def write_bglcomp_xml(
     return XmlProjection(
         path=output,
         airports=len(projected_airports),
-        runways=len(projected_runways),
+        runways=sum(
+            len(_physical_runways([
+                runway
+                for runway in projected_runways
+                if runway.airport_key == airport.key
+            ]))
+            for airport in projected_airports
+        ),
         waypoints=(
             enroute_waypoints
             + terminal_waypoint_count

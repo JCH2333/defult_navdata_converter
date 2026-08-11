@@ -62,8 +62,8 @@ def test_airport_projection_filters_prefix_and_emits_ils_and_procedure(tmp_path:
         "r", "zb", "03L", 30.0, 10000, 150, "ASP", 1000, source, 35.1, 105.1,
     ))
     model.ilses.append(Ils(
-        "ZBCF", "03L", "ICF", 109.5, "1", 35.2, 105.2, 27.0, 3.0, None,
-        35.2, 105.2, 35.2, 105.2, 304.8, source,
+        "ZBCF", "03L", "ICF", 109.5, "1", 35.11, 105.11, 27.0, 3.0, None,
+        35.11, 105.11, 35.11, 105.11, 304.8, source,
     ))
     model.terminal_waypoints.append(TerminalWaypoint(
         "t", "ZBCF", "FIX01", 35.3, 105.3, source, "ZB",
@@ -98,6 +98,57 @@ def test_airport_projection_filters_prefix_and_emits_ils_and_procedure(tmp_path:
     assert leg_attributes["turnDirection"] == "E"
     assert len(root.findall("Waypoint")) == 1
     assert projection.waypoints == 2
+
+
+def test_reciprocal_runway_ends_become_one_physical_runway(tmp_path: Path):
+    model = NavModel(Path("source"))
+    source = SourceRef("fixture", 1)
+    model.airports["a"] = Airport(
+        "a", "ZBCF", "ZBCF", 35.0, 105.0, 1000, 18000, 180, source,
+    )
+    model.runways.extend([
+        Runway(
+            "primary", "a", "03L", 30.0, 10000, 150, "ASP", 1000,
+            source, 35.0, 105.0,
+        ),
+        Runway(
+            "secondary", "a", "21R", 210.0, 10000, 150, "ASP", 1020,
+            source, 35.02, 105.02,
+        ),
+    ])
+    model.ilses.extend([
+        Ils(
+            "ZBCF", "03L", "IPRI", 109.5, "1", 35.0, 105.0, 30.0,
+            None, None, None, None, None, None, None, source,
+        ),
+        Ils(
+            "ZBCF", "21R", "ISEC", 110.3, "1", 35.02, 105.02, 210.0,
+            None, None, None, None, None, None, None, source,
+        ),
+        Ils(
+            "ZBCF", "03L", "WRONG", 111.1, "1", 45.0, 115.0, 30.0,
+            None, None, None, None, None, None, None, source,
+        ),
+    ])
+
+    output = tmp_path / "runways.xml"
+    projection = write_bglcomp_xml(model, DEFAULT_CYCLE, output, scope="airports")
+
+    root = ET.parse(output).getroot()
+    runways = root.findall("Airport/Runway")
+    assert len(runways) == 1
+    assert projection.runways == 1
+    assert runways[0].attrib["number"] == "03"
+    assert runways[0].attrib["primaryDesignator"] == "L"
+    assert runways[0].attrib["secondaryDesignator"] == "R"
+    assert "designator" not in runways[0].attrib
+    assert 35.0 < float(runways[0].attrib["lat"]) < 35.02
+    assert 105.0 < float(runways[0].attrib["lon"]) < 105.02
+    assert runways[0].attrib["alt"] == "1010F"
+    assert [
+        (ils.attrib["ident"], ils.attrib["end"])
+        for ils in runways[0].findall("Ils")
+    ] == [("IPRI", "PRIMARY"), ("ISEC", "SECONDARY")]
 
 
 def test_root_terminal_waypoints_are_deduplicated_across_airports(tmp_path: Path):
