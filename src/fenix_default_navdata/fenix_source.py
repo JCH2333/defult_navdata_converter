@@ -420,6 +420,47 @@ def _load_procedures(
     model.procedure_segments.clear()
     model.terminal_waypoints.clear()
     terminal_points: dict[tuple[str, str, str, float, float], TerminalWaypoint] = {}
+    coordinate_points: dict[
+        tuple[float, float],
+        tuple[str, str, str, int] | None,
+    ] = {}
+    for row in connection.execute("""
+        WITH waypoint_country AS (
+            SELECT ID, MIN(Country) AS Country
+            FROM WaypointLookup
+            GROUP BY ID
+        )
+        SELECT
+            w.ID, w.Ident, w.Latitude, w.Longtitude,
+            wl.Country, n.Type AS navaid_type
+        FROM Waypoints w
+        LEFT JOIN waypoint_country wl ON wl.ID=w.ID
+        LEFT JOIN Navaids n ON n.ID=w.NavaidID
+        WHERE
+            w.Ident IS NOT NULL
+            AND w.Latitude IS NOT NULL
+            AND w.Longtitude IS NOT NULL
+    """):
+        ident = str(row["Ident"] or "").strip().upper()
+        if not ident:
+            continue
+        coordinate_key = (
+            round(float(row["Latitude"]), 6),
+            round(float(row["Longtitude"]), 6),
+        )
+        candidate = (
+            ident,
+            str(row["Country"] or ""),
+            _fix_type(row["navaid_type"], terminal=True),
+            int(row["ID"]),
+        )
+        existing = coordinate_points.get(coordinate_key)
+        if existing is None and coordinate_key in coordinate_points:
+            continue
+        if existing is not None and existing[:3] != candidate[:3]:
+            coordinate_points[coordinate_key] = None
+        else:
+            coordinate_points[coordinate_key] = candidate
     query = """
         WITH waypoint_country AS (
             SELECT ID, MIN(Country) AS Country
@@ -513,6 +554,7 @@ def _load_procedures(
         track_code = str(row["TrackCode"] or "").strip().upper()
         fix_ident = str(row["fix_ident"] or "").strip().upper() or None
         fix_country = str(row["fix_country"] or airport.icao[:2])
+        fix_point_id = row["WptID"]
         if track_code.startswith("RWY") and fix_ident:
             runway_ident = fix_ident.removeprefix("RWY")
             if re.fullmatch(r"\d{1,2}[LRC]?", runway_ident):
@@ -539,22 +581,6 @@ def _load_procedures(
                 source=SourceRef("Fenix:TerminalLegs", int(row["ID"])),
             ))
             continue
-        map_runway_fix = (
-            fix_ident is None
-            and (
-                str(row["Alt"] or "").strip().upper() == "MAP"
-                or (
-                    procedure_kind == "approach"
-                    and "M" in str(row["WptDescCode"] or "").replace(" ", "").upper()
-                    and row["WptLat"] is not None
-                    and row["WptLon"] is not None
-                )
-            )
-            and bool(procedure_runway)
-        )
-        if map_runway_fix:
-            fix_ident = procedure_runway.removeprefix("RWY")
-            fix_country = airport.icao[:2]
         fix_latitude = (
             float(row["fix_latitude"])
             if row["fix_latitude"] is not None
@@ -565,10 +591,67 @@ def _load_procedures(
             if row["fix_longitude"] is not None
             else row["WptLon"]
         )
+        waypoint_description = str(row["WptDescCode"] or "").replace(" ", "").upper()
+        map_runway_fix = (
+            fix_ident is None
+            and (
+                track_code.startswith("RWY")
+                or
+                str(row["Alt"] or "").strip().upper() == "MAP"
+                or (
+                    procedure_kind == "approach"
+                    and "M" in waypoint_description
+                    and row["WptLat"] is not None
+                    and row["WptLon"] is not None
+                )
+                or (
+                    procedure_kind == "departure"
+                    and not active_legs
+                    and key[2] == "ALL"
+                    and "G" in waypoint_description
+                    and fix_latitude is not None
+                    and fix_longitude is not None
+                )
+            )
+            and bool(procedure_runway)
+        )
+        if map_runway_fix:
+            fix_ident = procedure_runway.removeprefix("RWY")
+            fix_country = airport.icao[:2]
+        coordinate_candidate = (
+            coordinate_points.get((
+                round(float(fix_latitude), 6),
+                round(float(fix_longitude), 6),
+            ))
+            if fix_latitude is not None and fix_longitude is not None
+            else None
+        )
+        recovered_fix_type = None
+        if fix_ident is None and coordinate_candidate is not None:
+            (
+                fix_ident,
+                fix_country,
+                recovered_fix_type,
+                fix_point_id,
+            ) = coordinate_candidate
+            fix_country = fix_country or airport.icao[:2]
+        if (
+            fix_ident is None
+            and not active_legs
+            and key[2] not in {"", "ALL"}
+            and not key[2].startswith("RW")
+            and re.fullmatch(r"[A-Z0-9]{1,5}", key[2])
+            and fix_latitude is not None
+            and fix_longitude is not None
+        ):
+            fix_ident = key[2]
+            fix_country = airport.icao[:2]
+            recovered_fix_type = "TERMINAL_WAYPOINT"
         fix_type = (
             "RUNWAY"
             if map_runway_fix or track_code.startswith("RWY")
-            else _fix_type(row["fix_navaid_type"], terminal=True)
+            else recovered_fix_type
+            or _fix_type(row["fix_navaid_type"], terminal=True)
         )
         if leg_type in SDK_FIX_REQUIRED_LEG_TYPES and fix_ident is None:
             model.rejected_records.append(RejectedRecord(
@@ -631,16 +714,44 @@ def _load_procedures(
             waypoint_description_code=str(row["WptDescCode"] or ""),
             speed_limit_descriptor=str(row["SpeedLimitDescription"] or "") or None,
         ))
-        for ident, country, latitude, longitude, point_id in (
-            (fix_ident, fix_country, row["fix_latitude"], row["fix_longitude"], row["WptID"]),
-            (
-                center_ident,
-                center_country,
-                row["center_latitude"],
-                row["center_longitude"],
-                row["CenterID"],
-            ),
+        if (
+            fix_ident
+            and fix_type != "RUNWAY"
+            and fix_latitude is not None
+            and fix_longitude is not None
         ):
+            point_id = fix_point_id
+            point_key = (
+                airport.icao,
+                fix_country,
+                fix_ident,
+                float(fix_latitude),
+                float(fix_longitude),
+            )
+            terminal_points.setdefault(point_key, TerminalWaypoint(
+                key=(
+                    f"fenix-terminal-waypoint:{point_id}"
+                    if point_id is not None
+                    else f"fenix-terminal-leg-waypoint:{row['ID']}"
+                ),
+                airport=airport.icao,
+                ident=fix_ident,
+                latitude=float(fix_latitude),
+                longitude=float(fix_longitude),
+                source=(
+                    SourceRef("Fenix:Waypoints", int(point_id))
+                    if point_id is not None
+                    else SourceRef("Fenix:TerminalLegs", int(row["ID"]))
+                ),
+                country=fix_country,
+            ))
+        for ident, country, latitude, longitude, point_id in ((
+            center_ident,
+            center_country,
+            row["center_latitude"],
+            row["center_longitude"],
+            row["CenterID"],
+        ),):
             if not ident or latitude is None or longitude is None or point_id is None:
                 continue
             point_key = (airport.icao, country, ident, float(latitude), float(longitude))

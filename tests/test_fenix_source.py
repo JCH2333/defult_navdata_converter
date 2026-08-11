@@ -288,6 +288,132 @@ def test_fenix_loader_recovers_approach_map_fix_from_missed_descriptor(
     ]
 
 
+def test_fenix_loader_recovers_missing_fix_from_unique_coordinate(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database = tmp_path / "nd.db3"
+    _database(database)
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "INSERT INTO Waypoints VALUES (329293,'OMDEM',0,'OMDEM',35.6,105.6,NULL)"
+        )
+        connection.execute(
+            "INSERT INTO WaypointLookup VALUES ('OMDEM','ZB',329293)"
+        )
+        connection.execute(
+            "INSERT INTO Terminals VALUES (31,1,'1','ZBCF','ARR03','ARR03','03',10,NULL)"
+        )
+        connection.execute(
+            "INSERT INTO TerminalLegs VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (50, 31, "6", "RW03", "IF", None, 35.6, 105.6, None,
+             None, None, None, None, None, None, None, "6000A",
+             None, None, None, None, "E"),
+        )
+        connection.commit()
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    monkeypatch.setattr(
+        "fenix_default_navdata.fenix_source.load_naip",
+        lambda root, include_terminal_documents=False: NavModel(root),
+    )
+
+    model = load_fenix_model(database, raw, DEFAULT_CYCLE)
+
+    segment = next(segment for segment in model.procedure_segments if segment.label == "ARR03")
+    leg = segment.legs[0]
+    assert (leg.fix_ident, leg.fix_region, leg.fix_type) == (
+        "OMDEM",
+        "ZB",
+        "TERMINAL_WAYPOINT",
+    )
+    assert any(point.ident == "OMDEM" for point in model.terminal_waypoints)
+    assert not any(record.source.row == 50 for record in model.rejected_records)
+
+
+def test_fenix_loader_recovers_first_transition_fix_from_transition_name(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database = tmp_path / "nd.db3"
+    _database(database)
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "INSERT INTO Terminals VALUES (31,1,'3','ZBCF','R03-Y','R03-Y','03',10,NULL)"
+        )
+        connection.execute(
+            "INSERT INTO TerminalLegs VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (50, 31, "0", "CF977", "IF", None, 35.6, 105.6, None,
+             None, None, None, None, None, None, None, "6000A",
+             None, None, None, None, "E A"),
+        )
+        connection.commit()
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    monkeypatch.setattr(
+        "fenix_default_navdata.fenix_source.load_naip",
+        lambda root, include_terminal_documents=False: NavModel(root),
+    )
+
+    model = load_fenix_model(database, raw, DEFAULT_CYCLE)
+
+    segment = next(segment for segment in model.procedure_segments if segment.label == "R03-Y")
+    leg = segment.legs[0]
+    assert (leg.fix_ident, leg.fix_region, leg.fix_type) == (
+        "CF977",
+        "ZB",
+        "TERMINAL_WAYPOINT",
+    )
+    assert any(point.ident == "CF977" for point in model.terminal_waypoints)
+    assert not any(record.source.row == 50 for record in model.rejected_records)
+
+
+def test_fenix_loader_recovers_runway_fix_for_departure_and_runway_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database = tmp_path / "nd.db3"
+    _database(database)
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "INSERT INTO Terminals VALUES (31,1,'2','ZBCF','DEP03','DEP03','03',10,NULL)"
+        )
+        connection.execute(
+            "INSERT INTO Terminals VALUES (32,1,'3','ZBCF','R03','R03','03',10,NULL)"
+        )
+        connection.executemany(
+            "INSERT INTO TerminalLegs VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            [
+                (50, 31, "5", "ALL", "IF", None, 35.01, 105.02, None,
+                 None, None, None, None, None, None, None, None,
+                 None, None, None, None, "G"),
+                (51, 32, "0", "", "RWY15", None, None, None, None,
+                 None, None, None, None, None, None, None, None,
+                 None, None, None, None, "EE"),
+            ],
+        )
+        connection.commit()
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    monkeypatch.setattr(
+        "fenix_default_navdata.fenix_source.load_naip",
+        lambda root, include_terminal_documents=False: NavModel(root),
+    )
+
+    model = load_fenix_model(database, raw, DEFAULT_CYCLE)
+
+    recovered = {
+        segment.label: (segment.legs[0].fix_ident, segment.legs[0].fix_type)
+        for segment in model.procedure_segments
+        if segment.label in {"DEP03", "R03"}
+    }
+    assert recovered == {
+        "DEP03": ("03", "RUNWAY"),
+        "R03": ("03", "RUNWAY"),
+    }
+    assert not any(record.source.row in {50, 51} for record in model.rejected_records)
+
+
 def test_fenix_loader_rejects_unrecoverable_required_fix(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
