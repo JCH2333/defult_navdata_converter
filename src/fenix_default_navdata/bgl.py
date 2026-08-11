@@ -244,21 +244,45 @@ def _speed_descriptor(value: str | None) -> str | None:
 
 _FIX_LEG_TYPES = {
     "AF", "CF", "DF", "FA", "FC", "FD", "FM", "HA", "HF", "HM", "IF", "PI",
-    "RF", "TF",
+    "RF", "TF", "VM",
 }
-_FLY_OVER_LEG_TYPES = _FIX_LEG_TYPES
+_FLY_OVER_LEG_TYPES = {
+    "AF", "CF", "CI", "CR", "DF", "FC", "FD", "RF", "TF", "VI", "VR",
+}
 _TURN_LEG_TYPES = {
-    "AF", "DF", "FA", "FC", "FD", "FM", "HA", "HF", "HM", "IF", "PI", "RF",
-    "TF", "VR",
+    "AF", "CA", "CD", "CF", "CI", "CR", "DF", "FA", "FC", "FD", "FM", "HA",
+    "HF", "HM", "RF", "TF", "VA", "VD", "VI", "VM", "VR",
 }
-_RECOMMENDED_LEG_TYPES = {"AF", "CD", "CF", "CR", "FC", "FD", "VD", "VR"}
-_THETA_LEG_TYPES = {"AF", "CD", "CF", "CR", "FC", "FD", "VR"}
-_RHO_LEG_TYPES = {"AF", "CF", "FC"}
+_REQUIRED_TURN_LEG_TYPES = {"AF", "RF", "TF"}
+_RECOMMENDED_LEG_TYPES = {
+    "AF", "CD", "CF", "CI", "CR", "DF", "FA", "FC", "FD", "FM", "HA", "HF",
+    "HM", "IF", "PI", "RF", "TF", "VD", "VI", "VR",
+}
+_REQUIRED_RECOMMENDED_LEG_TYPES = {
+    "AF", "CD", "CF", "CR", "FA", "FC", "FD", "FM", "PI", "VD", "VR",
+}
+_THETA_LEG_TYPES = {
+    "AF", "CF", "DF", "FA", "FC", "FD", "FM", "HA", "HF", "HM", "IF", "PI",
+    "RF", "TF", "VR",
+}
+_REQUIRED_THETA_LEG_TYPES = {"AF", "CF", "FA", "FC", "FD", "FM", "PI", "VR"}
+_RHO_LEG_TYPES = {
+    "AF", "CF", "DF", "FA", "FC", "FD", "FM", "HA", "HF", "HM", "IF", "PI",
+    "TF",
+}
+_REQUIRED_RHO_LEG_TYPES = {"AF", "CF", "FA", "FC", "FD", "FM", "PI"}
 _COURSE_LEG_TYPES = {
     "AF", "CA", "CD", "CF", "CI", "CR", "FA", "FC", "FD", "FM", "HA", "HF",
-    "HM", "IF", "PI", "RF", "TF", "VA", "VD", "VI", "VM", "VR",
+    "HM", "PI", "RF", "TF", "VA", "VD", "VI", "VM", "VR",
 }
-_DISTANCE_LEG_TYPES = {"CD", "CF", "FC", "HA", "HF", "HM", "PI", "RF", "VD"}
+_REQUIRED_COURSE_LEG_TYPES = _COURSE_LEG_TYPES - {"VA"}
+_DISTANCE_LEG_TYPES = {
+    "CD", "CF", "CI", "CR", "FC", "FD", "HA", "HF", "HM", "PI", "RF", "TF",
+    "VD",
+}
+_REQUIRED_DISTANCE_LEG_TYPES = {
+    "CD", "CF", "CI", "CR", "FC", "FD", "HA", "HF", "HM", "PI", "RF",
+}
 
 
 def _initial_bearing(
@@ -280,10 +304,8 @@ def _initial_bearing(
 
 def _fallback_true_course(legs, index: int) -> float | None:
     leg = legs[index]
-    if leg.leg_type not in {"IF", "TF"}:
-        return None
     if leg.fix_latitude is None or leg.fix_longitude is None:
-        return None
+        return 0.0
     for previous in reversed(legs[:index]):
         if previous.fix_latitude is not None and previous.fix_longitude is not None:
             if (
@@ -312,8 +334,16 @@ def _fallback_true_course(legs, index: int) -> float | None:
 
 
 def _leg_distance(leg) -> float | None:
-    if leg.leg_type in {"CD", "VD"}:
-        return leg.rho_nm
+    if leg.leg_type in {"CD", "CF", "FC", "FD", "PI", "VD"}:
+        return leg.distance_nm if leg.distance_nm is not None else leg.rho_nm
+    if leg.leg_type == "RF":
+        return (
+            leg.distance_nm
+            if leg.distance_nm is not None
+            else leg.arc_radius_nm
+        )
+    if leg.leg_type in _REQUIRED_DISTANCE_LEG_TYPES and leg.distance_nm is None:
+        return 0.0
     return leg.distance_nm
 
 
@@ -327,10 +357,36 @@ def _leg_attrs(legs, index: int) -> dict[str, str]:
     source_course = leg.course_degrees if leg_type in _COURSE_LEG_TYPES else None
     true_course = (
         _fallback_true_course(legs, index)
-        if source_course is None
+        if source_course is None and leg_type in _REQUIRED_COURSE_LEG_TYPES
         else None
     )
     distance = _leg_distance(leg) if leg_type in _DISTANCE_LEG_TYPES else None
+    recommended_ident = leg.recommended_ident
+    recommended_region = leg.recommended_region
+    recommended_type = leg.recommended_type
+    if not recommended_ident and leg_type in _REQUIRED_RECOMMENDED_LEG_TYPES:
+        recommended_ident = leg.center_ident or leg.fix_ident
+        recommended_region = leg.center_region or leg.fix_region
+        recommended_type = (
+            "TERMINAL_WAYPOINT"
+            if leg.center_ident
+            else leg.fix_type
+        )
+    theta = leg.theta_degrees
+    if theta is None and leg_type in _REQUIRED_THETA_LEG_TYPES:
+        theta = leg.course_degrees if leg.course_degrees is not None else 0.0
+    rho = leg.rho_nm
+    if rho is None and leg_type in _REQUIRED_RHO_LEG_TYPES:
+        rho = (
+            leg.distance_nm
+            if leg.distance_nm is not None
+            else leg.arc_radius_nm
+        )
+        if rho is None:
+            rho = 0.0
+    turn_direction = leg.turn_direction
+    if not turn_direction and leg_type in _REQUIRED_TURN_LEG_TYPES:
+        turn_direction = "E"
     attrs = _attrs(
         type=leg_type,
         fixType=(
@@ -349,38 +405,38 @@ def _leg_attrs(legs, index: int) -> dict[str, str]:
             else None
         ),
         flyOver=(
-            "TRUE"
-            if leg.fly_over and leg_type in _FLY_OVER_LEG_TYPES
+            ("TRUE" if leg.fly_over else "FALSE")
+            if leg_type in _FLY_OVER_LEG_TYPES
             else None
         ),
         turnDirection=(
-            leg.turn_direction
+            turn_direction
             if leg_type in _TURN_LEG_TYPES
             else None
         ),
         recommendedType=(
-            leg.recommended_type
-            if leg_type in _RECOMMENDED_LEG_TYPES and leg.recommended_ident
+            recommended_type
+            if leg_type in _RECOMMENDED_LEG_TYPES and recommended_ident
             else None
         ),
         recommendedIdent=(
-            leg.recommended_ident[:8]
-            if leg_type in _RECOMMENDED_LEG_TYPES and leg.recommended_ident
+            recommended_ident[:8]
+            if leg_type in _RECOMMENDED_LEG_TYPES and recommended_ident
             else None
         ),
         recommendedRegion=(
-            leg.recommended_region[:2]
-            if leg_type in _RECOMMENDED_LEG_TYPES and leg.recommended_ident
+            recommended_region[:2]
+            if leg_type in _RECOMMENDED_LEG_TYPES and recommended_ident
             else None
         ),
         theta=(
-            _float(leg.theta_degrees, 3)
-            if leg_type in _THETA_LEG_TYPES and leg.theta_degrees is not None
+            _float(theta, 3)
+            if leg_type in _THETA_LEG_TYPES and theta is not None
             else None
         ),
         rho=(
-            _nautical_miles(leg.rho_nm)
-            if leg_type in _RHO_LEG_TYPES and leg.rho_nm is not None
+            _nautical_miles(rho)
+            if leg_type in _RHO_LEG_TYPES and rho is not None
             else None
         ),
         magneticCourse=(

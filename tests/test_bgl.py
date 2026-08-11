@@ -94,7 +94,8 @@ def test_airport_projection_filters_prefix_and_emits_ils_and_procedure(tmp_path:
     ).attrib
     assert leg_attributes["fixIdent"] == "FIX01"
     assert leg_attributes["trueCourse"] == "0"
-    assert "flyOver" not in leg_attributes
+    assert leg_attributes["flyOver"] == "FALSE"
+    assert leg_attributes["turnDirection"] == "E"
     assert len(root.findall("Waypoint")) == 1
     assert projection.waypoints == 2
 
@@ -165,8 +166,42 @@ def test_leg_projection_uses_type_specific_semantic_fields(tmp_path: Path):
     assert attributes["rho"] == "12.5N"
     assert attributes["magneticCourse"] == "90"
     assert attributes["distance"] == "8N"
-    assert "flyOver" not in attributes
+    assert attributes["flyOver"] == "FALSE"
     assert "arcCenterFixIdent" not in attributes
+
+
+def test_if_leg_does_not_emit_course_or_fly_over(tmp_path: Path):
+    model = NavModel(Path("source"))
+    source = SourceRef("fixture", 1)
+    model.airports["a"] = Airport(
+        "a", "ZBCF", "ZBCF", 35.0, 105.0, 1000, 18000, 180, source,
+    )
+    model.procedure_segments.append(ProcedureSegment(
+        "ZBCF",
+        "SID01",
+        "departure",
+        "",
+        "",
+        (
+            ChartTerminalLeg(
+                "SID01", "", "IF", "FIX01", "fixture",
+                sequence=1, fix_region="ZB", fix_type="TERMINAL_WAYPOINT",
+                fix_latitude=35.1, fix_longitude=105.1,
+                course_degrees=90, fly_over=True,
+            ),
+        ),
+        source,
+    ))
+
+    output = tmp_path / "procedures.xml"
+    write_bglcomp_xml(model, DEFAULT_CYCLE, output, scope="airports")
+
+    attributes = ET.parse(output).getroot().find(
+        "Airport/Departure/CommonRouteLegs/Leg"
+    ).attrib
+    assert "magneticCourse" not in attributes
+    assert "trueCourse" not in attributes
+    assert "flyOver" not in attributes
 
 
 def test_missing_compiler_is_reported():
