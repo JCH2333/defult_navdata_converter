@@ -561,13 +561,17 @@ def _fallback_true_course(legs, index: int) -> float | None:
 
 def _leg_distance(leg) -> float | None:
     if leg.leg_type in {"CD", "CF", "FC", "FD", "PI", "VD"}:
-        return leg.distance_nm if leg.distance_nm is not None else leg.rho_nm
+        distance = leg.distance_nm if leg.distance_nm is not None else leg.rho_nm
+        if distance is not None:
+            return distance
     if leg.leg_type == "RF":
-        return (
+        distance = (
             leg.distance_nm
             if leg.distance_nm is not None
             else leg.arc_radius_nm
         )
+        if distance is not None:
+            return distance
     if leg.leg_type in _REQUIRED_DISTANCE_LEG_TYPES and leg.distance_nm is None:
         return 0.0
     return leg.distance_nm

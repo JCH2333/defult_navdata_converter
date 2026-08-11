@@ -298,6 +298,37 @@ def test_if_leg_does_not_emit_course_or_fly_over(tmp_path: Path):
     assert "flyOver" not in attributes
 
 
+def test_cf_leg_without_source_distance_uses_sdk_zero_distance(tmp_path: Path):
+    model = NavModel(Path("source"))
+    source = SourceRef("fixture", 1)
+    model.airports["a"] = Airport(
+        "a", "ZBCF", "ZBCF", 35.0, 105.0, 1000, 18000, 180, source,
+    )
+    model.procedure_segments.append(ProcedureSegment(
+        "ZBCF",
+        "SID01",
+        "departure",
+        "",
+        "",
+        (
+            ChartTerminalLeg(
+                "SID01", "", "CF", "FIX01", "fixture",
+                sequence=1, fix_region="ZB", fix_type="TERMINAL_WAYPOINT",
+                fix_latitude=35.1, fix_longitude=105.1, course_degrees=90,
+            ),
+        ),
+        source,
+    ))
+
+    output = tmp_path / "procedures.xml"
+    write_bglcomp_xml(model, DEFAULT_CYCLE, output, scope="airports")
+
+    attributes = ET.parse(output).getroot().find(
+        "Airport/Departure/CommonRouteLegs/Leg"
+    ).attrib
+    assert attributes["distance"] == "0N"
+
+
 def test_missing_compiler_is_reported():
     info = find_compiler(Path("does-not-exist.exe"))
     assert info.path is None
