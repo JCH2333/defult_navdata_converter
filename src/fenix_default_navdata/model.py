@@ -61,6 +61,7 @@ class Navaid:
     elevation_ft: int
     country: str
     source: SourceRef
+    terminal: bool = False
 
 
 @dataclass(frozen=True)

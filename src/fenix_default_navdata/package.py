@@ -87,7 +87,8 @@ def _compile_xml_package(
     *,
     package_name: str,
     airport_prefixes: tuple[str, ...],
-    scope: str,
+    include_enroute: bool,
+    duplicate_terminal_waypoints: bool,
     dependencies: list[dict[str, str]],
     package_order_hint: str,
 ) -> dict[str, object]:
@@ -95,15 +96,30 @@ def _compile_xml_package(
     work.mkdir(parents=True, exist_ok=True)
     input_dir = work / "inputs"
     input_dir.mkdir(parents=True, exist_ok=True)
-    xml_path = input_dir / "00_enroute.xml"
-    projection = write_bglcomp_xml(model, cycle, xml_path, scope=scope)
+    xml_paths: list[Path] = []
+    projections = []
+    if include_enroute:
+        xml_path = input_dir / "00_enroute.xml"
+        projections.append(write_bglcomp_xml(model, cycle, xml_path, scope="enroute"))
+        xml_paths.append(xml_path)
+    for prefix in airport_prefixes:
+        xml_path = input_dir / f"{prefix}_airports.xml"
+        projections.append(write_bglcomp_xml(
+            model,
+            cycle,
+            xml_path,
+            scope="airports",
+            airport_prefix=prefix,
+            duplicate_terminal_waypoints=duplicate_terminal_waypoints,
+        ))
+        xml_paths.append(xml_path)
     if compiler.kind == "PackageTool":
         project_path = write_package_project(
             work,
             package_name=package_root.name,
             title=f"China NavData AIRAC {cycle.number}",
             output_dir=f"scenery\\{package_name}",
-            source_xmls=(xml_path,),
+            source_xmls=tuple(xml_paths),
             package_order_hint=package_order_hint,
         )
         compile_report = compile_package(
@@ -114,11 +130,26 @@ def _compile_xml_package(
         built_root = Path(str(compile_report["package_root"]))
         shutil.copytree(built_root, package_root, dirs_exist_ok=True)
     else:
-        bgl_path = package_root / "scenery" / package_name / "00_enroute.bgl"
-        compile_report = compile_bgl(xml_path, compiler, bgl_path)
+        compile_reports = []
+        for xml_path in xml_paths:
+            bgl_path = (
+                package_root / "scenery" / package_name / f"{xml_path.stem}.bgl"
+            )
+            compile_reports.append(compile_bgl(xml_path, compiler, bgl_path))
         _write_package_metadata(package_root, package_root.name, f"China NavData AIRAC {cycle.number}", dependencies)
+        compile_report = {
+            "kind": compiler.kind,
+            "reports": compile_reports,
+            "bgls": [
+                str(package_root / "scenery" / package_name / f"{path.stem}.bgl")
+                for path in xml_paths
+            ],
+        }
     return {
-        "projection": {**projection.__dict__, "path": str(projection.path)},
+        "projections": [
+            {**projection.__dict__, "path": str(projection.path)}
+            for projection in projections
+        ],
         "compile": compile_report,
         "prefixes": airport_prefixes,
     }
@@ -186,34 +217,61 @@ def build_candidate(
         report["packages"][NAV_PACKAGE] = blocked
         report["packages"][AIRPORT_PACKAGE] = blocked
     else:
-        try:
-            nav_root = output / NAV_PACKAGE
-            nav_root.mkdir()
-            report["packages"][NAV_PACKAGE] = _compile_xml_package(
-                nav_root, model, cycle, compiler, package_name="pmdg-china-navdata",
-                airport_prefixes=("ZB", "ZG", "ZH", "ZJ", "ZL", "ZP", "ZS", "ZU", "ZW", "ZY"),
-                scope="all",
-                dependencies=[
+        prefixes = ("ZB", "ZG", "ZH", "ZJ", "ZL", "ZP", "ZS", "ZU", "ZW", "ZY")
+        package_specs = (
+            (
+                NAV_PACKAGE,
+                "pmdg-china-navdata",
+                True,
+                True,
+                [
                     {"name": BASE_PACKAGE, "package_version": "0.1.0"},
                     {"name": JEPP_PACKAGE, "package_version": "2.26.16"},
                 ],
-                package_order_hint="CUSTOM_NAVDATA_PATCH",
-            )
-            airport_root = output / AIRPORT_PACKAGE
-            airport_root.mkdir()
-            report["packages"][AIRPORT_PACKAGE] = _compile_xml_package(
-                airport_root, model, cycle, compiler, package_name="pmdg-china-airport-patch",
-                airport_prefixes=("ZB", "ZG", "ZH", "ZJ", "ZL", "ZP", "ZS", "ZU", "ZW", "ZY"),
-                scope="airports",
-                dependencies=[{"name": NAV_PACKAGE, "package_version": "0.1.0"}],
-                package_order_hint="CUSTOM_AIRPORT_PATCH",
-            )
-        except CompilerUnavailable as error:
-            report["packages"][NAV_PACKAGE] = {"status": "blocked", "reason": str(error)}
-            report["packages"][AIRPORT_PACKAGE] = {"status": "blocked", "reason": str(error)}
-        except Exception as error:
-            report["packages"][NAV_PACKAGE] = {"status": "failed", "reason": str(error)}
-            report["packages"][AIRPORT_PACKAGE] = {"status": "failed", "reason": str(error)}
+                "CUSTOM_NAVDATA_PATCH",
+            ),
+            (
+                AIRPORT_PACKAGE,
+                "pmdg-china-airport-patch",
+                False,
+                False,
+                [{"name": NAV_PACKAGE, "package_version": "0.1.0"}],
+                "CUSTOM_AIRPORT_PATCH",
+            ),
+        )
+        for (
+            output_name,
+            package_name,
+            include_enroute,
+            duplicate_terminal_waypoints,
+            dependencies,
+            package_order_hint,
+        ) in package_specs:
+            package_root = output / output_name
+            package_root.mkdir()
+            try:
+                report["packages"][output_name] = _compile_xml_package(
+                    package_root,
+                    model,
+                    cycle,
+                    compiler,
+                    package_name=package_name,
+                    airport_prefixes=prefixes,
+                    include_enroute=include_enroute,
+                    duplicate_terminal_waypoints=duplicate_terminal_waypoints,
+                    dependencies=dependencies,
+                    package_order_hint=package_order_hint,
+                )
+            except CompilerUnavailable as error:
+                report["packages"][output_name] = {
+                    "status": "blocked",
+                    "reason": str(error),
+                }
+            except Exception as error:
+                report["packages"][output_name] = {
+                    "status": "failed",
+                    "reason": str(error),
+                }
     report["deployable"] = all(
         (output / name / "bglIndex.bout").is_file()
         and bool(list((output / name).rglob("*.bgl")))

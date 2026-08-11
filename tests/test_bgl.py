@@ -9,7 +9,18 @@ from fenix_default_navdata.bgl import (
     write_bglcomp_xml,
     write_package_project,
 )
-from fenix_default_navdata.model import Airport, NavModel, Runway, SourceRef
+from fenix_default_navdata.model import (
+    Airport,
+    AirwayLeg,
+    ChartTerminalLeg,
+    Ils,
+    NavModel,
+    ProcedureSegment,
+    Runway,
+    SourceRef,
+    TerminalWaypoint,
+    Waypoint,
+)
 from fenix_default_navdata.profile import DEFAULT_CYCLE
 
 
@@ -17,6 +28,16 @@ def test_bgl_xml_is_deterministic(tmp_path: Path):
     model = NavModel(Path("source"))
     model.airports["a"] = Airport("a", "ZBCF", "TEST", 35.0, 105.0, 1000, 18000, 180, SourceRef("AD_HP.csv", 2))
     model.runways.append(Runway("r", "a", "03L", 30.0, 10000, 150, "ASP", 1000, SourceRef("RWY_DIRECTION.csv", 2)))
+    model.waypoints.extend([
+        Waypoint("w1", "START", "START", 35.0, 105.0, SourceRef("points", 1), "ZB"),
+        Waypoint("w2", "END", "END", 36.0, 106.0, SourceRef("points", 2), "ZB"),
+    ])
+    model.airway_legs.append(AirwayLeg(
+        "W1", 1, "START", "END", SourceRef("RTE_SEG.csv", 2),
+        start_latitude=35.0, start_longitude=105.0,
+        end_latitude=36.0, end_longitude=106.0,
+        start_country="ZB", end_country="ZB",
+    ))
     first = tmp_path / "one.xml"
     second = tmp_path / "two.xml"
     write_bglcomp_xml(model, DEFAULT_CYCLE, first)
@@ -26,6 +47,81 @@ def test_bgl_xml_is_deterministic(tmp_path: Path):
     assert root.tag == "FSData"
     assert root.find("AiracCycle").attrib["cycleNumber"] == "08"
     assert root.find("Airport/Runway").attrib["number"] == "03"
+    route = root.find("./Waypoint[@waypointIdent='START']/Route")
+    assert route is not None
+    assert route.attrib == {"name": "W1", "routeType": "BOTH"}
+    assert route.find("Next").attrib["waypointIdent"] == "END"
+
+
+def test_airport_projection_filters_prefix_and_emits_ils_and_procedure(tmp_path: Path):
+    model = NavModel(Path("source"))
+    source = SourceRef("fixture", 1)
+    model.airports["zb"] = Airport("zb", "ZBCF", "ZBCF", 35.0, 105.0, 1000, 18000, 180, source)
+    model.airports["zg"] = Airport("zg", "ZGAA", "ZGAA", 23.0, 113.0, 40, 18000, 180, source)
+    model.runways.append(Runway(
+        "r", "zb", "03L", 30.0, 10000, 150, "ASP", 1000, source, 35.1, 105.1,
+    ))
+    model.ilses.append(Ils(
+        "ZBCF", "03L", "ICF", 109.5, "1", 35.2, 105.2, 27.0, 3.0, None,
+        35.2, 105.2, 35.2, 105.2, 304.8, source,
+    ))
+    model.terminal_waypoints.append(TerminalWaypoint(
+        "t", "ZBCF", "FIX01", 35.3, 105.3, source, "ZB",
+    ))
+    leg = ChartTerminalLeg(
+        "SID01", "03L", "TF", "FIX01", "fixture",
+        procedure_kind="departure", sequence=1, fix_region="ZB",
+        fix_type="TERMINAL_WAYPOINT", fix_latitude=35.3, fix_longitude=105.3,
+    )
+    model.procedure_segments.append(ProcedureSegment(
+        "ZBCF", "SID01", "departure", "03L", "", (leg,), source,
+    ))
+    output = tmp_path / "ZB_airports.xml"
+    projection = write_bglcomp_xml(
+        model,
+        DEFAULT_CYCLE,
+        output,
+        scope="airports",
+        airport_prefix="ZB",
+        duplicate_terminal_waypoints=True,
+    )
+    root = ET.parse(output).getroot()
+    assert [airport.attrib["ident"] for airport in root.findall("Airport")] == ["ZBCF"]
+    assert root.find("Airport/Runway/Ils/GlideSlope") is not None
+    assert root.find("Airport/Runway/Ils/Dme") is not None
+    assert root.find("Airport/Departure/RunwayTransitions/RunwayTransitionLegs/Leg").attrib["fixIdent"] == "FIX01"
+    assert len(root.findall("Waypoint")) == 1
+    assert projection.waypoints == 2
+
+
+def test_root_terminal_waypoints_are_deduplicated_across_airports(tmp_path: Path):
+    model = NavModel(Path("source"))
+    source = SourceRef("fixture", 1)
+    model.airports["one"] = Airport(
+        "one", "ZBAA", "ZBAA", 40.0, 116.0, 100, 18000, 180, source,
+    )
+    model.airports["two"] = Airport(
+        "two", "ZBAD", "ZBAD", 39.5, 116.4, 100, 18000, 180, source,
+    )
+    model.terminal_waypoints.extend([
+        TerminalWaypoint("one:fix", "ZBAA", "FIX01", 40.1, 116.1, source, "ZB"),
+        TerminalWaypoint("two:fix", "ZBAD", "FIX01", 40.1, 116.1, source, "ZB"),
+    ])
+
+    output = tmp_path / "ZB_airports.xml"
+    projection = write_bglcomp_xml(
+        model,
+        DEFAULT_CYCLE,
+        output,
+        scope="airports",
+        airport_prefix="ZB",
+        duplicate_terminal_waypoints=True,
+    )
+
+    root = ET.parse(output).getroot()
+    assert len(root.findall("Waypoint")) == 1
+    assert len(root.findall("Airport/Waypoint")) == 2
+    assert projection.waypoints == 3
 
 
 def test_missing_compiler_is_reported():
@@ -36,13 +132,15 @@ def test_missing_compiler_is_reported():
 def test_package_tool_project_is_deterministic(tmp_path: Path):
     source = tmp_path / "source.xml"
     source.write_text("<FSData version=\"9.0\"/>", encoding="utf-8")
+    second_source = tmp_path / "ZB_airports.xml"
+    second_source.write_text("<FSData version=\"9.0\"/>", encoding="utf-8")
     root = tmp_path / "project"
     project = write_package_project(
         root,
         package_name="test-navdata",
         title="Test NavData",
         output_dir=r"scenery\test-navdata",
-        source_xmls=(source,),
+        source_xmls=(source, second_source),
         package_order_hint="CUSTOM_NAVDATA_PATCH",
     )
     parsed = ET.parse(project).getroot()
@@ -53,6 +151,7 @@ def test_package_tool_project_is_deterministic(tmp_path: Path):
     assert definition.findtext("AssetGroups/AssetGroup/Type") == "BGL"
     assert definition.findtext("AssetGroups/AssetGroup/OutputDir") == r"scenery\test-navdata"
     assert (root / "PackageSources" / "NavData" / "source.xml").read_bytes() == source.read_bytes()
+    assert (root / "PackageSources" / "NavData" / "ZB_airports.xml").read_bytes() == second_source.read_bytes()
 
 
 def test_package_tool_stages_project_in_ascii_path(tmp_path: Path, monkeypatch):

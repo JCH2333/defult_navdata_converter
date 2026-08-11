@@ -148,65 +148,307 @@ def _surface(value: str) -> str:
     }.get((value or "").upper(), "UNKNOWN")
 
 
-def write_bglcomp_xml(model: NavModel, cycle: Cycle, output: Path, *, scope: str = "all") -> XmlProjection:
-    """把统一中间模型投影为官方 XSD 约束下的 BglComp XML。
+def _feet(value: object) -> str:
+    return f"{_float(value)}F"
 
-    XML 是公开 SDK 的输入格式，不等同于 Navigraph 的最终 BGL；最终字节仍由
-    版本匹配的官方设施编译器决定。
-    """
-    output.parent.mkdir(parents=True, exist_ok=True)
-    ET.register_namespace("xsi", "http://www.w3.org/2001/XMLSchema-instance")
-    root = ET.Element("FSData", {
-        "version": "9.0",
-        "source": "fenix_to_default_navdata",
-    })
-    ET.SubElement(root, "AiracCycle", {
-        "cycleBegin": cycle.begin,
-        "cycleEnd": cycle.end,
-        "cycleNumber": cycle.number[-2:],
-    })
 
-    airports = [airport for airport in model.airports.values() if is_china_icao(airport.icao)]
-    airports.sort(key=lambda item: item.icao)
-    airport_keys = {airport.key for airport in airports}
-    runways = [runway for runway in model.runways if runway.airport_key in airport_keys]
-    runways.sort(key=lambda item: (model.airports[item.airport_key].icao, item.ident, item.key))
-    if scope not in {"all", "enroute", "airports"}:
-        raise ValueError(f"未知 XML 投影范围: {scope}")
-    projected_airports = airports if scope in {"all", "airports"} else []
-    projected_runways = runways if scope in {"all", "airports"} else []
-    for airport in projected_airports:
-        airport_element = ET.SubElement(root, "Airport", _attrs(
-            ident=airport.icao,
-            name=airport.name[:48],
-            region=airport.icao[:2],
-            regionCode=airport.icao[:2],
-            lat=_float(airport.latitude),
-            lon=_float(airport.longitude),
-            alt=_float(airport.elevation_ft),
-            transitionAltitude=_float(airport.transition_altitude),
-            transitionLevel=_float(airport.transition_level),
+def _nautical_miles(value: object) -> str:
+    return f"{_float(value, 3)}N"
+
+
+def _runway_parts(ident: str) -> tuple[str, str]:
+    number, designator = _number_designator(ident)
+    return number, designator or "NONE"
+
+
+def _route_type(value: str) -> str:
+    normalized = (value or "").strip().upper()
+    if normalized in {"L", "V", "VICTOR"}:
+        return "VICTOR"
+    if normalized in {"H", "J", "JET"}:
+        return "JET"
+    return "BOTH"
+
+
+def _route_point_type(value: str) -> str:
+    normalized = (value or "").strip().upper()
+    if "VOR" in normalized:
+        return "VOR"
+    if "NDB" in normalized:
+        return "NDB"
+    return "NAMED"
+
+
+def _ils_category(value: str | None) -> str | None:
+    return {
+        "0": "LOCALIZER",
+        "1": "CAT1",
+        "2": "CAT2",
+        "3": "CAT3",
+        "I": "IGS",
+    }.get(str(value or "").strip().upper())
+
+
+def _angle_delta(true_heading: float, magnetic_heading: float | None) -> float:
+    if magnetic_heading is None:
+        return 0.0
+    return ((float(true_heading) - float(magnetic_heading) + 180.0) % 360.0) - 180.0
+
+
+def _append_ils(runway_element: ET.Element, runway, ilses: list) -> None:
+    for ils in sorted(ilses, key=lambda item: (item.ident, item.frequency_mhz)):
+        heading = ils.localizer_course_magnetic
+        ils_element = ET.SubElement(runway_element, "Ils", _attrs(
+            lat=_float(ils.localizer_latitude),
+            lon=_float(ils.localizer_longitude),
+            alt=_feet(runway.elevation_ft),
+            heading=_float(heading if heading is not None else runway.true_heading, 3),
+            frequency=_float(ils.frequency_mhz, 3),
+            end="PRIMARY",
+            range=_nautical_miles(27),
+            magvar=_float(_angle_delta(runway.true_heading, heading), 3),
+            ident=ils.ident[:8],
+            width=_float(3.95, 3),
+            name=ils.ident[:48],
+            backCourse="FALSE",
+            lsCategory=_ils_category(ils.category),
         ))
-        for runway in [item for item in projected_runways if item.airport_key == airport.key]:
-            number, designator = _number_designator(runway.ident)
-            ET.SubElement(airport_element, "Runway", _attrs(
-                lat=_float(airport.latitude),
-                lon=_float(airport.longitude),
-                alt=_float(runway.elevation_ft),
-                surface=_surface(runway.surface),
-                heading=_float(runway.true_heading, 3),
-                length=_float(runway.length_ft),
-                width=_float(runway.width_ft),
-                number=number,
-                designator=designator,
-                primaryTakeoff="TRUE",
-                primaryLanding="TRUE",
-                secondaryTakeoff="TRUE",
-                secondaryLanding="TRUE",
+        if ils.glide_slope_degrees is not None:
+            ET.SubElement(ils_element, "GlideSlope", _attrs(
+                lat=_float(ils.glide_slope_latitude or ils.localizer_latitude),
+                lon=_float(ils.glide_slope_longitude or ils.localizer_longitude),
+                alt=_feet(runway.elevation_ft),
+                pitch=_float(ils.glide_slope_degrees, 3),
+                range=_nautical_miles(10),
+            ))
+        if ils.dme_latitude is not None and ils.dme_longitude is not None:
+            dme_altitude_ft = (
+                float(ils.dme_elevation_meters) / 0.3048
+                if ils.dme_elevation_meters is not None
+                else runway.elevation_ft
+            )
+            ET.SubElement(ils_element, "Dme", _attrs(
+                lat=_float(ils.dme_latitude),
+                lon=_float(ils.dme_longitude),
+                alt=_feet(dme_altitude_ft),
+                range=_nautical_miles(125),
             ))
 
-    points = list(model.waypoints) if scope in {"all", "enroute"} else list(model.terminal_waypoints)
-    for leg in model.airway_legs if scope in {"all", "enroute"} else ():
+
+def _speed_descriptor(value: str | None) -> str | None:
+    return {"A": "+", "B": "-", "+": "+", "-": "-", "@": "@"}.get(
+        str(value or "").strip().upper()
+    )
+
+
+def _leg_attrs(leg) -> dict[str, str]:
+    attrs = _attrs(
+        type=leg.leg_type,
+        fixType=leg.fix_type if leg.fix_ident else None,
+        fixRegion=leg.fix_region[:2] if leg.fix_ident else None,
+        fixIdent=leg.fix_ident[:8] if leg.fix_ident else None,
+        flyOver="TRUE" if leg.fly_over else "FALSE",
+        turnDirection=leg.turn_direction,
+        recommendedType=leg.recommended_type if leg.recommended_ident else None,
+        recommendedIdent=leg.recommended_ident[:8] if leg.recommended_ident else None,
+        recommendedRegion=leg.recommended_region[:2] if leg.recommended_ident else None,
+        magneticCourse=_float(leg.course_degrees, 3) if leg.course_degrees is not None else None,
+        distance=_nautical_miles(leg.distance_nm) if leg.distance_nm is not None else None,
+        altitudeDescriptor=leg.altitude_descriptor,
+        altitude1=_feet(leg.altitude1_ft) if leg.altitude1_ft is not None else None,
+        altitude2=_feet(leg.altitude2_ft) if leg.altitude2_ft is not None else None,
+        speedLimit=leg.speed_limit_knots,
+        verticalAngle=_float(leg.vertical_angle, 3) if leg.vertical_angle is not None else None,
+        arcCenterFixType="TERMINAL_WAYPOINT" if leg.center_ident else None,
+        arcCenterFixIdent=leg.center_ident[:8] if leg.center_ident else None,
+        arcCenterFixRegion=leg.center_region[:2] if leg.center_ident else None,
+        arcRadius=_nautical_miles(leg.arc_radius_nm) if leg.arc_radius_nm is not None else None,
+        speedLimitDescriptor=_speed_descriptor(leg.speed_limit_descriptor),
+    )
+    return attrs
+
+
+def _append_legs(parent: ET.Element, legs) -> None:
+    for leg in sorted(legs, key=lambda item: item.sequence):
+        ET.SubElement(parent, "Leg", _leg_attrs(leg))
+
+
+def _append_departures(airport_element: ET.Element, segments: list) -> None:
+    labels = sorted({segment.label for segment in segments})
+    for label in labels:
+        selected = [segment for segment in segments if segment.label == label]
+        departure = ET.SubElement(airport_element, "Departure", {"name": label[:6]})
+        runway_transitions = ET.SubElement(departure, "RunwayTransitions")
+        common = ET.SubElement(departure, "CommonRouteLegs")
+        enroute_transitions = ET.SubElement(departure, "EnrouteTransitions")
+        for segment in selected:
+            transition = segment.transition.upper()
+            runway = segment.runway or (transition[2:] if transition.startswith("RW") else "")
+            if runway:
+                number, designator = _runway_parts(runway)
+                target = ET.SubElement(runway_transitions, "RunwayTransitionLegs", {
+                    "number": number,
+                    "designator": designator,
+                })
+            elif transition:
+                target = ET.SubElement(
+                    enroute_transitions,
+                    "EnrouteTransitionLegs",
+                    _attrs(name=transition[:5]),
+                )
+            else:
+                target = common
+            _append_legs(target, segment.legs)
+
+
+def _append_arrivals(airport_element: ET.Element, segments: list) -> None:
+    labels = sorted({segment.label for segment in segments})
+    for label in labels:
+        selected = [segment for segment in segments if segment.label == label]
+        arrival = ET.SubElement(airport_element, "Arrival", {"name": label[:6]})
+        enroute_transitions = ET.SubElement(arrival, "EnrouteTransitions")
+        common = ET.SubElement(arrival, "CommonRouteLegs")
+        runway_transitions = ET.SubElement(arrival, "RunwayTransitions")
+        for segment in selected:
+            transition = segment.transition.upper()
+            runway = segment.runway or (transition[2:] if transition.startswith("RW") else "")
+            if runway:
+                number, designator = _runway_parts(runway)
+                target = ET.SubElement(runway_transitions, "RunwayTransitionLegs", {
+                    "number": number,
+                    "designator": designator,
+                })
+            elif transition:
+                target = ET.SubElement(
+                    enroute_transitions,
+                    "EnrouteTransitionLegs",
+                    _attrs(name=transition[:5]),
+                )
+            else:
+                target = common
+            _append_legs(target, segment.legs)
+
+
+def _approach_type(label: str) -> str:
+    first = (label or "R").upper()[:1]
+    return {
+        "I": "ILS",
+        "L": "LOCALIZER",
+        "N": "NDB",
+        "Q": "NDBDME",
+        "D": "VORDME",
+        "V": "VOR",
+        "G": "GPS",
+        "R": "RNAV",
+    }.get(first, "RNAV")
+
+
+def _append_approaches(
+    airport_element: ET.Element,
+    airport: str,
+    segments: list,
+    runways: list,
+) -> None:
+    runway_headings = {runway.ident: runway.true_heading for runway in runways}
+    keys = sorted({(segment.label, segment.runway) for segment in segments})
+    for label, runway in keys:
+        selected = [
+            segment for segment in segments
+            if segment.label == label and segment.runway == runway
+        ]
+        all_legs = [leg for segment in selected for leg in segment.legs]
+        first_fix = next((leg for leg in all_legs if leg.fix_ident), None)
+        first_altitude = next(
+            (leg.altitude1_ft for leg in all_legs if leg.altitude1_ft is not None),
+            0,
+        )
+        heading = next(
+            (leg.course_degrees for leg in all_legs if leg.course_degrees is not None),
+            runway_headings.get(runway, 0),
+        )
+        missed_altitude = max(
+            (leg.altitude1_ft for leg in all_legs if leg.altitude1_ft is not None),
+            default=first_altitude,
+        )
+        number, designator = _runway_parts(runway or "00")
+        suffix = label[-1] if label[-1:] in {"X", "Y", "Z"} else None
+        approach = ET.SubElement(airport_element, "Approach", _attrs(
+            type=_approach_type(label),
+            runway=number if runway else None,
+            designator=designator if runway else None,
+            suffix=suffix,
+            gpsOverlay="TRUE" if _approach_type(label) in {"GPS", "RNAV"} else "FALSE",
+            fixType=(first_fix.fix_type if first_fix else "AIRPORT"),
+            fixRegion=(first_fix.fix_region[:2] if first_fix else airport[:2]),
+            fixIdent=(first_fix.fix_ident[:8] if first_fix else airport[:8]),
+            altitude=_feet(first_altitude),
+            heading=_float(heading or 0, 3),
+            missedAltitude=_feet(missed_altitude),
+        ))
+        common_legs = [
+            leg for segment in selected if not segment.transition for leg in segment.legs
+        ]
+        if common_legs:
+            _append_legs(ET.SubElement(approach, "ApproachLegs"), common_legs)
+        for segment in selected:
+            if not segment.transition:
+                continue
+            first_transition_fix = next(
+                (leg for leg in segment.legs if leg.fix_ident),
+                None,
+            )
+            transition = ET.SubElement(approach, "Transition", _attrs(
+                transitionType="FULL",
+                fixType=first_transition_fix.fix_type if first_transition_fix else None,
+                fixRegion=first_transition_fix.fix_region[:2] if first_transition_fix else None,
+                fixIdent=first_transition_fix.fix_ident[:8] if first_transition_fix else None,
+                altitude=(
+                    _feet(first_transition_fix.altitude1_ft)
+                    if first_transition_fix and first_transition_fix.altitude1_ft is not None
+                    else None
+                ),
+                name=segment.transition[:5],
+            ))
+            _append_legs(ET.SubElement(transition, "TransitionLegs"), segment.legs)
+
+
+def _append_airport_procedures(
+    airport_element: ET.Element,
+    airport: str,
+    model: NavModel,
+    runways: list,
+) -> int:
+    segments = [
+        segment for segment in model.procedure_segments
+        if segment.airport == airport
+    ]
+    _append_departures(
+        airport_element,
+        [segment for segment in segments if segment.kind == "departure"],
+    )
+    _append_arrivals(
+        airport_element,
+        [segment for segment in segments if segment.kind == "arrival"],
+    )
+    _append_approaches(
+        airport_element,
+        airport,
+        [segment for segment in segments if segment.kind == "approach"],
+        runways,
+    )
+    return len(segments)
+
+
+def _point_key(ident: str, latitude: float, longitude: float) -> tuple[str, float, float]:
+    return ident.upper(), round(float(latitude), 6), round(float(longitude), 6)
+
+
+def _append_enroute(
+    root: ET.Element,
+    model: NavModel,
+) -> tuple[int, int, int]:
+    points = list(model.waypoints)
+    for leg in model.airway_legs:
         if leg.start_latitude is not None and leg.start_longitude is not None:
             points.append(type("_Point", (), {
                 "ident": leg.start_ident,
@@ -225,50 +467,290 @@ def write_bglcomp_xml(model: NavModel, cycle: Cycle, output: Path, *, scope: str
                 "name": leg.end_ident,
                 "key": f"airway-end:{leg.airway}:{leg.sequence}",
             })())
-    deduped: dict[tuple[str, int, int], object] = {}
+    deduped: dict[tuple[str, float, float], object] = {}
     for point in points:
-        key = (str(point.ident).upper(), round(float(point.latitude), 6), round(float(point.longitude), 6))
-        deduped.setdefault(key, point)
+        deduped.setdefault(
+            _point_key(str(point.ident), float(point.latitude), float(point.longitude)),
+            point,
+        )
+    route_children: dict[
+        tuple[str, float, float],
+        list[tuple[str, str, str, dict[str, str]]],
+    ] = {}
+    for leg in sorted(model.airway_legs, key=lambda item: (item.airway, item.sequence)):
+        if None in {
+            leg.start_latitude, leg.start_longitude,
+            leg.end_latitude, leg.end_longitude,
+        }:
+            continue
+        start_key = _point_key(leg.start_ident, leg.start_latitude, leg.start_longitude)
+        end_key = _point_key(leg.end_ident, leg.end_latitude, leg.end_longitude)
+        route_children.setdefault(start_key, []).append((
+            leg.airway,
+            _route_type(leg.route_type),
+            "Next",
+            _attrs(
+            waypointRegion=(leg.end_country or "CN")[:2],
+            waypointIdent=leg.end_ident[:8],
+            waypointType=_route_point_type(leg.end_type),
+            altitudeMinimum=(
+                _feet(leg.minimum_altitude_ft)
+                if leg.minimum_altitude_ft is not None
+                else None
+            ),
+        )))
+        route_children.setdefault(end_key, []).append((
+            leg.airway,
+            _route_type(leg.route_type),
+            "Previous",
+            _attrs(
+            waypointRegion=(leg.start_country or "CN")[:2],
+            waypointIdent=leg.start_ident[:8],
+            waypointType=_route_point_type(leg.start_type),
+            altitudeMinimum=(
+                _feet(leg.minimum_altitude_ft)
+                if leg.minimum_altitude_ft is not None
+                else None
+            ),
+        )))
     ordered_points = sorted(deduped.values(), key=lambda item: (
         str(item.ident).upper(), float(item.latitude), float(item.longitude), str(item.key),
     ))
     for point in ordered_points:
-        ET.SubElement(root, "Waypoint", _attrs(
+        point_element = ET.SubElement(root, "Waypoint", _attrs(
             lat=_float(point.latitude),
             lon=_float(point.longitude),
             waypointType=_waypoint_type(point.ident),
             waypointRegion=(point.country or "CN")[:2],
             waypointIdent=str(point.ident).upper()[:8],
         ))
-
-    navaids = sorted(model.navaids, key=lambda item: (item.kind, item.ident, item.key)) if scope in {"all", "enroute"} else []
+        grouped_routes: dict[str, tuple[str, list[tuple[str, dict[str, str]]]]] = {}
+        key = _point_key(str(point.ident), float(point.latitude), float(point.longitude))
+        for route_name, route_type, direction, attrs in route_children.get(key, []):
+            grouped_routes.setdefault(route_name, (route_type, []))[1].append(
+                (direction, attrs)
+            )
+        for route_name in sorted(grouped_routes):
+            route_type, children = grouped_routes[route_name]
+            route = ET.SubElement(point_element, "Route", _attrs(
+                name=route_name,
+                routeType=route_type,
+            ))
+            for direction, attrs in children:
+                ET.SubElement(route, direction, attrs)
+    navaids = sorted(model.navaids, key=lambda item: (item.kind, item.ident, item.key))
     for navaid in navaids:
         if navaid.kind == "VOR":
-            ET.SubElement(root, "Vor", _attrs(
+            vor = ET.SubElement(root, "Vor", _attrs(
                 lat=_float(navaid.latitude),
                 lon=_float(navaid.longitude),
-                alt=_float(navaid.elevation_ft),
+                alt=_feet(navaid.elevation_ft),
                 type="HIGH",
                 frequency=_float(navaid.frequency, 3),
                 magvar=_float(navaid.magnetic_variation, 3),
+                range=_nautical_miles(125),
                 region=navaid.country[:2],
                 ident=navaid.ident[:8],
                 name=navaid.name[:48],
                 nav="TRUE",
                 dme="TRUE",
             ))
+            ET.SubElement(vor, "Dme", _attrs(
+                lat=_float(navaid.latitude),
+                lon=_float(navaid.longitude),
+                alt=_feet(navaid.elevation_ft),
+                range=_nautical_miles(125),
+            ))
         elif navaid.kind == "NDB":
             ET.SubElement(root, "Ndb", _attrs(
                 lat=_float(navaid.latitude),
                 lon=_float(navaid.longitude),
-                alt=_float(navaid.elevation_ft),
+                alt=_feet(navaid.elevation_ft),
                 type="H",
                 frequency=_float(navaid.frequency, 1),
+                range=_nautical_miles(50),
                 magvar=_float(navaid.magnetic_variation, 3),
                 region=navaid.country[:2],
                 ident=navaid.ident[:8],
                 name=navaid.name[:48],
             ))
+    return len(ordered_points), len(navaids), len({leg.airway for leg in model.airway_legs})
+
+
+def write_bglcomp_xml(
+    model: NavModel,
+    cycle: Cycle,
+    output: Path,
+    *,
+    scope: str = "all",
+    airport_prefix: str | None = None,
+    duplicate_terminal_waypoints: bool = False,
+) -> XmlProjection:
+    """把统一中间模型投影为官方 XSD 约束下的 BglComp XML。
+
+    XML 是公开 SDK 的输入格式，不等同于 Navigraph 的最终 BGL；最终字节仍由
+    版本匹配的官方设施编译器决定。
+    """
+    output.parent.mkdir(parents=True, exist_ok=True)
+    ET.register_namespace("xsi", "http://www.w3.org/2001/XMLSchema-instance")
+    root = ET.Element("FSData", {
+        "version": "9.0",
+        "source": "fenix_to_default_navdata",
+    })
+    ET.SubElement(root, "AiracCycle", {
+        "cycleBegin": cycle.begin,
+        "cycleEnd": cycle.end,
+        "cycleNumber": cycle.number[-2:],
+    })
+
+    airports = [
+        airport for airport in model.airports.values()
+        if is_china_icao(airport.icao)
+        and (airport_prefix is None or airport.icao.startswith(airport_prefix))
+    ]
+    airports.sort(key=lambda item: item.icao)
+    airport_keys = {airport.key for airport in airports}
+    runways = [runway for runway in model.runways if runway.airport_key in airport_keys]
+    runways.sort(key=lambda item: (model.airports[item.airport_key].icao, item.ident, item.key))
+    if scope not in {"all", "enroute", "airports"}:
+        raise ValueError(f"未知 XML 投影范围: {scope}")
+    if airport_prefix is not None and airport_prefix not in {
+        "ZB", "ZG", "ZH", "ZJ", "ZL", "ZP", "ZS", "ZU", "ZW", "ZY",
+    }:
+        raise ValueError(f"未知机场分区: {airport_prefix}")
+    projected_airports = airports if scope in {"all", "airports"} else []
+    projected_runways = runways if scope in {"all", "airports"} else []
+    projected_procedures = 0
+    for airport in projected_airports:
+        airport_element = ET.SubElement(root, "Airport", _attrs(
+            ident=airport.icao,
+            name=airport.name[:48],
+            region=airport.icao[:2],
+            regionCode=airport.icao[:2],
+            lat=_float(airport.latitude),
+            lon=_float(airport.longitude),
+            alt=_feet(airport.elevation_ft),
+            transitionAltitude=_feet(airport.transition_altitude),
+            transitionLevel=_feet(airport.transition_level),
+        ))
+        airport_runways = [
+            item for item in projected_runways if item.airport_key == airport.key
+        ]
+        airport_ilses = [
+            ils for ils in model.ilses if ils.airport == airport.icao
+        ]
+        for runway in airport_runways:
+            number, designator = _number_designator(runway.ident)
+            runway_element = ET.SubElement(airport_element, "Runway", _attrs(
+                lat=_float(runway.latitude if runway.latitude is not None else airport.latitude),
+                lon=_float(runway.longitude if runway.longitude is not None else airport.longitude),
+                alt=_feet(runway.elevation_ft),
+                surface=_surface(runway.surface),
+                heading=_float(runway.true_heading, 3),
+                length=_feet(runway.length_ft),
+                width=_feet(runway.width_ft),
+                number=number,
+                designator=designator,
+                primaryTakeoff="TRUE",
+                primaryLanding="TRUE",
+                secondaryTakeoff="TRUE",
+                secondaryLanding="TRUE",
+            ))
+            _append_ils(
+                runway_element,
+                runway,
+                [ils for ils in airport_ilses if ils.runway == runway.ident],
+            )
+        terminal_points = sorted(
+            (
+                point for point in model.terminal_waypoints
+                if point.airport == airport.icao
+            ),
+            key=lambda item: (item.ident, item.latitude, item.longitude, item.key),
+        )
+        for point in terminal_points:
+            ET.SubElement(airport_element, "Waypoint", _attrs(
+                lat=_float(point.latitude),
+                lon=_float(point.longitude),
+                waypointType="NAMED",
+                waypointRegion=(point.country or airport.icao[:2])[:2],
+                waypointIdent=point.ident[:8],
+            ))
+        projected_procedures += _append_airport_procedures(
+            airport_element,
+            airport.icao,
+            model,
+            airport_runways,
+        )
+        airport_holdings = [
+            holding for holding in model.holdings
+            if holding.fix_region == airport.icao
+        ]
+        for holding in sorted(airport_holdings, key=lambda item: (item.fix_ident, item.name)):
+            ET.SubElement(airport_element, "HoldingPattern", _attrs(
+                name=holding.name,
+                fixType="TERMINAL_WAYPOINT",
+                fixIdent=holding.fix_ident[:8],
+                fixRegion=holding.fix_region[:2],
+                inboundHoldingCourse=(
+                    _float(holding.inbound_course, 3)
+                    if holding.inbound_course is not None
+                    else None
+                ),
+                turnDirection=holding.turn_direction,
+                length=(
+                    _nautical_miles(holding.length_nm)
+                    if holding.length_nm is not None
+                    else None
+                ),
+                time=holding.time_minutes,
+                altitudeMinimum=(
+                    _feet(holding.minimum_altitude_ft)
+                    if holding.minimum_altitude_ft is not None
+                    else None
+                ),
+                altitudeMaximum=(
+                    _feet(holding.maximum_altitude_ft)
+                    if holding.maximum_altitude_ft is not None
+                    else None
+                ),
+                holdSpeed=holding.speed_limit_knots,
+            ))
+
+    selected_terminal_points = [
+        point for point in model.terminal_waypoints
+        if airport_prefix is None or point.airport.startswith(airport_prefix)
+    ] if scope in {"all", "airports"} else []
+    terminal_waypoint_count = len(selected_terminal_points)
+    root_terminal_waypoint_count = 0
+    if duplicate_terminal_waypoints and scope in {"all", "airports"}:
+        deduped_terminal_points: dict[tuple[str, str, float, float], object] = {}
+        for point in selected_terminal_points:
+            key = (
+                point.ident.upper()[:8],
+                (point.country or point.airport[:2]).upper()[:2],
+                round(float(point.latitude), 6),
+                round(float(point.longitude), 6),
+            )
+            deduped_terminal_points.setdefault(key, point)
+        root_terminal_waypoint_count = len(deduped_terminal_points)
+        for point in sorted(
+            deduped_terminal_points.values(),
+            key=lambda item: (item.ident, item.latitude, item.longitude, item.key),
+        ):
+            ET.SubElement(root, "Waypoint", _attrs(
+                lat=_float(point.latitude),
+                lon=_float(point.longitude),
+                waypointType="NAMED",
+                waypointRegion=(point.country or point.airport[:2])[:2],
+                waypointIdent=point.ident[:8],
+            ))
+
+    enroute_waypoints = 0
+    enroute_navaids = 0
+    airway_routes = 0
+    if scope in {"all", "enroute"}:
+        enroute_waypoints, enroute_navaids, airway_routes = _append_enroute(root, model)
 
     ET.indent(root, space="  ")
     ET.ElementTree(root).write(output, encoding="utf-8", xml_declaration=True)
@@ -276,10 +758,14 @@ def write_bglcomp_xml(model: NavModel, cycle: Cycle, output: Path, *, scope: str
         path=output,
         airports=len(projected_airports),
         runways=len(projected_runways),
-        waypoints=len(ordered_points),
-        navaids=len(navaids),
-        airway_routes=len({leg.airway for leg in model.airway_legs}),
-        procedure_segments=len(model.procedure_segments),
+        waypoints=(
+            enroute_waypoints
+            + terminal_waypoint_count
+            + root_terminal_waypoint_count
+        ),
+        navaids=enroute_navaids,
+        airway_routes=airway_routes,
+        procedure_segments=projected_procedures,
         rejected_records=len(model.rejected_records),
         rejected_procedures=len(model.rejected_procedures),
     )

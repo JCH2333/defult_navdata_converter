@@ -14,6 +14,7 @@ from .model import (
     Navaid,
     NavModel,
     ProcedureSegment,
+    RejectedRecord,
     Runway,
     SourceRef,
     TerminalWaypoint,
@@ -29,6 +30,10 @@ FENIX_ENROUTE_VOR_START = 11396
 FENIX_VOR_TYPES = {"1", "2", "3", "4", "9"}
 FENIX_NDB_TYPES = {"5", "7"}
 PROCEDURE_KINDS = {"1": "arrival", "2": "departure", "3": "approach"}
+SDK_LEG_TYPES = {
+    "AF", "CA", "CD", "CF", "CI", "CR", "DF", "FA", "FC", "FD", "FM",
+    "HA", "HF", "HM", "IF", "PI", "RF", "TF", "VA", "VD", "VI", "VM", "VR",
+}
 
 
 class FenixSourceError(RuntimeError):
@@ -98,6 +103,13 @@ def _fix_type(navaid_type: str | None, *, terminal: bool) -> str:
     if navaid_type in FENIX_NDB_TYPES:
         return "TERMINAL_NDB" if terminal else "NDB"
     return "TERMINAL_WAYPOINT" if terminal else "WAYPOINT"
+
+
+def _leg_type(track_code: str | None) -> str | None:
+    value = str(track_code or "IF").strip().upper()
+    if value.startswith("RWY"):
+        value = value.removeprefix("RWY")
+    return value if value in SDK_LEG_TYPES else None
 
 
 def _load_airports(connection: sqlite3.Connection, model: NavModel) -> dict[int, str]:
@@ -264,6 +276,7 @@ def _load_navaids(connection: sqlite3.Connection, model: NavModel) -> None:
             elevation_ft=int(row["Elevation"] or 0),
             country=country,
             source=SourceRef("Fenix:Navaids", identifier),
+            terminal=navaid_type == "7",
         ))
 
 
@@ -365,10 +378,19 @@ def _load_procedures(
             if str(row["TrackCode"] or "").strip().upper() == "RF"
             else None
         )
+        leg_type = _leg_type(row["TrackCode"])
+        if leg_type is None:
+            model.rejected_records.append(RejectedRecord(
+                kind="terminal-leg",
+                key=str(row["ID"]),
+                reason=f"unsupported Fenix TrackCode: {row['TrackCode']!r}",
+                source=SourceRef("Fenix:TerminalLegs", int(row["ID"])),
+            ))
+            continue
         active_legs.append(ChartTerminalLeg(
             procedure_label=str(row["procedure_name"] or "")[:6],
             runway=str(row["runway"] or "").strip().upper(),
-            leg_type=str(row["TrackCode"] or "IF").strip().upper().removeprefix("RWY"),
+            leg_type=leg_type,
             fix_ident=fix_ident,
             raw=f"Fenix TerminalLegs.ID={row['ID']}",
             procedure_kind=PROCEDURE_KINDS.get(str(row["proc"] or ""), ""),
@@ -381,7 +403,11 @@ def _load_procedures(
             center_ident=center_ident,
             sequence=int(row["ID"]),
             fix_region=fix_country,
-            fix_type=_fix_type(row["fix_navaid_type"], terminal=True),
+            fix_type=(
+                "RUNWAY"
+                if str(row["TrackCode"] or "").strip().upper().startswith("RWY")
+                else _fix_type(row["fix_navaid_type"], terminal=True)
+            ),
             fix_latitude=(
                 float(row["fix_latitude"])
                 if row["fix_latitude"] is not None
