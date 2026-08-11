@@ -116,7 +116,9 @@ def _fix_type(navaid_type: str | None, *, terminal: bool) -> str:
 def _leg_type(track_code: str | None) -> str | None:
     value = str(track_code or "IF").strip().upper()
     if value.startswith("RWY"):
-        value = value.removeprefix("RWY")
+        # Fenix uses both RWYTF and runway-number path labels. The SDK
+        # expresses both as a track-to-fix leg.
+        value = "TF"
     return value if value in SDK_LEG_TYPES else None
 
 
@@ -508,8 +510,13 @@ def _load_procedures(
             procedure_runway,
             row["procedure_name"] or row["full_name"],
         )
+        track_code = str(row["TrackCode"] or "").strip().upper()
         fix_ident = str(row["fix_ident"] or "").strip().upper() or None
         fix_country = str(row["fix_country"] or airport.icao[:2])
+        if track_code.startswith("RWY") and fix_ident:
+            runway_ident = fix_ident.removeprefix("RWY")
+            if re.fullmatch(r"\d{1,2}[LRC]?", runway_ident):
+                fix_ident = runway_ident
         center_ident = str(row["center_ident"] or "").strip().upper() or None
         center_country = str(row["center_country"] or airport.icao[:2])
         altitude_descriptor, altitude1, altitude2 = _altitudes(row["Alt"])
@@ -520,10 +527,10 @@ def _load_procedures(
                 row["fix_latitude"],
                 row["fix_longitude"],
             )
-            if str(row["TrackCode"] or "").strip().upper() == "RF"
+            if track_code == "RF"
             else None
         )
-        leg_type = _leg_type(row["TrackCode"])
+        leg_type = _leg_type(track_code)
         if leg_type is None:
             model.rejected_records.append(RejectedRecord(
                 kind="terminal-leg",
@@ -532,6 +539,37 @@ def _load_procedures(
                 source=SourceRef("Fenix:TerminalLegs", int(row["ID"])),
             ))
             continue
+        map_runway_fix = (
+            fix_ident is None
+            and (
+                str(row["Alt"] or "").strip().upper() == "MAP"
+                or (
+                    procedure_kind == "approach"
+                    and "M" in str(row["WptDescCode"] or "").replace(" ", "").upper()
+                    and row["WptLat"] is not None
+                    and row["WptLon"] is not None
+                )
+            )
+            and bool(procedure_runway)
+        )
+        if map_runway_fix:
+            fix_ident = procedure_runway.removeprefix("RWY")
+            fix_country = airport.icao[:2]
+        fix_latitude = (
+            float(row["fix_latitude"])
+            if row["fix_latitude"] is not None
+            else row["WptLat"]
+        )
+        fix_longitude = (
+            float(row["fix_longitude"])
+            if row["fix_longitude"] is not None
+            else row["WptLon"]
+        )
+        fix_type = (
+            "RUNWAY"
+            if map_runway_fix or track_code.startswith("RWY")
+            else _fix_type(row["fix_navaid_type"], terminal=True)
+        )
         if leg_type in SDK_FIX_REQUIRED_LEG_TYPES and fix_ident is None:
             model.rejected_records.append(RejectedRecord(
                 kind="terminal-leg",
@@ -556,21 +594,9 @@ def _load_procedures(
             center_ident=center_ident,
             sequence=int(row["ID"]),
             fix_region=fix_country,
-            fix_type=(
-                "RUNWAY"
-                if str(row["TrackCode"] or "").strip().upper().startswith("RWY")
-                else _fix_type(row["fix_navaid_type"], terminal=True)
-            ),
-            fix_latitude=(
-                float(row["fix_latitude"])
-                if row["fix_latitude"] is not None
-                else row["WptLat"]
-            ),
-            fix_longitude=(
-                float(row["fix_longitude"])
-                if row["fix_longitude"] is not None
-                else row["WptLon"]
-            ),
+            fix_type=fix_type,
+            fix_latitude=fix_latitude,
+            fix_longitude=fix_longitude,
             fly_over=bool(row["IsFlyOver"]),
             recommended_ident=str(row["recommended_ident"] or "") or None,
             recommended_region=str(row["recommended_country"] or ""),
