@@ -411,6 +411,31 @@ def test_cr_leg_without_source_theta_uses_course_fallback(tmp_path: Path):
     assert attributes["theta"] == "236"
 
 
+def test_ca_leg_without_source_altitude_uses_sdk_zero_altitude(tmp_path: Path):
+    model = NavModel(Path("source"))
+    source = SourceRef("fixture", 1)
+    model.airports["a"] = Airport(
+        "a", "ZBCF", "ZBCF", 35.0, 105.0, 1000, 18000, 180, source,
+    )
+    model.procedure_segments.append(ProcedureSegment(
+        "ZBCF",
+        "SID01",
+        "departure",
+        "",
+        "",
+        (ChartTerminalLeg("SID01", "", "CA", None, "fixture", sequence=1),),
+        source,
+    ))
+
+    output = tmp_path / "procedures.xml"
+    write_bglcomp_xml(model, DEFAULT_CYCLE, output, scope="airports")
+
+    attributes = ET.parse(output).getroot().find(
+        "Airport/Departure/CommonRouteLegs/Leg"
+    ).attrib
+    assert attributes["altitude1"] == "0F"
+
+
 def test_missing_compiler_is_reported():
     info = find_compiler(Path("does-not-exist.exe"))
     assert info.path is None

@@ -511,6 +511,7 @@ _DISTANCE_LEG_TYPES = {
 _REQUIRED_DISTANCE_LEG_TYPES = {
     "CD", "CF", "CI", "CR", "FC", "FD", "HA", "HF", "HM", "PI", "RF",
 }
+_REQUIRED_ALTITUDE1_LEG_TYPES = {"CA"}
 
 
 def _initial_bearing(
@@ -748,6 +749,9 @@ def _leg_attrs(legs, index: int, airport: str, identities) -> dict[str, str]:
     turn_direction = leg.turn_direction
     if not turn_direction and leg_type in _REQUIRED_TURN_LEG_TYPES:
         turn_direction = "E"
+    altitude1 = leg.altitude1_ft
+    if altitude1 is None and leg_type in _REQUIRED_ALTITUDE1_LEG_TYPES:
+        altitude1 = 0
     attrs = _attrs(
         type=leg_type,
         fixType=(
@@ -812,7 +816,7 @@ def _leg_attrs(legs, index: int, airport: str, identities) -> dict[str, str]:
         ),
         distance=_nautical_miles(distance) if distance is not None else None,
         altitudeDescriptor=leg.altitude_descriptor,
-        altitude1=_feet(leg.altitude1_ft) if leg.altitude1_ft is not None else None,
+        altitude1=_feet(altitude1) if altitude1 is not None else None,
         altitude2=_feet(leg.altitude2_ft) if leg.altitude2_ft is not None else None,
         speedLimit=leg.speed_limit_knots,
         verticalAngle=_float(leg.vertical_angle, 3) if leg.vertical_angle is not None else None,
