@@ -1,19 +1,86 @@
-# 默认通用数据契约记录
+# 默认通用数据 2608R1 契约
 
-## 2608R1
+## 输入职责
 
-- 内容来源：工作区 `424源数据\2608\2608` 的 CSV/PDF。
-- 官方全球基线：`navigraph-nav-base` 与 `navigraph-nav-jepp`。
-- 参考覆盖层：`Default navdata 2608R1`，仅用于只读差分。
-- 周期：2608，Revision 1，起止日期 `20260806` 至 `20260903`。
-- 参考覆盖层包含 `00_enroute.bgl`、按区域划分的机场 BGL，以及 `bglIndex.bout`、`layout.json`、`manifest.json` 和 ContentHistory。
+- 内容来源：`424源数据\2608\2608` 中的 CSV、PDF 与匹配航路数据。
+- 目标基线：Community 中的 `navigraph-nav-base` 与 `navigraph-nav-jepp`。
+- 只读参考：`424源数据\2608\Default navdata 2608R1`。
 
-## 已验证限制
+内容来源、目标基线和参考成品不得互相替代。
 
-2026 年 8 月 11 日，本机 SDK 1.5.3 的工具目录中未找到 `BglComp.exe`。`BglExplorer.exe`
-的字符串和行为表明它是 ImGui 交互式查看器；无参数或带 BGL 路径启动都会等待窗口，
-不能作为无头编译器。`fspackagetool.exe` 的无参数调用也未提供可用的无头帮助。
+## AIRAC
 
-因此当前实现能确定性地产生 BglComp XML、复制官方基线并报告阻塞原因，但不能承诺
-生成与 Navigraph 成品字节级一致的 BGL。获得合法的、版本匹配的编译器后，必须补充
-最小 XML fixture、BGL 结构比较、`bglIndex.bout` 生成和参考 SHA-256 回归。
+- 周期：2608。
+- Revision：1。
+- 开始日期：`20260806`。
+- 结束日期：`20260903`。
+- SDK `AiracCycle.cycleNumber`：`08`。
+
+## 覆盖包
+
+参考成品包含：
+
+- `zzz-pmdg-china-navdata`
+  - `scenery/pmdg-china-navdata/00_enroute.bgl`
+  - `ZB/ZG/ZH/ZJ/ZL/ZP/ZS/ZU/ZW/ZY_airports.bgl`
+- `zzz-pmdg-china-navdata-airport-patch`
+  - `scenery/pmdg-china-airport-patch/`
+  - 十个对应分区机场 BGL
+
+每个包都必须包含：
+
+- `bglIndex.bout`
+- `layout.json`
+- `manifest.json`
+- `ContentInfo/<包名>/ContentHistory.json`
+- 至少一个可读取的 BGL
+
+## SDK 编译契约
+
+2026-08-11 的本机验证环境：
+
+- MSFS 2024：`1.7.35.0`
+- SDK：`1.5.7`
+- 编译入口：`C:\MSFS 2024 SDK\Tools\bin\fspackagetool.exe`
+- 平台：Steam
+
+已确认：
+
+1. `fspackagetool.exe <项目.xml> -nopause -rebuild -forcesteam` 会启动游戏的 `BuildAssetPackages` 模式。
+2. Package Tool 会生成 BGL、`bglIndex.bout`、布局、清单和 ContentInfo。
+3. 项目 XML、PackageDefinitions 和 PackageSources 必须先镜像到纯 ASCII 路径。
+4. 包装器可能因附着竞态先返回代码 1，但后台游戏仍会完成构建；应等待新启动的模拟器进程退出，再检查实际产物。
+5. 构建前若已有 `FlightSimulator2024.exe`，必须拒绝运行。
+
+对应自动化测试：
+
+- `test_package_tool_project_is_deterministic`
+- `test_package_tool_stages_project_in_ascii_path`
+
+## 当前数据模型
+
+2608 全量来源当前解析结果：
+
+- 275 个机场
+- 640 条跑道
+- 438 个导航台
+- 2573 个去重航点
+- 1354 条航路
+- 9926 个程序段
+- 6389 条无法安全投影的程序证据拒绝记录
+
+拒绝记录必须保留在转换报告中，不得静默丢弃。
+
+## 验证与发布
+
+候选至少通过：
+
+1. 官方双包基线 SHA-256 树保持不变。
+2. SDK XML 校验和 Package Tool 构建。
+3. 两个覆盖包结构与索引完整性。
+4. BGL 分区、内容结构与参考成品差分。
+5. 参考目录逐文件字节比较。
+6. ZBCF、ZUNZ、ZUUU 的机场、跑道、SID、STAR、IAP 实机验证。
+7. 退出飞行和退出模拟器稳定性验证。
+
+实机验证完成前只允许测试版，不创建正式 Release。

@@ -1,22 +1,28 @@
-# Fenix to Default NavData
+# Default NavData Converter
 
-Fenix/2608 原始数据到 MSFS 2024 默认 Navigraph 通用数据的测试版转换器。
+把中国 424/Fenix 导航数据投影为 Microsoft Flight Simulator 2024 默认通用导航数据覆盖包。
 
-## 当前状态
+> 当前为测试版。转换结果尚未完成参考成品字节级收敛与实机验证，不发布正式 Release。
 
-`0.1.0` 已提供：
+## 当前能力
 
-- 2608 CSV/PDF 来源解析和统一中间模型；
-- 官方 `navigraph-nav-base` 与 `navigraph-nav-jepp` 的只读基线复制；
-- BglComp XML 投影、周期字段和确定性排序；
-- 编译器探测、候选报告、参考目录差分和 SHA-256 校验；
-- Tk GUI、命令行、备份/恢复/测试版部署；
-- GitHub Actions 测试与预发布更新包流程。
+- 解析 2608 CSV/PDF，并建立带来源证据的统一中间模型。
+- 只读复制官方 `navigraph-nav-base` 与 `navigraph-nav-jepp` 全球基线。
+- 生成符合 SDK `bglcomp.xsd` 的确定性设施 XML。
+- 自动探测 MSFS 2024 SDK `fspackagetool.exe`。
+- 通过纯 ASCII 暂存项目调用 Package Tool，生成 BGL、`bglIndex.bout`、包元数据与 ContentInfo。
+- 比较参考成品目录的逐文件大小和 SHA-256。
+- 提供命令行、Tk GUI、备份、恢复、测试版部署保护和 GitHub 预发布更新检查。
 
-本机调查确认 MSFS 2024 SDK 1.5.3 目录中只有 `BglExplorer.exe`、`fspackagetool.exe`
-和 `bglcomp.xsd`，没有可调用的 `BglComp.exe`。因此在补齐合法且版本匹配的设施编译器
-之前，工具会生成来源 XML 和完整官方基线，但将候选标记为 `deployable=false`，不会
-伪造 BGL 或宣称字节级一致。
+## 本机已验证编译链
+
+2026-08-11 使用 MSFS 2024 SDK 1.5.7 完成最小导航包真实构建：
+
+- 输入：一个机场和一条跑道的设施 XML。
+- 输出：`smoke.bgl`、`bglIndex.bout`、`layout.json`、`manifest.json` 与 ContentInfo。
+- Package Tool 会通过 Steam 启动 `FlightSimulator2024.exe` 的 `BuildAssetPackages` 模式。
+- SDK 项目路径必须为纯 ASCII；中文项目路径会在游戏命令行中损坏并导致启动崩溃。
+- `fspackagetool.exe` 可能先返回非零代码，而后台构建进程仍在运行；转换器会等待该进程结束并以实际产物为判据。
 
 ## 使用
 
@@ -24,33 +30,32 @@ Fenix/2608 原始数据到 MSFS 2024 默认 Navigraph 通用数据的测试版�
 python -m pip install -e .
 python -m fenix_default_navdata.cli detect
 python -m fenix_default_navdata.cli build --output output/candidate-2608-default
-python -m fenix_default_navdata.cli validate --candidate output/candidate-2608-default
+python -m fenix_default_navdata.cli validate `
+  --candidate output/candidate-2608-default `
+  --reference "F:\我的世界动画\AI项目\导航数据\424源数据\2608\Default navdata 2608R1"
 python -m fenix_default_navdata.gui
 ```
 
 也可以双击 `run_gui.bat`。
 
-找到合法编译器后可显式传入：
+显式指定 SDK Package Tool：
 
 ```powershell
 python -m fenix_default_navdata.cli build `
-  --raw "<工作区>\424源数据\2608\2608" `
-  --nav-base "<Community>\navigraph-nav-base" `
-  --nav-jepp "<Community>\navigraph-nav-jepp" `
-  --reference "<工作区>\424源数据\2608\Default navdata 2608R1" `
-  --bglcomp "C:\path\to\BglComp.exe" `
+  --bglcomp "C:\MSFS 2024 SDK\Tools\bin\fspackagetool.exe" `
   --output output/candidate-2608-default
 ```
 
-测试版覆盖必须显式使用 `--allow-test-build`，并且部署前会拒绝正在运行的
-`FlightSimulator2024.exe`。每次覆盖都会先创建带时间戳的 Community 备份。
+## 安全边界
 
-## 数据边界
+- 原始 CSV/PDF、官方 Community 包、参考 BGL、备份、日志和生成包均不进入仓库。
+- 参考成品只用于只读差分，绝不复制参考 BGL 冒充转换结果。
+- Package Tool 构建和 Community 覆盖前都要求 `FlightSimulator2024.exe` 已完全退出。
+- 覆盖前自动备份四个相关包；不完整候选始终拒绝部署。
+- 未完成实机验证前，候选只能标记为测试版。
 
-源 CSV/PDF 是内容来源；官方 Community 包是目标基线和加载契约模板；参考成品只用于
-只读差分和回归，不会被复制进源码或作为转换结果。
+## 尚未完成
 
-## 发布约束
-
-实机验证完成前只允许 GitHub prerelease 测试包，不创建正式 Release。原始数据库、官方
-导航包、备份、日志、反编译结果和测试输出均不进入仓库。
+- 参考成品采用 `00_enroute.bgl` 加十个机场分区 BGL，并另有十个机场补丁 BGL；当前完整转换仍需按相同边界拆分。
+- SID、STAR、IAP、航路与导航设施的 BGL 投影仍需补齐和逐项验证。
+- 必须完成 BGL 结构差分、逐文件 SHA-256 收敛，以及 ZBCF、ZUNZ、ZUUU 实机回归。

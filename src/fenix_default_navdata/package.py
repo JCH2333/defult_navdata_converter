@@ -5,7 +5,14 @@ import json
 import shutil
 from pathlib import Path
 
-from .bgl import CompilerInfo, CompilerUnavailable, compile_bgl, write_bglcomp_xml
+from .bgl import (
+    CompilerInfo,
+    CompilerUnavailable,
+    compile_bgl,
+    compile_package,
+    write_bglcomp_xml,
+    write_package_project,
+)
 from .model import NavModel
 from .profile import Cycle
 
@@ -82,14 +89,34 @@ def _compile_xml_package(
     airport_prefixes: tuple[str, ...],
     scope: str,
     dependencies: list[dict[str, str]],
+    package_order_hint: str,
 ) -> dict[str, object]:
-    work = package_root / "_work"
+    work = package_root.parent / "_work" / "sdk-projects" / package_root.name
     work.mkdir(parents=True, exist_ok=True)
-    xml_path = work / "00_enroute.xml"
+    input_dir = work / "inputs"
+    input_dir.mkdir(parents=True, exist_ok=True)
+    xml_path = input_dir / "00_enroute.xml"
     projection = write_bglcomp_xml(model, cycle, xml_path, scope=scope)
-    bgl_path = package_root / "scenery" / package_name / "00_enroute.bgl"
-    compile_report = compile_bgl(xml_path, compiler, bgl_path)
-    _write_package_metadata(package_root, package_root.name, f"China NavData AIRAC {cycle.number}", dependencies)
+    if compiler.kind == "PackageTool":
+        project_path = write_package_project(
+            work,
+            package_name=package_root.name,
+            title=f"China NavData AIRAC {cycle.number}",
+            output_dir=f"scenery\\{package_name}",
+            source_xmls=(xml_path,),
+            package_order_hint=package_order_hint,
+        )
+        compile_report = compile_package(
+            project_path,
+            compiler,
+            package_name=package_root.name,
+        )
+        built_root = Path(str(compile_report["package_root"]))
+        shutil.copytree(built_root, package_root, dirs_exist_ok=True)
+    else:
+        bgl_path = package_root / "scenery" / package_name / "00_enroute.bgl"
+        compile_report = compile_bgl(xml_path, compiler, bgl_path)
+        _write_package_metadata(package_root, package_root.name, f"China NavData AIRAC {cycle.number}", dependencies)
     return {
         "projection": {**projection.__dict__, "path": str(projection.path)},
         "compile": compile_report,
@@ -159,21 +186,23 @@ def build_candidate(
             nav_root = output / NAV_PACKAGE
             nav_root.mkdir()
             report["packages"][NAV_PACKAGE] = _compile_xml_package(
-                nav_root, model, cycle, compiler, package_name="fenix-default-navdata",
+                nav_root, model, cycle, compiler, package_name="pmdg-china-navdata",
                 airport_prefixes=("ZB", "ZG", "ZH", "ZJ", "ZL", "ZP", "ZS", "ZU", "ZW", "ZY"),
                 scope="all",
                 dependencies=[
                     {"name": BASE_PACKAGE, "package_version": "0.1.0"},
                     {"name": JEPP_PACKAGE, "package_version": "2.26.16"},
                 ],
+                package_order_hint="CUSTOM_NAVDATA_PATCH",
             )
             airport_root = output / AIRPORT_PACKAGE
             airport_root.mkdir()
             report["packages"][AIRPORT_PACKAGE] = _compile_xml_package(
-                airport_root, model, cycle, compiler, package_name="fenix-default-airport-patch",
+                airport_root, model, cycle, compiler, package_name="pmdg-china-airport-patch",
                 airport_prefixes=("ZB", "ZG", "ZH", "ZJ", "ZL", "ZP", "ZS", "ZU", "ZW", "ZY"),
                 scope="airports",
                 dependencies=[{"name": NAV_PACKAGE, "package_version": "0.1.0"}],
+                package_order_hint="CUSTOM_AIRPORT_PATCH",
             )
         except CompilerUnavailable as error:
             report["packages"][NAV_PACKAGE] = {"status": "blocked", "reason": str(error)}

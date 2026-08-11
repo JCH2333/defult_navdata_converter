@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import csv
+import io
 import os
 import re
+import shutil
 import subprocess
+import tempfile
+import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
@@ -35,21 +40,82 @@ class XmlProjection:
     rejected_procedures: int
 
 
+def _simulator_pids() -> set[int]:
+    result = subprocess.run(
+        [
+            "tasklist",
+            "/FI",
+            "IMAGENAME eq FlightSimulator2024.exe",
+            "/FO",
+            "CSV",
+            "/NH",
+        ],
+        capture_output=True,
+        text=True,
+        encoding="cp936",
+        errors="replace",
+        check=False,
+    )
+    pids: set[int] = set()
+    for row in csv.reader(io.StringIO(result.stdout)):
+        if len(row) >= 2 and row[0].lower() == "flightsimulator2024.exe":
+            try:
+                pids.add(int(row[1]))
+            except ValueError:
+                continue
+    return pids
+
+
+def _wait_for_package_tool_process(
+    previous_pids: set[int],
+    *,
+    start_timeout: int = 45,
+    build_timeout: int = 3600,
+) -> bool:
+    start_deadline = time.monotonic() + start_timeout
+    launched: set[int] = set()
+    while time.monotonic() < start_deadline:
+        launched = _simulator_pids() - previous_pids
+        if launched:
+            break
+        time.sleep(0.5)
+    if not launched:
+        return False
+    build_deadline = time.monotonic() + build_timeout
+    while time.monotonic() < build_deadline:
+        if not (_simulator_pids() & launched):
+            return True
+        time.sleep(1)
+    raise TimeoutError(f"MSFS Package Tool 构建超过 {build_timeout} 秒")
+
+
 def find_compiler(explicit: Path | None = None) -> CompilerInfo:
-    candidates = []
     if explicit:
-        candidates.append(explicit)
+        path = explicit.expanduser()
+        if not path.is_file():
+            return CompilerInfo(None, "none", f"指定的编译器不存在: {path}")
+        kind = "PackageTool" if path.name.lower() == "fspackagetool.exe" else "BglComp"
+        return CompilerInfo(path.resolve(), kind, "found")
+    candidates = []
+    if os.environ.get("FSPACKAGETOOL"):
+        candidates.append((Path(os.environ["FSPACKAGETOOL"]), "PackageTool"))
     if os.environ.get("BGLCOMP"):
-        candidates.append(Path(os.environ["BGLCOMP"]))
+        candidates.append((Path(os.environ["BGLCOMP"]), "BglComp"))
     candidates.extend([
-        Path(r"F:\games\MSF tools\MSFS2024_SDK_Core_Installer_1.5.3\SDK\Tools\bin\BglComp.exe"),
-        Path(r"F:\SteamLibrary\steamapps\common\MSFS2024\BglComp.exe"),
-        Path(r"C:\MSFS SDK\Tools\bin\BglComp.exe"),
+        (Path(r"C:\MSFS 2024 SDK\Tools\bin\fspackagetool.exe"), "PackageTool"),
+        (Path(r"F:\games\MSF tools\MSFS2024_SDK_Core_Installer_1.5.3\SDK\Tools\bin\fspackagetool.exe"), "PackageTool"),
+        (Path(r"F:\games\MSF tools\MSFS2024_SDK_Core_Installer_1.5.3\SDK\Tools\bin\BglComp.exe"), "BglComp"),
+        (Path(r"F:\SteamLibrary\steamapps\common\MSFS2024\BglComp.exe"), "BglComp"),
+        (Path(r"C:\MSFS SDK\Tools\bin\BglComp.exe"), "BglComp"),
     ])
-    for path in candidates:
+    for path, kind in candidates:
         if path.is_file():
-            return CompilerInfo(path.resolve(), "BglComp", "found")
-    return CompilerInfo(None, "none", "未找到 BglComp.exe；SDK 中的 BglExplorer 仅为交互式查看器")
+            return CompilerInfo(path.resolve(), kind, "found")
+    return CompilerInfo(
+        None,
+        "none",
+        "未找到 MSFS 2024 SDK fspackagetool.exe 或兼容的 BglComp.exe",
+    )
 
 
 def _number_designator(ident: str) -> tuple[str, str]:
@@ -217,6 +283,147 @@ def write_bglcomp_xml(model: NavModel, cycle: Cycle, output: Path, *, scope: str
         rejected_records=len(model.rejected_records),
         rejected_procedures=len(model.rejected_procedures),
     )
+
+
+def write_package_project(
+    project_root: Path,
+    *,
+    package_name: str,
+    title: str,
+    output_dir: str,
+    source_xmls: tuple[Path, ...],
+    package_order_hint: str,
+) -> Path:
+    """生成可由 MSFS 2024 Package Tool 构建的最小项目。"""
+    project_root.mkdir(parents=True, exist_ok=True)
+    source_dir = project_root / "PackageSources" / "NavData"
+    definition_dir = project_root / "PackageDefinitions"
+    source_dir.mkdir(parents=True, exist_ok=True)
+    definition_dir.mkdir(parents=True, exist_ok=True)
+    for source in source_xmls:
+        shutil.copy2(source, source_dir / source.name)
+
+    package = ET.Element("AssetPackage", {"Version": "0.1.0"})
+    ET.SubElement(package, "PackageOrderHint").text = package_order_hint
+    settings = ET.SubElement(package, "ItemSettings")
+    ET.SubElement(settings, "ContentType").text = "SCENERY"
+    ET.SubElement(settings, "Title").text = title
+    ET.SubElement(settings, "Manufacturer").text = "User NavData"
+    ET.SubElement(settings, "Creator").text = "Fenix to Default NavData Converter"
+    flags = ET.SubElement(package, "Flags")
+    ET.SubElement(flags, "VisibleInStore").text = "false"
+    ET.SubElement(flags, "CanBeReferenced").text = "false"
+    groups = ET.SubElement(package, "AssetGroups")
+    group = ET.SubElement(groups, "AssetGroup", {"Name": "NavData"})
+    ET.SubElement(group, "Type").text = "BGL"
+    group_flags = ET.SubElement(group, "Flags")
+    ET.SubElement(group_flags, "FSXCompatibility").text = "false"
+    ET.SubElement(group, "AssetDir").text = r"PackageSources\NavData"
+    ET.SubElement(group, "OutputDir").text = output_dir.replace("/", "\\")
+    ET.indent(package, space="\t")
+    definition_path = definition_dir / f"{package_name}.xml"
+    ET.ElementTree(package).write(definition_path, encoding="utf-8", xml_declaration=True)
+
+    project = ET.Element("Project", {
+        "Version": "2",
+        "Name": package_name,
+        "FolderName": "Packages",
+        "MetadataFolderName": "PackagesMetadata",
+    })
+    ET.SubElement(project, "OutputDirectory").text = "."
+    ET.SubElement(project, "TemporaryOutputDirectory").text = "_PackageInt"
+    packages = ET.SubElement(project, "Packages")
+    ET.SubElement(packages, "Package").text = f"PackageDefinitions\\{package_name}.xml"
+    ET.SubElement(project, "PublishingGroups")
+    ET.indent(project, space="\t")
+    project_path = project_root / f"{package_name}.xml"
+    ET.ElementTree(project).write(project_path, encoding="utf-8", xml_declaration=True)
+    return project_path
+
+
+def compile_package(
+    project_path: Path,
+    compiler: CompilerInfo,
+    *,
+    package_name: str,
+    timeout_seconds: int = 3600,
+) -> dict[str, object]:
+    if compiler.path is None:
+        raise CompilerUnavailable(compiler.reason)
+    if compiler.kind != "PackageTool":
+        raise CompilerUnavailable(f"编译器 {compiler.path} 不是 MSFS Package Tool")
+    stage_parent = Path(os.environ.get("LOCALAPPDATA", tempfile.gettempdir())) / "fenix_default_navdata"
+    stage_parent.mkdir(parents=True, exist_ok=True)
+    stage_root = Path(tempfile.mkdtemp(prefix="sdk-build-", dir=stage_parent))
+    try:
+        simulator_pids = _simulator_pids()
+        if simulator_pids:
+            raise RuntimeError(
+                "FlightSimulator2024.exe 正在运行；Package Tool 构建前请完全关闭模拟器"
+            )
+        shutil.copytree(project_path.parent, stage_root, dirs_exist_ok=True)
+        staged_project = stage_root / project_path.name
+        command = [
+            str(compiler.path),
+            str(staged_project),
+            "-outputtoseparateconsole",
+            "-nopause",
+            "-rebuild",
+            "-forcesteam",
+        ]
+        result = subprocess.run(
+            command,
+            cwd=str(stage_root),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+            timeout=timeout_seconds,
+        )
+        if result.returncode != 0:
+            _wait_for_package_tool_process(
+                simulator_pids,
+                build_timeout=timeout_seconds,
+            )
+        staged_package_root = stage_root / "Packages" / package_name
+        required = (
+            staged_package_root / "manifest.json",
+            staged_package_root / "layout.json",
+            staged_package_root / "bglIndex.bout",
+        )
+        missing = [str(path.relative_to(stage_root)) for path in required if not path.is_file()]
+        bgls = sorted(staged_package_root.rglob("*.bgl")) if staged_package_root.is_dir() else []
+        if missing or not bgls:
+            details = "\n".join(filter(None, (result.stdout, result.stderr)))
+            builder_log = (
+                Path(os.environ.get("APPDATA", ""))
+                / "Microsoft Flight Simulator 2024"
+                / "BuilderLogError.txt"
+            )
+            if builder_log.is_file():
+                details = f"{details}\n{builder_log.read_text(encoding='utf-8', errors='replace')[-4000:]}"
+            raise RuntimeError(
+                "Package Tool 未生成完整导航包；"
+                f"包装器退出代码={result.returncode}，缺少={missing}，"
+                f"BGL={len(bgls)}，输出={details[-4000:]}"
+            )
+        package_root = project_path.parent / "_compiled" / package_name
+        if package_root.exists():
+            shutil.rmtree(package_root)
+        shutil.copytree(staged_package_root, package_root)
+        copied_bgls = sorted(package_root.rglob("*.bgl"))
+        return {
+            "compiler": str(compiler.path),
+            "kind": compiler.kind,
+            "command": command,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "package_root": str(package_root),
+            "bgls": [str(path) for path in copied_bgls],
+        }
+    finally:
+        shutil.rmtree(stage_root, ignore_errors=True)
 
 
 def compile_bgl(xml_path: Path, compiler: CompilerInfo, output_bgl: Path) -> dict[str, object]:
