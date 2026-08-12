@@ -32,6 +32,36 @@ def test_missing_compiler_blocks_both_overlay_packages(tmp_path: Path, monkeypat
     assert not (output / AIRPORT_PACKAGE).exists()
 
 
+def test_missing_navaid_baseline_keeps_candidate_non_deployable(
+    tmp_path: Path,
+    monkeypatch,
+):
+    raw = tmp_path / "raw"
+    base = tmp_path / "base"
+    jepp = tmp_path / "jepp"
+    output = tmp_path / "candidate"
+    raw.mkdir()
+    base.mkdir()
+    jepp.mkdir()
+    monkeypatch.setattr(
+        "fenix_default_navdata.package.load_naip",
+        lambda root, **kwargs: NavModel(root),
+    )
+
+    report = build_candidate(
+        raw_root=raw,
+        nav_base=base,
+        nav_jepp=jepp,
+        output=output,
+        cycle=DEFAULT_CYCLE,
+        compiler=CompilerInfo(None, "none", "missing"),
+    )
+
+    assert report["navaid_diff"]["navaid_diff_verified"] is False
+    assert report["deployable"] is False
+    assert report["model"]["selected_navaids"] == 0
+
+
 def test_overlay_packages_compile_independently(tmp_path: Path, monkeypatch):
     raw = tmp_path / "raw"
     base = tmp_path / "base"

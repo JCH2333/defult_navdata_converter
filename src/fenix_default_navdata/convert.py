@@ -18,6 +18,8 @@ def convert(
     reference: Path | None = None,
     compiler: Path | None = None,
     pdf_cache: Path | None = None,
+    baseline_db: Path | None = None,
+    baseline_tolerance_nm: float = 0.25,
 ) -> dict[str, object]:
     validate_cycle(cycle)
     result = build_candidate(
@@ -29,6 +31,8 @@ def convert(
         compiler=find_compiler(compiler),
         reference=reference.resolve() if reference else None,
         pdf_cache=pdf_cache,
+        baseline_db=baseline_db.resolve() if baseline_db else None,
+        baseline_tolerance_nm=baseline_tolerance_nm,
     )
     (output / "conversion-report.json").write_text(
         json.dumps(result, ensure_ascii=False, indent=2, default=str) + "\n", encoding="utf-8",

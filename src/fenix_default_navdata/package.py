@@ -14,6 +14,7 @@ from .bgl import (
     write_bglcomp_xml,
     write_package_project,
 )
+from .baseline import BaselineError, NavaidDiff, diff_navaids, load_baseline_sqlite
 from .model import NavModel
 from .profile import Cycle
 from .source import load_naip
@@ -94,6 +95,7 @@ def _compile_xml_package(
     dependencies: list[dict[str, str]],
     package_order_hint: str,
     title: str,
+    selected_navaids: tuple = (),
 ) -> dict[str, object]:
     work = package_root.parent / "_work" / "sdk-projects" / package_root.name
     work.mkdir(parents=True, exist_ok=True)
@@ -103,7 +105,13 @@ def _compile_xml_package(
     projections = []
     if include_enroute:
         xml_path = input_dir / "00_enroute.xml"
-        projections.append(write_bglcomp_xml(model, cycle, xml_path, scope="enroute"))
+        projections.append(write_bglcomp_xml(
+            model,
+            cycle,
+            xml_path,
+            scope="enroute",
+            selected_navaids=selected_navaids,
+        ))
         xml_paths.append(xml_path)
     for prefix in airport_prefixes:
         xml_path = input_dir / f"{prefix}_airports.xml"
@@ -114,6 +122,7 @@ def _compile_xml_package(
             scope="airports",
             airport_prefix=prefix,
             duplicate_terminal_waypoints=duplicate_terminal_waypoints,
+            selected_navaids=selected_navaids,
         ))
         xml_paths.append(xml_path)
     if compiler.kind == "PackageTool":
@@ -169,6 +178,8 @@ def build_candidate(
     compiler: CompilerInfo,
     reference: Path | None = None,
     pdf_cache: Path | None = None,
+    baseline_db: Path | None = None,
+    baseline_tolerance_nm: float = 0.25,
 ) -> dict[str, object]:
     """复制全球官方基线并用 424 原始数据生成中国覆盖层候选。
 
@@ -190,6 +201,21 @@ def build_candidate(
         pdf_cache=pdf_cache,
         include_terminal_documents=True,
     )
+    navaid_diff: NavaidDiff | None = None
+    selected_navaids: tuple = ()
+    baseline_error: str | None = None
+    if baseline_db is not None:
+        try:
+            baseline_index = load_baseline_sqlite(baseline_db)
+            navaid_diff = diff_navaids(
+                model.navaids,
+                baseline_index,
+                coordinate_tolerance_nm=baseline_tolerance_nm,
+            )
+            if navaid_diff.navaid_diff_verified:
+                selected_navaids = navaid_diff.selected_navaids
+        except (BaselineError, ValueError) as error:
+            baseline_error = str(error)
     report: dict[str, object] = {
         "status": "candidate",
         "deployable": False,
@@ -199,12 +225,17 @@ def build_candidate(
         "compiler": {"path": str(compiler.path) if compiler.path else None, "kind": compiler.kind, "reason": compiler.reason},
         "source": {"raw_424": str(raw_root)},
         "pdf_cache": str(pdf_cache),
-        "official_baseline": {"base": str(nav_base), "jepp": str(nav_jepp)},
+        "official_baseline": {
+            "base": str(nav_base),
+            "jepp": str(nav_jepp),
+            "navaid_index": str(baseline_db) if baseline_db else None,
+        },
         "reference": str(reference) if reference else None,
         "model": {
             "airports": len(model.airports),
             "runways": len(model.runways),
             "navaids": len(model.navaids),
+            "selected_navaids": len(selected_navaids),
             "waypoints": len(model.waypoints),
             "airway_legs": len(model.airway_legs),
             "procedure_segments": len(model.procedure_segments),
@@ -216,12 +247,27 @@ def build_candidate(
         },
         "packages": {},
         "byte_equal_reference": False,
+        "navaid_diff": (
+            navaid_diff.to_report()
+            if navaid_diff is not None
+            else {
+                "navaid_diff_verified": False,
+                "reason": baseline_error or "未提供官方设施索引 SQLite",
+                "raw_count": len(model.navaids),
+                "selected_missing": 0,
+            }
+        ),
         "limitations": [
             "没有合法的 BglComp.exe 时不能生成可加载的区域 BGL。",
             "默认 BGL 的字节级一致还需要相同版本的设施编译器、记录排序、索引和打包时间戳。",
         ],
     }
-    projection = write_bglcomp_xml(model, cycle, work / "china-navdata.xml")
+    projection = write_bglcomp_xml(
+        model,
+        cycle,
+        work / "china-navdata.xml",
+        selected_navaids=selected_navaids,
+    )
     report["projection"] = {**projection.__dict__, "path": str(projection.path)}
     if compiler.path is None:
         blocked = {"status": "blocked", "reason": compiler.reason}
@@ -276,6 +322,7 @@ def build_candidate(
                     dependencies=dependencies,
                     package_order_hint=package_order_hint,
                     title=title,
+                    selected_navaids=selected_navaids,
                 )
             except CompilerUnavailable as error:
                 report["packages"][output_name] = {
@@ -287,7 +334,11 @@ def build_candidate(
                     "status": "failed",
                     "reason": str(error),
                 }
-    report["deployable"] = all(
+    navaid_diff_verified = bool(
+        isinstance(report.get("navaid_diff"), dict)
+        and report["navaid_diff"].get("navaid_diff_verified")
+    )
+    report["deployable"] = navaid_diff_verified and all(
         (output / name / "bglIndex.bout").is_file()
         and bool(list((output / name).rglob("*.bgl")))
         for name in (NAV_PACKAGE, AIRPORT_PACKAGE)

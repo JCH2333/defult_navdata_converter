@@ -78,6 +78,32 @@ def test_enroute_projection_romanizes_chinese_navaid_names(tmp_path: Path):
     assert root.find("Ndb").attrib["name"] == "ZEDANG"
 
 
+def test_enroute_projection_can_emit_only_verified_selected_navaids(tmp_path: Path):
+    model = NavModel(Path("source"))
+    source = SourceRef("VOR.csv", 2)
+    kept = Navaid(
+        "kept", "KEEP", "VOR", "保留", 35.0, 105.0, 111.2, 0.0, 100, "ZB", source,
+    )
+    suppressed = Navaid(
+        "suppressed", "DROP", "NDB", "抑制", 36.0, 106.0, 445.0, 0.0, 0, "ZB", source,
+    )
+    model.navaids.extend((kept, suppressed))
+
+    output = tmp_path / "selected-navaids.xml"
+    projection = write_bglcomp_xml(
+        model,
+        DEFAULT_CYCLE,
+        output,
+        scope="enroute",
+        selected_navaids=(kept,),
+    )
+
+    root = ET.parse(output).getroot()
+    assert [item.attrib["ident"] for item in root.findall("Vor")] == ["KEEP"]
+    assert root.findall("Ndb") == []
+    assert projection.navaids == 1
+
+
 def test_enroute_projection_uses_verified_default_navaid_name_exceptions(tmp_path: Path):
     model = NavModel(Path("source"))
     source = SourceRef("VOR.csv", 2)

@@ -50,10 +50,16 @@ def validate_candidate(candidate: Path, reference: Path | None = None) -> dict[s
         and bool(list(package_dir.rglob("*.bgl")))
         for package_dir in package_dirs
     )
+    navaid_diff = report.get("navaid_diff")
+    navaid_diff_verified = bool(
+        isinstance(navaid_diff, dict)
+        and navaid_diff.get("navaid_diff_verified")
+    )
     result = {
         "valid": not missing and package_contract,
-        "deployable": bool(report.get("deployable")) and package_contract,
+        "deployable": bool(report.get("deployable")) and package_contract and navaid_diff_verified,
         "official_baseline_present": not missing,
+        "navaid_diff_verified": navaid_diff_verified,
         "package_contract": package_contract,
         "bgl_count": len(bgls),
         "report_status": report.get("status"),

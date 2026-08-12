@@ -14,7 +14,7 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from .model import NavModel, Runway, is_china_icao
+from .model import Navaid, NavModel, Runway, is_china_icao
 from .pdf_charts import approach_procedure_name_candidates
 from .profile import Cycle
 from .source import romanize_name
@@ -1404,6 +1404,7 @@ def _waypoint_identity(
 def _append_enroute(
     root: ET.Element,
     model: NavModel,
+    selected_navaids: tuple[Navaid, ...] | None = None,
 ) -> tuple[int, int, int, int, int]:
     """Write only enroute records that meet the SDK's required region contract."""
     points = [point for point in model.waypoints if point.country]
@@ -1529,7 +1530,10 @@ def _append_enroute(
             ))
             for direction, attrs in children:
                 ET.SubElement(route, direction, attrs)
-    navaids = sorted(model.navaids, key=lambda item: (item.kind, item.ident, item.key))
+    navaids = sorted(
+        model.navaids if selected_navaids is None else selected_navaids,
+        key=lambda item: (item.kind, item.ident, item.country, item.key),
+    )
     for navaid in navaids:
         name = _default_navaid_name(navaid.name)
         if navaid.kind == "VOR":
@@ -1583,6 +1587,7 @@ def write_bglcomp_xml(
     scope: str = "all",
     airport_prefix: str | None = None,
     duplicate_terminal_waypoints: bool = False,
+    selected_navaids: tuple[Navaid, ...] | None = None,
 ) -> XmlProjection:
     """把统一中间模型投影为官方 XSD 约束下的 BglComp XML。
 
@@ -1788,7 +1793,7 @@ def write_bglcomp_xml(
             airway_routes,
             skipped_enroute_waypoints,
             skipped_airway_legs,
-        ) = _append_enroute(root, model)
+        ) = _append_enroute(root, model, selected_navaids)
 
     ET.indent(root, space="  ")
     ET.ElementTree(root).write(output, encoding="utf-8", xml_declaration=True)
