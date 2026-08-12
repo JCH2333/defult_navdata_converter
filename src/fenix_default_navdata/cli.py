@@ -9,6 +9,7 @@ from .deployment import deploy, restore
 from .official_index import build_official_navaid_index
 from .paths import detect_paths
 from .profile import DEFAULT_CYCLE
+from .semantic_diff import SUPPORTED_TABLES, semantic_diff, write_semantic_diff
 from .validation import validate_candidate
 
 
@@ -56,6 +57,21 @@ def build_parser() -> argparse.ArgumentParser:
     index.add_argument("--cache-root", help="纯 ASCII 的本地索引/暂存缓存目录")
     index.add_argument("--force", action="store_true", help="覆盖同名本地索引并重新生成")
     index.add_argument("--timeout", type=int, default=3600, help="读取器超时秒数（默认 3600）")
+    semantic = sub.add_parser(
+        "semantic-diff",
+        help="只读比较候选与参考 Navdatareader SQLite，不导出参考字段值",
+    )
+    semantic.add_argument("--candidate-db", required=True, help="候选包的 Navdatareader SQLite")
+    semantic.add_argument("--reference-db", required=True, help="参考包的 Navdatareader SQLite")
+    semantic.add_argument(
+        "--tables",
+        nargs="+",
+        choices=SUPPORTED_TABLES,
+        default=list(SUPPORTED_TABLES),
+        help="要比较的读取器表（默认 VOR、NDB、航点、航路）",
+    )
+    semantic.add_argument("--sample-limit", type=int, default=50, help="每类差异最多输出的样本数")
+    semantic.add_argument("--output", help="可选的本地诊断 JSON 输出路径")
     validate = sub.add_parser("validate", help="验证候选")
     validate.add_argument("--candidate", required=True)
     validate.add_argument("--reference")
@@ -108,6 +124,19 @@ def main(argv: list[str] | None = None) -> int:
             timeout_seconds=args.timeout,
         )
         print(json.dumps(index.to_report(), ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "semantic-diff":
+        report = semantic_diff(
+            Path(args.candidate_db),
+            Path(args.reference_db),
+            tables=args.tables,
+            sample_limit=args.sample_limit,
+        )
+        if args.output:
+            output = Path(args.output).expanduser().resolve()
+            report["output"] = str(output)
+            write_semantic_diff(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "validate":
         report = validate_candidate(Path(args.candidate), _path(args.reference))

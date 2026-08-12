@@ -14,6 +14,7 @@
 - 通过纯 ASCII 暂存项目调用 Package Tool，生成 BGL、`bglIndex.bout`、包元数据与 ContentInfo。
 - 将 PDF 解析证据缓存到本机可复用目录，长时间转换中断后可以断点续跑。
 - 比较参考成品目录的逐文件大小和 SHA-256。
+- 对候选与参考的 Navdatareader SQLite 执行只读语义差分；报告只保留逻辑身份、差异字段名和数量，不导出参考字段值。
 - 提供命令行、Tk GUI、备份、恢复、测试版部署保护和 GitHub 预发布更新检查。
 
 ## 本机已验证编译链
@@ -35,6 +36,10 @@ python -m fenix_default_navdata.cli build --output output/candidate-2608-default
 python -m fenix_default_navdata.cli validate `
   --candidate output/candidate-2608-default `
   --reference "F:\我的世界动画\AI项目\导航数据\424源数据\2608\Default navdata 2608R1"
+python -m fenix_default_navdata.cli semantic-diff `
+  --candidate-db "C:\诊断目录\candidate.sqlite" `
+  --reference-db "C:\诊断目录\reference.sqlite" `
+  --output diagnostics\navdatareader\semantic-diff.json
 python -m fenix_default_navdata.gui
 ```
 
@@ -57,6 +62,7 @@ python -m fenix_default_navdata.cli build `
 - 原始 CSV/PDF、官方 Community 包、参考 BGL、备份、日志和生成包均不进入仓库。
 - Fenix `nd.db3` 不参与本工具转换；Fenix 相关代码仅保留为历史适配器回归材料。
 - 参考成品只用于只读差分，绝不复制参考 BGL 冒充转换结果。
+- `semantic-diff` 不返回参考 SQLite 的坐标、频率、磁差、高程、名称或航路端点字段值，不能作为候选内容的反向来源。
 - Package Tool 构建和 Community 覆盖前都要求 `FlightSimulator2024.exe` 已完全退出。
 - 覆盖前自动备份四个相关包；不完整候选始终拒绝部署。
 - 未完成实机验证前，候选只能标记为测试版。
