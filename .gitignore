@@ -12,6 +12,8 @@ backups/
 diagnostics/
 abarthel-navdatareader*.log*
 *.db3
+*.sqlite
+*.sqlite-*
 *.s3db
 *-wal
 *-shm

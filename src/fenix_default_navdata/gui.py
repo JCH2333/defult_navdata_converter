@@ -9,6 +9,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from .convert import convert
 from .deployment import deploy
+from .official_index import build_official_navaid_index
 from .paths import detect_paths
 from .profile import DEFAULT_CYCLE
 from .update_manager import check_prerelease
@@ -34,12 +35,13 @@ class App:
         self.raw = tk.StringVar()
         self.base = tk.StringVar()
         self.jepp = tk.StringVar()
+        self.baseline = tk.StringVar()
         self.reference = tk.StringVar()
         self.output = tk.StringVar(value=str(Path.cwd() / "output" / "candidate-2608-default"))
         self.target = tk.StringVar()
         self.status = tk.StringVar(value="等待检测")
         self.allow_test = tk.BooleanVar(value=False)
-        self.events: queue.Queue[tuple[str, object]] = queue.Queue()
+        self.events: queue.Queue[tuple[str, object, object | None]] = queue.Queue()
         self.busy = False
         self._build()
         self.root.after(100, self._drain)
@@ -60,6 +62,7 @@ class App:
             ("2608 原始目录", self.raw, "dir"),
             ("官方 nav-base", self.base, "dir"),
             ("官方 nav-jepp", self.jepp, "dir"),
+            ("官方设施索引", self.baseline, "file"),
             ("参考成品（只读）", self.reference, "dir"),
             ("隔离候选输出", self.output, "dir"),
             ("Community 目标", self.target, "dir"),
@@ -81,6 +84,7 @@ class App:
         actions.pack(fill=tk.X)
         for text, command in (
             ("自动检测", self._detect),
+            ("生成官方索引", self._build_official_index),
             ("生成候选", self._build_candidate),
             ("验证候选", self._validate),
             ("检查测试更新", self._check_update),
@@ -97,7 +101,7 @@ class App:
     def _browse(self, variable: tk.StringVar, kind: str) -> None:
         value = (
             filedialog.askopenfilename(
-                filetypes=[("SQLite 数据库", "*.db3"), ("所有文件", "*.*")]
+                filetypes=[("SQLite 数据库", "*.sqlite *.db3"), ("所有文件", "*.*")]
             )
             if kind == "file"
             else filedialog.askdirectory()
@@ -119,9 +123,8 @@ class App:
         self.status.set("路径检测完成")
         self._write("已检测本机 2608 原始数据、官方基线、参考目录和 Community 路径")
 
-    def _required(self) -> bool:
+    def _required_baseline(self) -> bool:
         directories = (
-            (self.raw, "2608 原始目录"),
             (self.base, "nav-base"),
             (self.jepp, "nav-jepp"),
         )
@@ -134,16 +137,42 @@ class App:
             return False
         return True
 
-    def _run(self, action) -> None:
+    def _required(self) -> bool:
+        if not self._required_baseline():
+            return False
+        if not Path(self.raw.get()).is_dir():
+            messagebox.showerror("输入不完整", "缺少：2608 原始目录")
+            return False
+        return True
+
+    def _run(self, action, on_success=None) -> None:
         if self.busy:
             return
         self.busy = True
         def worker() -> None:
             try:
-                self.events.put(("done", action()))
+                self.events.put(("done", action(), on_success))
             except Exception as error:
-                self.events.put(("error", error))
+                self.events.put(("error", error, None))
         threading.Thread(target=worker, daemon=True).start()
+
+    def _build_official_index(self) -> None:
+        if not self._required_baseline():
+            return
+        self.status.set("正在生成并校验官方设施索引")
+        output = Path(self.baseline.get()) if self.baseline.get().strip() else None
+        self._run(
+            lambda: build_official_navaid_index(
+                nav_base=Path(self.base.get()),
+                nav_jepp=Path(self.jepp.get()),
+                output=output,
+            ).to_report(),
+            self._set_baseline_index,
+        )
+
+    def _set_baseline_index(self, report: object) -> None:
+        if isinstance(report, dict) and isinstance(report.get("database"), str):
+            self.baseline.set(report["database"])
 
     def _build_candidate(self) -> None:
         if not self._required():
@@ -159,6 +188,11 @@ class App:
             reference=(
                 Path(self.reference.get())
                 if Path(self.reference.get()).is_dir()
+                else None
+            ),
+            baseline_db=(
+                Path(self.baseline.get())
+                if Path(self.baseline.get()).is_file()
                 else None
             ),
         ))
@@ -191,13 +225,15 @@ class App:
     def _drain(self) -> None:
         try:
             while True:
-                kind, value = self.events.get_nowait()
+                kind, value, on_success = self.events.get_nowait()
                 self.busy = False
                 if kind == "error":
                     self.status.set("操作失败")
                     self._write("[失败] " + str(value))
                     messagebox.showerror("操作失败", str(value))
                 else:
+                    if callable(on_success):
+                        on_success(value)
                     self.status.set("操作完成")
                     self._write(json.dumps(value, ensure_ascii=False, indent=2, default=str))
         except queue.Empty:

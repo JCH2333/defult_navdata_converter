@@ -55,11 +55,27 @@ def validate_candidate(candidate: Path, reference: Path | None = None) -> dict[s
         isinstance(navaid_diff, dict)
         and navaid_diff.get("navaid_diff_verified")
     )
+    official_baseline = report.get("official_baseline")
+    index_verification = (
+        official_baseline.get("navaid_index_verification")
+        if isinstance(official_baseline, dict)
+        else None
+    )
+    navaid_index_verified = bool(
+        isinstance(index_verification, dict)
+        and index_verification.get("verified")
+    )
     result = {
         "valid": not missing and package_contract,
-        "deployable": bool(report.get("deployable")) and package_contract and navaid_diff_verified,
+        "deployable": (
+            bool(report.get("deployable"))
+            and package_contract
+            and navaid_diff_verified
+            and navaid_index_verified
+        ),
         "official_baseline_present": not missing,
         "navaid_diff_verified": navaid_diff_verified,
+        "navaid_index_verified": navaid_index_verified,
         "package_contract": package_contract,
         "bgl_count": len(bgls),
         "report_status": report.get("status"),

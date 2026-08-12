@@ -14,8 +14,12 @@ from .bgl import (
     write_bglcomp_xml,
     write_package_project,
 )
-from .baseline import BaselineError, NavaidDiff, diff_navaids, load_baseline_sqlite
+from .baseline import NavaidDiff, diff_navaids
 from .model import NavModel
+from .official_index import (
+    OfficialIndexError,
+    load_verified_official_navaid_index,
+)
 from .profile import Cycle
 from .source import load_naip
 
@@ -204,18 +208,34 @@ def build_candidate(
     navaid_diff: NavaidDiff | None = None
     selected_navaids: tuple = ()
     baseline_error: str | None = None
+    baseline_report: dict[str, object] = {
+        "verified": False,
+        "database": str(baseline_db) if baseline_db else None,
+        "reason": "未提供经过来源校验的官方设施索引 SQLite",
+    }
     if baseline_db is not None:
         try:
-            baseline_index = load_baseline_sqlite(baseline_db)
+            official_index = load_verified_official_navaid_index(
+                baseline_db,
+                nav_base=nav_base,
+                nav_jepp=nav_jepp,
+            )
+            baseline_index = official_index.baseline
             navaid_diff = diff_navaids(
                 model.navaids,
                 baseline_index,
                 coordinate_tolerance_nm=baseline_tolerance_nm,
             )
+            baseline_report = official_index.to_report()
             if navaid_diff.navaid_diff_verified:
                 selected_navaids = navaid_diff.selected_navaids
-        except (BaselineError, ValueError) as error:
+        except (OfficialIndexError, ValueError) as error:
             baseline_error = str(error)
+            baseline_report = {
+                "verified": False,
+                "database": str(baseline_db),
+                "reason": baseline_error,
+            }
     report: dict[str, object] = {
         "status": "candidate",
         "deployable": False,
@@ -229,6 +249,7 @@ def build_candidate(
             "base": str(nav_base),
             "jepp": str(nav_jepp),
             "navaid_index": str(baseline_db) if baseline_db else None,
+            "navaid_index_verification": baseline_report,
         },
         "reference": str(reference) if reference else None,
         "model": {
@@ -252,7 +273,7 @@ def build_candidate(
             if navaid_diff is not None
             else {
                 "navaid_diff_verified": False,
-                "reason": baseline_error or "未提供官方设施索引 SQLite",
+                "reason": baseline_error or "未提供经过来源校验的官方设施索引 SQLite",
                 "raw_count": len(model.navaids),
                 "selected_missing": 0,
             }
@@ -338,7 +359,8 @@ def build_candidate(
         isinstance(report.get("navaid_diff"), dict)
         and report["navaid_diff"].get("navaid_diff_verified")
     )
-    report["deployable"] = navaid_diff_verified and all(
+    index_verified = bool(baseline_report.get("verified"))
+    report["deployable"] = index_verified and navaid_diff_verified and all(
         (output / name / "bglIndex.bout").is_file()
         and bool(list((output / name).rglob("*.bgl")))
         for name in (NAV_PACKAGE, AIRPORT_PACKAGE)
