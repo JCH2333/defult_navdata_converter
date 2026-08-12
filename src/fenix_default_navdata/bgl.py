@@ -1386,7 +1386,7 @@ def _normalized_waypoint_ident(
 
 def _waypoint_identity(
     ident: str,
-    country: str,
+    country: str | None,
     latitude: float,
     longitude: float,
     source_type: str = "",
@@ -1394,7 +1394,7 @@ def _waypoint_identity(
     normalized_ident = _normalized_waypoint_ident(ident, latitude, longitude)
     return (
         _route_point_type(source_type),
-        (country or "CN").upper()[:2],
+        (country or "").upper()[:2],
         normalized_ident,
     )
 
@@ -1408,7 +1408,7 @@ def _append_enroute(
         if leg.start_latitude is not None and leg.start_longitude is not None:
             points.append(type("_Point", (), {
                 "ident": leg.start_ident,
-                "country": leg.start_country or "CN",
+                "country": leg.start_country,
                 "latitude": leg.start_latitude,
                 "longitude": leg.start_longitude,
                 "name": leg.start_ident,
@@ -1418,7 +1418,7 @@ def _append_enroute(
         if leg.end_latitude is not None and leg.end_longitude is not None:
             points.append(type("_Point", (), {
                 "ident": leg.end_ident,
-                "country": leg.end_country or "CN",
+                "country": leg.end_country,
                 "latitude": leg.end_latitude,
                 "longitude": leg.end_longitude,
                 "name": leg.end_ident,
@@ -1430,7 +1430,7 @@ def _append_enroute(
         points,
         key=lambda item: (
             str(item.ident).upper(),
-            str(item.country or "CN").upper(),
+            str(item.country or "").upper(),
             float(item.latitude),
             float(item.longitude),
             str(item.key),
@@ -1438,7 +1438,7 @@ def _append_enroute(
     ):
         deduped.setdefault(_waypoint_identity(
             str(point.ident),
-            str(point.country or "CN"),
+            str(point.country or ""),
             float(point.latitude),
             float(point.longitude),
             str(getattr(point, "source_type", "")),
@@ -1493,7 +1493,7 @@ def _append_enroute(
     for point in ordered_points:
         identity = _waypoint_identity(
             str(point.ident),
-            str(point.country or "CN"),
+            str(point.country or ""),
             float(point.latitude),
             float(point.longitude),
             str(getattr(point, "source_type", "")),

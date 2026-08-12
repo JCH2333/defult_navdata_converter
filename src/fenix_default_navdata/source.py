@@ -34,10 +34,16 @@ _FIR_COUNTRIES = {
     "\u6c88\u9633\u60c5\u62a5\u533a": "ZY",
 }
 
-# These border fixes have no FIR in the 2608 source table.  Their published
-# locations identify the adjacent Fenix country key deterministically.
+# These border fixes have no FIR in the 2608 source table. Their published
+# identities map to an adjacent MSFS region key deterministically.
 _EMPTY_FIR_COUNTRY_OVERRIDES = {"SARUL": "ZB", "MAGOG": "VH", "SULEM": "RC", "SADLI": "RK"}
 _AIRPORT_PDF_NAME = re.compile(r"\b(?P<icao>Z[A-Z]{3})/[A-Z0-9]{3}\s*[-–]\s*(?P<name>.*)")
+_AIRWAY_ENDPOINT_SOURCE_TYPES = {
+    "DESIGNATED_POINT": "DESIGNATED_POINT",
+    "地名点": "DESIGNATED_POINT",
+    "VORDME": "VORDME",
+    "NDB": "NDB",
+}
 
 
 def parse_dms(value: str) -> float:
@@ -239,22 +245,90 @@ def navaid_country(serviced_airport: str, fir: str) -> str:
 
 
 def waypoint_country(fir: str, latitude: float | None = None, longitude: float | None = None, ident: str = "") -> str:
-    """Map the structured designated-point FIR code to a Fenix country key."""
+    """Map a structured designated-point FIR to an MSFS region key."""
     if "\u9999\u6e2f" in (fir or ""):
         return "VH"
     if fir:
         return navaid_country("", fir)
     if ident in _EMPTY_FIR_COUNTRY_OVERRIDES:
         return _EMPTY_FIR_COUNTRY_OVERRIDES[ident]
+    raise ValueError(f"empty waypoint FIR: {ident or '<unknown>'}")
+
+
+def _airway_endpoint_key(
+    endpoint_type: str,
+    ident: str,
+    latitude: float,
+    longitude: float,
+) -> tuple[str, str, float, float] | None:
+    """Build the exact 424 identity used to recover a route endpoint FIR."""
+    source_type = _AIRWAY_ENDPOINT_SOURCE_TYPES.get((endpoint_type or "").strip().upper())
+    normalized_ident = (ident or "").strip().upper()
+    if not source_type or not normalized_ident:
+        return None
+    return source_type, normalized_ident, round(latitude, 6), round(longitude, 6)
+
+
+def _register_airway_endpoint_country(
+    countries: dict[tuple[str, str, float, float], set[str]],
+    endpoint_type: str,
+    ident: str,
+    latitude: float,
+    longitude: float,
+    country: str,
+) -> None:
+    key = _airway_endpoint_key(endpoint_type, ident, latitude, longitude)
+    normalized_country = (country or "").strip().upper()[:2]
+    if key is not None and normalized_country:
+        countries.setdefault(key, set()).add(normalized_country)
+
+
+def _recover_airway_endpoint_country(
+    countries: dict[tuple[str, str, float, float], set[str]],
+    endpoint_type: str,
+    ident: str,
+    latitude: float | None,
+    longitude: float | None,
+) -> str:
+    """Return one source-proven FIR key, without geographic guesswork."""
     if latitude is None or longitude is None:
-        raise ValueError("empty waypoint FIR without coordinates")
-    if 25 <= latitude <= 30 and 120 <= longitude <= 124:
-        return "RC"
-    if 30 <= latitude <= 40 and 124 <= longitude <= 132:
-        return "RK"
-    if 15 <= latitude <= 55 and 70 <= longitude <= 135:
-        return "CN"
-    raise ValueError(f"unmapped empty waypoint FIR at {latitude}, {longitude}")
+        return ""
+    key = _airway_endpoint_key(endpoint_type, ident, latitude, longitude)
+    matches = countries.get(key, set()) if key is not None else set()
+    return next(iter(matches)) if len(matches) == 1 else ""
+
+
+def _restore_airway_endpoint_countries(
+    model: NavModel,
+    countries: dict[tuple[str, str, float, float], set[str]],
+) -> None:
+    """Replace blank RTE_SEG FIRs only when another 424 table proves them."""
+    model.airway_legs = [
+        replace(
+            leg,
+            start_country=(
+                _recover_airway_endpoint_country(
+                    countries,
+                    leg.start_type,
+                    leg.start_ident,
+                    leg.start_latitude,
+                    leg.start_longitude,
+                )
+                or leg.start_country
+            ),
+            end_country=(
+                _recover_airway_endpoint_country(
+                    countries,
+                    leg.end_type,
+                    leg.end_ident,
+                    leg.end_latitude,
+                    leg.end_longitude,
+                )
+                or leg.end_country
+            ),
+        )
+        for leg in model.airway_legs
+    ]
 
 
 def _validate_pdf_cache(root: Path, pdf_cache: Path | None) -> Path | None:
@@ -276,6 +350,7 @@ def load_naip(
     root = root.resolve()
     pdf_cache = _validate_pdf_cache(root, pdf_cache)
     model = NavModel(root=root)
+    airway_endpoint_countries: dict[tuple[str, str, float, float], set[str]] = {}
     for row_number, row in enumerate(_rows(root / "AD_HP.csv"), start=2):
         icao = (row.get("CODE_ID") or "").strip().upper()
         if not is_china_icao(icao):
@@ -319,13 +394,25 @@ def load_naip(
     for filename, kind, divisor in (("VOR.csv", "VOR", 1), ("NDB.csv", "NDB", 1)):
         for row_number, row in enumerate(_rows(root / filename), start=2):
             try:
-                model.navaids.append(Navaid(row["SIGNIFICANT_POINT_ID"], row.get("CODE_ID") or "", kind,
-                    row.get("TXT_NAME") or "", parse_dms(row.get("GEO_LAT_ACCURACY") or ""),
-                    parse_dms(row.get("GEO_LONG_ACCURACY") or ""), _float(row.get("VAL_FREQ") or "0") / divisor,
+                latitude = parse_dms(row.get("GEO_LAT_ACCURACY") or "")
+                longitude = parse_dms(row.get("GEO_LONG_ACCURACY") or "")
+                country = navaid_country(row.get("SERVICED_AIRPORT") or "", row.get("CODE_FIR") or "")
+                navaid = Navaid(row["SIGNIFICANT_POINT_ID"], row.get("CODE_ID") or "", kind,
+                    row.get("TXT_NAME") or "", latitude,
+                    longitude, _float(row.get("VAL_FREQ") or "0") / divisor,
                     _float(row.get("VAL_MAG_VAR") or "0"), _navaid_elevation_feet(
                         row.get("VAL_ELEV") or "0", row.get("UOM_DIST_VER") or "",
                     ),
-                    navaid_country(row.get("SERVICED_AIRPORT") or "", row.get("CODE_FIR") or ""), SourceRef(filename, row_number)))
+                    country, SourceRef(filename, row_number))
+                model.navaids.append(navaid)
+                _register_airway_endpoint_country(
+                    airway_endpoint_countries,
+                    "VORDME" if kind == "VOR" else "NDB",
+                    navaid.ident,
+                    navaid.latitude,
+                    navaid.longitude,
+                    navaid.country,
+                )
             except ValueError:
                 model.rejected_records.append(RejectedRecord(
                     kind=kind,
@@ -337,8 +424,23 @@ def load_naip(
         try:
             latitude = parse_dms(row.get("GEO_LAT_ACCURACY") or "")
             longitude = parse_dms(row.get("GEO_LONG_ACCURACY") or "")
-            model.waypoints.append(Waypoint(row["SIGNIFICANT_POINT_ID"], row.get("CODE_ID") or "", row.get("TXT_NAME") or "",
-                latitude, longitude, SourceRef("DESIGNATED_POINT.csv", row_number), waypoint_country(row.get("CODE_FIR") or "", latitude, longitude, row.get("CODE_ID") or "")))
+            ident = row.get("CODE_ID") or ""
+            country = (
+                waypoint_country(row.get("CODE_FIR") or "", latitude, longitude, ident)
+                if (row.get("CODE_FIR") or "").strip() or ident.upper() in _EMPTY_FIR_COUNTRY_OVERRIDES
+                else ""
+            )
+            model.waypoints.append(Waypoint(row["SIGNIFICANT_POINT_ID"], ident, row.get("TXT_NAME") or "",
+                latitude, longitude, SourceRef("DESIGNATED_POINT.csv", row_number), country))
+            if (row.get("CODE_FIR") or "").strip() or ident.upper() in _EMPTY_FIR_COUNTRY_OVERRIDES:
+                _register_airway_endpoint_country(
+                    airway_endpoint_countries,
+                    "DESIGNATED_POINT",
+                    ident,
+                    latitude,
+                    longitude,
+                    country,
+                )
         except ValueError:
             model.rejected_records.append(RejectedRecord(
                 kind="designated-point", key=row.get("CODE_ID") or row.get("SIGNIFICANT_POINT_ID") or "",
@@ -353,11 +455,19 @@ def load_naip(
             start_ident = row.get("CODE_POINT_START") or ""
             end_ident = row.get("CODE_POINT_END") or ""
             try:
-                start_country = waypoint_country(row.get("CODE_FIR_START") or "", start_latitude, start_longitude, start_ident)
+                start_country = (
+                    waypoint_country(row.get("CODE_FIR_START") or "", start_latitude, start_longitude, start_ident)
+                    if (row.get("CODE_FIR_START") or "").strip()
+                    else ""
+                )
             except ValueError:
                 start_country = ""
             try:
-                end_country = waypoint_country(row.get("CODE_FIR_END") or "", end_latitude, end_longitude, end_ident)
+                end_country = (
+                    waypoint_country(row.get("CODE_FIR_END") or "", end_latitude, end_longitude, end_ident)
+                    if (row.get("CODE_FIR_END") or "").strip()
+                    else ""
+                )
             except ValueError:
                 end_country = ""
             model.airway_legs.append(AirwayLeg(
@@ -373,6 +483,7 @@ def load_naip(
                 kind="airway-leg", key=row.get("TXT_DESIG") or "", reason="invalid airway endpoint coordinate",
                 source=SourceRef("RTE_SEG.csv", row_number),
             ))
+    _restore_airway_endpoint_countries(model, airway_endpoint_countries)
     if include_terminal_documents:
         _load_terminal_coordinate_pages(model, pdf_cache)
         _load_terminal_landing_aids(model)

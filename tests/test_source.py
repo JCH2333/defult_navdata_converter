@@ -103,3 +103,38 @@ def test_load_naip_converts_vor_elevation_meters_and_keeps_raw_navaid_name(tmp_p
         ("VOR", "CKA", "茶卡", 10322),
         ("NDB", "DM", "泽当", 0),
     ]
+
+
+def test_load_naip_recovers_blank_route_endpoint_firs_from_matching_424_records(tmp_path: Path) -> None:
+    root = _minimal_naip_root(tmp_path, "沥青")
+    _write_csv(root, "DESIGNATED_POINT.csv", "\n".join((
+        "SIGNIFICANT_POINT_ID,CODE_ID,TXT_NAME,GEO_LAT_ACCURACY,GEO_LONG_ACCURACY,CODE_FIR",
+        "point,DP01,DESIGNATED,N350000,E1050000,北京情报区",
+        "nofir,NOFIR,UNRESOLVED,N360000,E1060000,",
+    )))
+    _write_csv(root, "VOR.csv", "\n".join((
+        "SIGNIFICANT_POINT_ID,CODE_ID,TXT_NAME,GEO_LAT_ACCURACY,GEO_LONG_ACCURACY,VAL_FREQ,VAL_MAG_VAR,VAL_ELEV,SERVICED_AIRPORT,CODE_FIR",
+        "vor,VOR1,VOR,N230000,E1130000,113.1,0,0,ZGAA,广州情报区",
+    )))
+    _write_csv(root, "NDB.csv", "\n".join((
+        "SIGNIFICANT_POINT_ID,CODE_ID,TXT_NAME,GEO_LAT_ACCURACY,GEO_LONG_ACCURACY,VAL_FREQ,VAL_MAG_VAR,VAL_ELEV,SERVICED_AIRPORT,CODE_FIR",
+        "ndb,NDB1,NDB,N290000,E0910000,350,0,0,ZULS,昆明情报区",
+    )))
+    _write_csv(root, "RTE_SEG.csv", "\n".join((
+        "TXT_DESIG,VAL_SORT,CODE_POINT_START,CODE_POINT_END,GEO_LAT_START_ACCURACY,GEO_LONG_START_ACCURACY,GEO_LAT_END_ACCURACY,GEO_LONG_END_ACCURACY,CODE_FIR_START,CODE_FIR_END,CODE_DIR,CODE_TYPE,CODE_TYPE_START,CODE_TYPE_END",
+        "R1,1,DP01,VOR1,N350000,E1050000,N230000,E1130000,,,B,L,DESIGNATED_POINT,VORDME",
+        "R2,2,NDB1,DP01,N290000,E0910000,N350000,E1050000,,,B,L,NDB,地名点",
+        "R3,3,DP01,NOFIR,N350000,E1050000,N360000,E1060000,,,B,L,DESIGNATED_POINT,DESIGNATED_POINT",
+    )))
+
+    model = load_naip(root, include_terminal_documents=False)
+
+    assert [
+        (leg.start_country, leg.end_country)
+        for leg in model.airway_legs
+    ] == [
+        ("ZB", "ZG"),
+        ("ZU", "ZB"),
+        ("ZB", ""),
+    ]
+    assert next(point.country for point in model.waypoints if point.ident == "NOFIR") == ""

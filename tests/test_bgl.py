@@ -112,6 +112,28 @@ def test_enroute_projection_uses_verified_default_navaid_name_exceptions(tmp_pat
     }
 
 
+def test_enroute_projection_does_not_invent_a_region_for_an_unresolved_endpoint(tmp_path: Path):
+    model = NavModel(Path("source"))
+    model.airway_legs.append(AirwayLeg(
+        "R1", 1, "KNOWN", "UNRES", SourceRef("RTE_SEG.csv", 2),
+        start_latitude=35.0, start_longitude=105.0,
+        end_latitude=36.0, end_longitude=106.0,
+        start_country="ZB", end_country="",
+        start_type="DESIGNATED_POINT", end_type="DESIGNATED_POINT",
+    ))
+
+    output = tmp_path / "unresolved-enroute.xml"
+    write_bglcomp_xml(model, DEFAULT_CYCLE, output, scope="enroute")
+
+    root = ET.parse(output).getroot()
+    unresolved = root.find("./Waypoint[@waypointIdent='UNRES']")
+    assert unresolved is not None
+    assert "waypointRegion" not in unresolved.attrib
+    next_endpoint = root.find("./Waypoint[@waypointIdent='KNOWN']/Route/Next")
+    assert next_endpoint is not None
+    assert "waypointRegion" not in next_endpoint.attrib
+
+
 def test_airport_projection_emits_source_backed_holding_pattern(tmp_path: Path):
     model = NavModel(Path("source"))
     source = SourceRef("ZBAA-0C-15.pdf", page=1)
