@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import math
 import re
 from dataclasses import replace
 from pathlib import Path
@@ -87,13 +88,27 @@ def _float(value: str, default: float = 0.0) -> float:
 
 
 def _surface(value: str) -> str:
-    normalized = (value or "").upper()
-    if any(token in normalized for token in ("水泥", "沥青", "混凝土", "CON", "ASP")):
-        return "ASP"
-    if any(token in normalized for token in ("草", "土", "GRE", "GRASS")):
-        return "GRE"
-    if any(token in normalized for token in ("水", "WAT")):
-        return "WAT"
+    """Project the first source-listed runway material into an SDK surface.
+
+    A slash-separated 424 composition can describe a runway with multiple
+    paving sections, while the MSFS Runway element accepts one material only.
+    Retaining the first expressible source component is deterministic and
+    avoids silently rewriting a concrete runway as asphalt.
+    """
+    components = [
+        component.strip().upper()
+        for component in re.split(r"[/、,;，；]+", value or "")
+        if component.strip()
+    ]
+    for component in components:
+        if any(token in component for token in ("水泥", "混凝土", "CONCRETE", "CON")):
+            return "CON"
+        if any(token in component for token in ("沥青", "ASPHALT", "ASP")):
+            return "ASP"
+        if any(token in component for token in ("草", "土", "GRASS", "GRE")):
+            return "GRE"
+        if any(token in component for token in ("水", "WATER", "WAT")):
+            return "WAT"
     return "U"
 
 
@@ -105,6 +120,35 @@ def _feet(value: str) -> int:
 def _airport_altitude_feet(value: str) -> int:
     """Project airport transition heights to Fenix's 100-foot resolution."""
     return int(round(_float(value) * 3.28084, -2))
+
+
+def runway_threshold(
+    latitude: float,
+    longitude: float,
+    true_heading: float,
+    length_ft: int,
+) -> tuple[float, float]:
+    """Derive one published runway end from the airport reference point.
+
+    `RWY_DIRECTION.csv` supplies a true direction but no end coordinates.
+    The matched 424 airport reference point represents the runway midpoint
+    for this projection, so each end sits half a runway length away on the
+    reciprocal bearing.
+    """
+    earth_radius_m = 6_371_008.8
+    angular_distance = length_ft * 0.3048 / 2 / earth_radius_m
+    bearing = math.radians((true_heading + 180) % 360)
+    start_latitude = math.radians(latitude)
+    start_longitude = math.radians(longitude)
+    end_latitude = math.asin(
+        math.sin(start_latitude) * math.cos(angular_distance)
+        + math.cos(start_latitude) * math.sin(angular_distance) * math.cos(bearing)
+    )
+    end_longitude = start_longitude + math.atan2(
+        math.sin(bearing) * math.sin(angular_distance) * math.cos(start_latitude),
+        math.cos(angular_distance) - math.sin(start_latitude) * math.sin(end_latitude),
+    )
+    return math.degrees(end_latitude), ((math.degrees(end_longitude) + 540) % 360) - 180
 
 
 def romanize_name(value: str) -> str:
@@ -227,19 +271,33 @@ def load_naip(
 
     _load_airport_pdf_names(model)
 
-    runway_airports: dict[str, str] = {}
-    dimensions: dict[str, tuple[int, int, str]] = {}
+    dimensions: dict[str, tuple[str, int, int, str, float, float]] = {}
     for row_number, row in enumerate(_rows(root / "RWY.csv"), start=2):
-        if row.get("AD_HP_ID") in model.airports:
-            runway_airports[row["RWY_ID"]] = row["AD_HP_ID"]
-            dimensions[row["RWY_ID"]] = (_feet(row.get("VAL_LEN") or "0"), _feet(row.get("VAL_WID") or "0"), _surface(row.get("CODE_COMPOSITION") or ""))
+        airport_key = row.get("AD_HP_ID") or ""
+        airport = model.airports.get(airport_key)
+        if airport is not None:
+            dimensions[row["RWY_ID"]] = (
+                airport_key,
+                _feet(row.get("VAL_LEN") or "0"),
+                _feet(row.get("VAL_WID") or "0"),
+                _surface(row.get("CODE_COMPOSITION") or ""),
+                airport.latitude,
+                airport.longitude,
+            )
     for row_number, row in enumerate(_rows(root / "RWY_DIRECTION.csv"), start=2):
-        airport_key = runway_airports.get(row.get("RWY_ID") or "")
-        if airport_key:
-            length, width, surface = dimensions[row["RWY_ID"]]
+        runway = dimensions.get(row.get("RWY_ID") or "")
+        if runway is not None:
+            airport_key, length, width, surface, airport_latitude, airport_longitude = runway
+            true_heading = _float(row.get("VAL_TRUE_BRG") or "0")
+            latitude, longitude = runway_threshold(
+                airport_latitude,
+                airport_longitude,
+                true_heading,
+                length,
+            )
             model.runways.append(Runway(row["RWY_DIRECTION_ID"], airport_key, row.get("TXT_DESIG") or "",
-                _float(row.get("VAL_TRUE_BRG") or "0"), length, width, surface, _feet(row.get("VAL_ELEV") or "0"),
-                SourceRef("RWY_DIRECTION.csv", row_number)))
+                true_heading, length, width, surface, _feet(row.get("VAL_ELEV") or "0"),
+                SourceRef("RWY_DIRECTION.csv", row_number), latitude, longitude))
 
     for filename, kind, divisor in (("VOR.csv", "VOR", 1), ("NDB.csv", "NDB", 1)):
         for row_number, row in enumerate(_rows(root / filename), start=2):
