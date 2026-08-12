@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from fenix_default_navdata.baseline import BaselineIndex, BaselineNavaid
 from fenix_default_navdata.default_navaids import select_default_navaids
 from fenix_default_navdata.model import Navaid, SourceRef
@@ -14,6 +16,7 @@ def _raw(
     longitude: float,
     frequency: float,
     country: str,
+    source_file: str = "fixture.csv",
 ) -> Navaid:
     return Navaid(
         key=key,
@@ -26,7 +29,7 @@ def _raw(
         magnetic_variation=0.0,
         elevation_ft=0,
         country=country,
-        source=SourceRef("fixture.csv", 2),
+        source=SourceRef(source_file, 2),
         code_in_airway="Y",
         purpose="AE",
         is_rep_atc="Y",
@@ -126,6 +129,77 @@ def test_default_selection_keeps_same_ident_with_different_frequency() -> None:
 
     assert result.navaid_selection_verified is True
     assert result.selected_navaids == (raw,)
+
+
+def test_default_selection_projects_source_backed_ndb_property_correction() -> None:
+    raw = _raw(
+        "raw", "DM", "NDB", latitude=29.256111, longitude=91.764167,
+        frequency=435, country="ZU", source_file="NDB.csv",
+    )
+    baseline = _index(_baseline(
+        "NDB", "DM", "ZU", 43500, 29.255000, 91.765000, 1,
+    ))
+
+    result = select_default_navaids([raw], baseline)
+
+    assert result.navaid_selection_verified is True
+    assert result.selected_navaids == (raw,)
+    assert result.selected_missing_navaids == ()
+    assert len(result.property_corrections) == 1
+    correction = result.property_corrections[0]
+    assert correction.raw == raw
+    assert correction.property_delta == ("coordinates",)
+    report = result.to_report()
+    assert report["selected_total"] == 1
+    assert report["selected_missing"] == 0
+    assert report["selected_property_corrections"] == 1
+    assert report["property_corrections_by_kind"] == {"VOR": 0, "NDB": 1}
+    assert report["property_correction_records"][0]["reason"] == (
+        "source_backed_ndb_property_delta"
+    )
+
+
+def test_default_selection_does_not_project_unchanged_ndb_or_vor_delta() -> None:
+    unchanged_ndb = _raw(
+        "ndb", "EQ", "NDB", latitude=36.0, longitude=106.0,
+        frequency=445, country="ZB",
+    )
+    vor_delta = _raw(
+        "vor", "VOR", "VOR", latitude=35.0, longitude=105.0,
+        frequency=112.3, country="ZB",
+    )
+    baseline = _index(
+        _baseline("NDB", "EQ", "ZB", 44500, 36.0, 106.0, 1),
+        _baseline("VOR", "VOR", "ZB", 112300, 35.001, 105.0, 2),
+    )
+
+    result = select_default_navaids([unchanged_ndb, vor_delta], baseline)
+
+    assert result.navaid_selection_verified is True
+    assert result.selected_navaids == ()
+    assert result.selected_missing_navaids == ()
+    assert result.property_corrections == ()
+    report = result.to_report()
+    assert report["strict_property_delta"] == 1
+    assert report["unselected_property_deltas"] == 1
+
+
+def test_default_selection_requires_direct_ndb_csv_provenance_for_correction() -> None:
+    raw = _raw(
+        "raw", "DM", "NDB", latitude=29.256111, longitude=91.764167,
+        frequency=435, country="ZU", source_file="NDB.csv",
+    )
+    raw = replace(raw, source=SourceRef("derived-ndb.csv", 2))
+    baseline = _index(_baseline(
+        "NDB", "DM", "ZU", 43500, 29.255000, 91.765000, 1,
+    ))
+
+    result = select_default_navaids([raw], baseline)
+
+    assert result.navaid_selection_verified is True
+    assert result.selected_navaids == ()
+    assert result.property_corrections == ()
+    assert result.to_report()["unselected_property_deltas"] == 1
 
 
 def test_default_selection_blocks_on_multiple_physical_official_identities() -> None:

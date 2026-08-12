@@ -7,6 +7,7 @@ from .baseline import (
     BaselineIndex,
     BaselineNavaid,
     NavaidDiff,
+    NavaidMatch,
     _distance_nm,
     _source_frequency_khz,
     diff_navaids,
@@ -36,13 +37,21 @@ class DefaultNavaidSelection:
     """Default-overlay navaid selection with an audit trail for every outcome.
 
     ``diff_navaids`` deliberately keeps its historical, region-strict meaning.
-    This adapter layer adds a second pass only for rows that strict matching
-    considered missing: it suppresses a row when the verified official index
-    already contains the same physical facility under a different region key.
+    This adapter layer keeps two source-backed projection categories:
+
+    * rows that are missing from the official baseline; and
+    * NDB rows that uniquely match an official entity but carry an expressible
+      424 property change.
+
+    It adds a second pass only for rows that strict matching considered
+    missing: it suppresses a row when the verified official index already
+    contains the same physical facility under a different region key.
     """
 
     strict_diff: NavaidDiff
     selected_navaids: tuple[Navaid, ...]
+    selected_missing_navaids: tuple[Navaid, ...]
+    property_corrections: tuple[NavaidMatch, ...]
     suppressed_physical_duplicates: tuple[PhysicalNavaidMatch, ...]
     physical_ambiguities: tuple[PhysicalNavaidAmbiguity, ...]
     coordinate_tolerance_nm: float
@@ -95,17 +104,42 @@ class DefaultNavaidSelection:
 
         return {
             "navaid_selection_verified": self.navaid_selection_verified,
-            "strategy": "strict_region_diff_then_physical_duplicate_suppression",
+            "strategy": (
+                "strict_region_diff_then_ndb_property_corrections_"
+                "and_physical_duplicate_suppression"
+            ),
             "source_records": len(self.strict_diff.raw),
             "strict_matched_existing": len(self.strict_diff.matched_existing),
             "strict_selected_missing": len(self.strict_diff.selected_navaids),
-            "selected_missing": len(self.selected_navaids),
+            "strict_property_delta": len(self.strict_diff.property_deltas),
+            "selected_total": len(self.selected_navaids),
+            "selected_missing": len(self.selected_missing_navaids),
+            "selected_property_corrections": len(self.property_corrections),
+            "unselected_property_deltas": (
+                len(self.strict_diff.property_deltas) - len(self.property_corrections)
+            ),
             "suppressed_physical_duplicates": len(self.suppressed_physical_duplicates),
             "physical_ambiguities": len(self.physical_ambiguities),
             "strict_ambiguities": len(self.strict_diff.ambiguous),
             "coordinate_tolerance_nm": self.coordinate_tolerance_nm,
             "selected_by_kind": {
                 kind: sum(1 for item in self.selected_navaids if item.kind == kind)
+                for kind in ("VOR", "NDB")
+            },
+            "selected_missing_by_kind": {
+                kind: sum(
+                    1
+                    for item in self.selected_missing_navaids
+                    if item.kind == kind
+                )
+                for kind in ("VOR", "NDB")
+            },
+            "property_corrections_by_kind": {
+                kind: sum(
+                    1
+                    for item in self.property_corrections
+                    if item.raw.kind == kind
+                )
                 for kind in ("VOR", "NDB")
             },
             "suppressed_by_kind": {
@@ -121,7 +155,17 @@ class DefaultNavaidSelection:
                     "reason": "no_physical_official_match",
                     "raw": raw_payload(item),
                 }
-                for item in self.selected_navaids[:100]
+                for item in self.selected_missing_navaids[:100]
+            ],
+            "property_correction_records": [
+                {
+                    "reason": "source_backed_ndb_property_delta",
+                    "raw": raw_payload(item.raw),
+                    "baseline": baseline_payload(item.baseline),
+                    "distance_nm": item.distance_nm,
+                    "fields": list(item.property_delta),
+                }
+                for item in self.property_corrections[:100]
             ],
             "suppressed_records": [
                 {
@@ -196,12 +240,15 @@ def select_default_navaids(
     *,
     coordinate_tolerance_nm: float = 0.25,
 ) -> DefaultNavaidSelection:
-    """Select only source navaids absent from the official default baseline.
+    """Select source-backed navaid additions and NDB property corrections.
 
     The first pass remains region-strict to preserve diagnostics.  The second
     pass prevents an overlay from recreating a physical facility just because
-    the source and baseline assign different region keys.  A physical ambiguity
-    is a hard stop: no navaid output is returned for an unverified selection.
+    the source and baseline assign different region keys.  A uniquely matched
+    424 NDB with an expressible property delta is selected as a correction;
+    VOR corrections remain report-only until their own source rule is proven.
+    A physical ambiguity is a hard stop: no navaid output is returned for an
+    unverified selection.
     """
     raw = tuple(navaids)
     strict_diff = diff_navaids(
@@ -213,12 +260,14 @@ def select_default_navaids(
         return DefaultNavaidSelection(
             strict_diff=strict_diff,
             selected_navaids=(),
+            selected_missing_navaids=(),
+            property_corrections=(),
             suppressed_physical_duplicates=(),
             physical_ambiguities=(),
             coordinate_tolerance_nm=coordinate_tolerance_nm,
         )
 
-    selected: list[Navaid] = []
+    selected_missing: list[Navaid] = []
     suppressed: list[PhysicalNavaidMatch] = []
     ambiguities: list[PhysicalNavaidAmbiguity] = []
     for raw_item in strict_diff.selected_navaids:
@@ -232,15 +281,39 @@ def select_default_navaids(
         elif len(candidates) > 1:
             ambiguities.append(PhysicalNavaidAmbiguity(raw_item, candidates))
         else:
-            selected.append(raw_item)
+            selected_missing.append(raw_item)
+
+    # Unlike VORs, every 2608 424 NDB row in the normalized model is a direct
+    # NDB.csv record.  When strict matching has already established exactly one
+    # same-region, same-frequency physical entity, an expressible field delta
+    # is enough source evidence to emit a replacement facility.  The baseline
+    # record is used only to prove identity and to audit the changed fields.
+    property_corrections = [
+        match
+        for match in strict_diff.property_deltas
+        if (
+            match.raw.kind.upper() == "NDB"
+            and match.raw.source.file.strip().casefold() == "ndb.csv"
+        )
+    ]
 
     # An ambiguous physical identity must never leave a partly trusted set for
     # the caller to accidentally project into a loadable overlay.
     if ambiguities:
-        selected = []
+        selected_missing = []
+        property_corrections = []
+    selected = tuple(sorted(
+        (*selected_missing, *(item.raw for item in property_corrections)),
+        key=_sort_raw,
+    ))
     return DefaultNavaidSelection(
         strict_diff=strict_diff,
-        selected_navaids=tuple(sorted(selected, key=_sort_raw)),
+        selected_navaids=selected,
+        selected_missing_navaids=tuple(sorted(selected_missing, key=_sort_raw)),
+        property_corrections=tuple(sorted(
+            property_corrections,
+            key=lambda item: (_sort_raw(item.raw), item.baseline.sort_key),
+        )),
         suppressed_physical_duplicates=tuple(sorted(
             suppressed,
             key=lambda item: (_sort_raw(item.raw), item.baseline.sort_key),
