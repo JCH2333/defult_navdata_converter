@@ -65,6 +65,11 @@ def validate_candidate(candidate: Path, reference: Path | None = None) -> dict[s
         isinstance(index_verification, dict)
         and index_verification.get("verified")
     )
+    official_region_resolution = report.get("official_region_resolution")
+    official_region_resolution_verified = bool(
+        isinstance(official_region_resolution, dict)
+        and official_region_resolution.get("verified")
+    )
     result = {
         "valid": not missing and package_contract,
         "deployable": (
@@ -72,10 +77,12 @@ def validate_candidate(candidate: Path, reference: Path | None = None) -> dict[s
             and package_contract
             and navaid_diff_verified
             and navaid_index_verified
+            and official_region_resolution_verified
         ),
         "official_baseline_present": not missing,
         "navaid_diff_verified": navaid_diff_verified,
         "navaid_index_verified": navaid_index_verified,
+        "official_region_resolution_verified": official_region_resolution_verified,
         "package_contract": package_contract,
         "bgl_count": len(bgls),
         "report_status": report.get("status"),

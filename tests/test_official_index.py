@@ -76,7 +76,7 @@ def _write_reader_index(output: Path, base_bgl: Path, jepp_bgl: Path) -> None:
     )
     connection.executemany(
         "INSERT INTO bgl_file(bgl_file_id, filepath) VALUES (?, ?)",
-        ((1, str(base_bgl)), (2, str(jepp_bgl))),
+        ((1, str(base_bgl)), (2, str(jepp_bgl)), (3, str(base_bgl))),
     )
     connection.execute(
         """
@@ -93,7 +93,7 @@ def _write_reader_index(output: Path, base_bgl: Path, jepp_bgl: Path) -> None:
     connection.execute(
         """
         INSERT INTO waypoint(file_id, ident, region, lonx, laty)
-        VALUES (1, 'POINT', 'ZB', 105.5, 35.5)
+        VALUES (3, 'POINT', 'ZB', 105.5, 35.5)
         """
     )
     connection.commit()
@@ -307,7 +307,7 @@ def test_foreign_waypoint_provenance_rejects_index_before_writing_output(tmp_pat
         )
         connection = sqlite3.connect(database)
         connection.execute(
-            "UPDATE bgl_file SET filepath = ? WHERE bgl_file_id = 1",
+            "UPDATE bgl_file SET filepath = ? WHERE bgl_file_id = 3",
             (str(tmp_path / "foreign" / "waypoint-source.bgl"),),
         )
         connection.commit()

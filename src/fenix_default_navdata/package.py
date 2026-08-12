@@ -21,6 +21,12 @@ from .official_index import (
     load_verified_official_navaid_index,
 )
 from .profile import Cycle
+from .region_resolution import (
+    OFFICIAL_REGION_TOLERANCE_NM,
+    OfficialRegionResolution,
+    RegionResolutionError,
+    restore_regions_from_official_index,
+)
 from .source import load_naip
 
 
@@ -206,8 +212,14 @@ def build_candidate(
         include_terminal_documents=True,
     )
     navaid_diff: NavaidDiff | None = None
+    region_resolution: OfficialRegionResolution | None = None
     selected_navaids: tuple = ()
     baseline_error: str | None = None
+    region_resolution_report: dict[str, object] = {
+        "verified": False,
+        "reason": "未提供经过来源校验的官方 VOR/NDB/航点索引 SQLite",
+        "coordinate_tolerance_nm": OFFICIAL_REGION_TOLERANCE_NM,
+    }
     baseline_report: dict[str, object] = {
         "verified": False,
         "database": str(baseline_db) if baseline_db else None,
@@ -220,6 +232,11 @@ def build_candidate(
                 nav_base=nav_base,
                 nav_jepp=nav_jepp,
             )
+            region_resolution = restore_regions_from_official_index(
+                model,
+                official_index,
+                coordinate_tolerance_nm=OFFICIAL_REGION_TOLERANCE_NM,
+            )
             baseline_index = official_index.baseline
             navaid_diff = diff_navaids(
                 model.navaids,
@@ -227,14 +244,20 @@ def build_candidate(
                 coordinate_tolerance_nm=baseline_tolerance_nm,
             )
             baseline_report = official_index.to_report()
+            region_resolution_report = region_resolution.to_report()
             if navaid_diff.navaid_diff_verified:
                 selected_navaids = navaid_diff.selected_navaids
-        except (OfficialIndexError, ValueError) as error:
+        except (OfficialIndexError, RegionResolutionError, ValueError) as error:
             baseline_error = str(error)
             baseline_report = {
                 "verified": False,
                 "database": str(baseline_db),
                 "reason": baseline_error,
+            }
+            region_resolution_report = {
+                "verified": False,
+                "reason": baseline_error,
+                "coordinate_tolerance_nm": OFFICIAL_REGION_TOLERANCE_NM,
             }
     report: dict[str, object] = {
         "status": "candidate",
@@ -278,6 +301,7 @@ def build_candidate(
                 "selected_missing": 0,
             }
         ),
+        "official_region_resolution": region_resolution_report,
         "limitations": [
             "没有合法的 BglComp.exe 时不能生成可加载的区域 BGL。",
             "默认 BGL 的字节级一致还需要相同版本的设施编译器、记录排序、索引和打包时间戳。",
@@ -360,10 +384,16 @@ def build_candidate(
         and report["navaid_diff"].get("navaid_diff_verified")
     )
     index_verified = bool(baseline_report.get("verified"))
-    report["deployable"] = index_verified and navaid_diff_verified and all(
+    region_resolution_verified = bool(region_resolution_report.get("verified"))
+    report["deployable"] = (
+        index_verified
+        and navaid_diff_verified
+        and region_resolution_verified
+        and all(
         (output / name / "bglIndex.bout").is_file()
         and bool(list((output / name).rglob("*.bgl")))
         for name in (NAV_PACKAGE, AIRPORT_PACKAGE)
+        )
     )
     _write_json(output / "conversion-report.json", report)
     return report
