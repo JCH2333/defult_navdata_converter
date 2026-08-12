@@ -1490,7 +1490,7 @@ def write_package_project(
     output_dir: str,
     source_xmls: tuple[Path, ...],
     package_order_hint: str,
-    dependencies: tuple[str, ...] = (),
+    dependencies: tuple[dict[str, str], ...] = (),
 ) -> Path:
     """生成可由 MSFS 2024 Package Tool 构建的最小项目。"""
     project_root.mkdir(parents=True, exist_ok=True)
@@ -1517,9 +1517,9 @@ def write_package_project(
             dependency_element = ET.SubElement(
                 dependency_root,
                 "Dependency",
-                {"Version": "0.1.0"},
+                {"Version": dependency["package_version"]},
             )
-            ET.SubElement(dependency_element, "Name").text = dependency
+            ET.SubElement(dependency_element, "Name").text = dependency["name"]
     groups = ET.SubElement(package, "AssetGroups")
     group = ET.SubElement(groups, "AssetGroup", {"Name": "NavData"})
     ET.SubElement(group, "Type").text = "BGL"

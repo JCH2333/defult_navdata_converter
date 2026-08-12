@@ -122,7 +122,7 @@ def _compile_xml_package(
             output_dir=f"scenery\\{package_name}",
             source_xmls=tuple(xml_paths),
             package_order_hint=package_order_hint,
-            dependencies=tuple(item["name"] for item in dependencies),
+            dependencies=tuple(dependencies),
         )
         compile_report = compile_package(
             project_path,

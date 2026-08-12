@@ -479,17 +479,22 @@ def test_package_tool_project_is_deterministic(tmp_path: Path):
         output_dir=r"scenery\test-navdata",
         source_xmls=(source, second_source),
         package_order_hint="CUSTOM_NAVDATA_PATCH",
-        dependencies=("navigraph-nav-base", "navigraph-nav-jepp"),
+        dependencies=(
+            {"name": "navigraph-nav-base", "package_version": "0.1.0"},
+            {"name": "navigraph-nav-jepp", "package_version": "2.26.16"},
+        ),
     )
     parsed = ET.parse(project).getroot()
     assert parsed.tag == "Project"
     assert parsed.findtext("Packages/Package") == r"PackageDefinitions\test-navdata.xml"
     definition = ET.parse(root / "PackageDefinitions" / "test-navdata.xml").getroot()
     assert definition.findtext("PackageOrderHint") == "CUSTOM_NAVDATA_PATCH"
-    assert [
-        item.findtext("Name")
-        for item in definition.findall("Dependencies/Dependency")
-    ] == ["navigraph-nav-base", "navigraph-nav-jepp"]
+    dependencies = definition.findall("Dependencies/Dependency")
+    assert [item.findtext("Name") for item in dependencies] == [
+        "navigraph-nav-base",
+        "navigraph-nav-jepp",
+    ]
+    assert [item.attrib["Version"] for item in dependencies] == ["0.1.0", "2.26.16"]
     assert definition.findtext("ItemSettings/Creator") == "PMDG DFD v2 converter"
     assert definition.findtext("AssetGroups/AssetGroup/Type") == "BGL"
     assert definition.findtext("AssetGroups/AssetGroup/OutputDir") == r"scenery\test-navdata"
