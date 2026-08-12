@@ -13,6 +13,7 @@ from fenix_default_navdata.model import (
     Airport,
     AirwayLeg,
     ChartTerminalLeg,
+    Holding,
     Ils,
     NavModel,
     ProcedureChart,
@@ -56,6 +57,37 @@ def test_bgl_xml_is_deterministic(tmp_path: Path):
         "waypointIdent": "END",
         "waypointType": "NAMED",
         "altitudeMinimum": "0F",
+    }
+
+
+def test_airport_projection_emits_source_backed_holding_pattern(tmp_path: Path):
+    model = NavModel(Path("source"))
+    source = SourceRef("ZBAA-0C-15.pdf", page=1)
+    model.airports["a"] = Airport(
+        "a", "ZBAA", "ZBAA", 40.0, 116.0, 100, 18000, 180, source,
+    )
+    model.terminal_waypoints.append(TerminalWaypoint(
+        "holding-fix", "ZBAA", "IGMOR", 40.1, 116.1, source, "ZB",
+    ))
+    model.holdings.append(Holding(
+        "IGMOR", "IGMOR", "ZBAA", 40.1, 116.1, 109, "L", None, 1.5,
+        19685, None, None, source,
+    ))
+
+    output = tmp_path / "holdings.xml"
+    write_bglcomp_xml(model, DEFAULT_CYCLE, output, scope="airports")
+
+    holding = ET.parse(output).getroot().find("Airport/HoldingPattern")
+    assert holding is not None
+    assert holding.attrib == {
+        "name": "IGMOR",
+        "fixType": "TERMINAL_WAYPOINT",
+        "fixIdent": "IGMOR",
+        "fixRegion": "ZB",
+        "inboundHoldingCourse": "109",
+        "turnDirection": "L",
+        "time": "1.5",
+        "altitudeMinimum": "19685F",
     }
 
 

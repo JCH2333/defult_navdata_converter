@@ -9,7 +9,7 @@ from pathlib import Path
 from pypinyin import lazy_pinyin
 import pymupdf
 
-from .model import CN_PREFIXES, Airport, AirwayLeg, NavModel, Navaid, ProcedureSegment, RejectedProcedure, RejectedRecord, Runway, SourceRef, TerminalWaypoint, Waypoint, is_china_icao
+from .model import CN_PREFIXES, Airport, AirwayLeg, Holding, NavModel, Navaid, ProcedureSegment, RejectedProcedure, RejectedRecord, Runway, SourceRef, TerminalWaypoint, Waypoint, is_china_icao
 from .pdf_charts import (
     _is_instrument_approach_index_row,
     _is_standard_procedure_index_row,
@@ -302,6 +302,7 @@ def load_naip(
         _load_terminal_database_charts(model, pdf_cache)
         _load_terminal_standard_procedure_charts(model, pdf_cache)
         _build_database_procedure_segments(model)
+        _build_database_holdings(model)
         _retain_database_referenced_terminal_waypoints(model)
         _load_terminal_approach_charts(model, pdf_cache)
         _reject_unparsed_charts(model)
@@ -382,6 +383,7 @@ def _retain_database_referenced_terminal_waypoints(model: NavModel) -> None:
         for identifier in (leg.fix_ident, leg.center_ident)
         if identifier
     }
+    used.update((holding.fix_region, holding.fix_ident) for holding in model.holdings)
     model.terminal_waypoints[:] = [
         point for point in model.terminal_waypoints
         if (point.airport, point.ident) in used
@@ -415,6 +417,99 @@ def _build_database_procedure_segments(model: NavModel) -> None:
         flush()
 
     _replace_standard_p_arrivals(model)
+
+
+def _build_database_holdings(model: NavModel) -> None:
+    """Build airport holdings only when their printed fix has a 424 coordinate."""
+    model.holdings.clear()
+    terminal_points: dict[tuple[str, str], list[TerminalWaypoint]] = {}
+    global_points: dict[str, list[Waypoint]] = {}
+    navaids: dict[str, list[Navaid]] = {}
+    for point in model.terminal_waypoints:
+        terminal_points.setdefault((point.airport, point.ident), []).append(point)
+    for point in model.waypoints:
+        global_points.setdefault(point.ident, []).append(point)
+    for navaid in model.navaids:
+        navaids.setdefault(navaid.ident, []).append(navaid)
+
+    def source_point(points):
+        by_coordinate = {
+            (round(point.latitude, 6), round(point.longitude, 6)): point
+            for point in points
+        }
+        return next(iter(by_coordinate.values())) if len(by_coordinate) == 1 else None
+
+    terminal_keys = {
+        (point.airport, point.ident, round(point.latitude, 6), round(point.longitude, 6))
+        for point in model.terminal_waypoints
+    }
+    seen: set[tuple[object, ...]] = set()
+    for chart in model.procedure_charts:
+        if chart.chart_type != "terminal-database-coding":
+            continue
+        for evidence in chart.holding_evidence:
+            airport = chart.airport.upper()
+            point = source_point(terminal_points.get((airport, evidence.fix_ident), []))
+            if point is None:
+                point = source_point(global_points.get(evidence.fix_ident, []))
+            if point is None:
+                point = source_point(navaids.get(evidence.fix_ident, []))
+            if point is None:
+                model.rejected_records.append(RejectedRecord(
+                    "holding",
+                    f"{airport}:{evidence.fix_ident}",
+                    "holding fix has no unambiguous 424 source coordinate",
+                    chart.source,
+                ))
+                continue
+            latitude, longitude = round(point.latitude, 6), round(point.longitude, 6)
+            point_key = (airport, evidence.fix_ident, latitude, longitude)
+            if point_key not in terminal_keys:
+                terminal_point = TerminalWaypoint(
+                    key=f"holding:{airport}:{evidence.fix_ident}:{latitude:.6f}:{longitude:.6f}",
+                    airport=airport,
+                    ident=evidence.fix_ident,
+                    latitude=point.latitude,
+                    longitude=point.longitude,
+                    source=point.source,
+                    country=getattr(point, "country", "") or airport[:2],
+                )
+                model.terminal_waypoints.append(terminal_point)
+                terminal_points.setdefault((airport, evidence.fix_ident), []).append(terminal_point)
+                terminal_keys.add(point_key)
+            identity = (
+                airport,
+                evidence.fix_ident,
+                latitude,
+                longitude,
+                evidence.inbound_course,
+                evidence.turn_direction,
+                evidence.time_minutes,
+                evidence.minimum_altitude_meters,
+                evidence.speed_limit_knots,
+            )
+            if identity in seen:
+                continue
+            seen.add(identity)
+            model.holdings.append(Holding(
+                name=evidence.fix_ident,
+                fix_ident=evidence.fix_ident,
+                fix_region=airport,
+                latitude=point.latitude,
+                longitude=point.longitude,
+                inbound_course=evidence.inbound_course,
+                turn_direction=evidence.turn_direction,
+                length_nm=None,
+                time_minutes=evidence.time_minutes,
+                minimum_altitude_ft=(
+                    _feet(str(evidence.minimum_altitude_meters))
+                    if evidence.minimum_altitude_meters is not None
+                    else None
+                ),
+                maximum_altitude_ft=None,
+                speed_limit_knots=evidence.speed_limit_knots,
+                source=chart.source,
+            ))
 
 
 def _source_route_templates(

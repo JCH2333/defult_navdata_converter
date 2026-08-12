@@ -60,26 +60,29 @@
 
 ## 当前数据模型
 
-2026-08-11 的 Fenix 2608R1 只读加载结果：
+截至 2026-08-12，转换器只读加载 `424源数据\2608\2608` 的 CSV/PDF，并使用
+版本 `33` 的本地 PDF 证据缓存复核，得到：
 
-- 279 个中国机场
-- 641 条跑道
-- 456 套 ILS
-- 8861 个 Terminal
-- 69795 条 TerminalLeg
-- 17140 个规范化终端航点
-- 20032 个按 route type/transition 分组的程序段
-- 673 条中国等待航线
-- 424 来源中的 2158 个结构化航点与 4446 条航路段
+- 10,302 个按程序类型、跑道和过渡分组的终端程序段。
+- 1,297 条机场等待航线。
+- 0 条因等待固定点无法从 424 数据唯一定位而被拒绝的记录。
+- 424 结构化来源当前包含 2,158 个航点和 4,446 条航路段。
 
-Fenix `WaypointLookup` 可能为同一 waypoint ID 保存多条国家码记录。程序加载
-必须先按 ID 归一后再关联，否则 69795 条中国程序腿会被错误展开为 70642 条。
-对应回归测试为 `test_fenix_loader_uses_fenix_content_and_raw_route_model`。
+等待航线的唯一内容来源是终端数据库编码页中明确印刷的 `HM`、`HF` 或 `HA`
+行及其 `RWY...等待` 标题。解析器保留固定点、入航向、左右转、最低高度、速度
+限制、适用跑道和标题中的出航时间；只有当固定点可由机场终端坐标页、
+`DESIGNATED_POINT.csv`、`VOR.csv` 或 `NDB.csv` 唯一定位时，才生成
+`HoldingPattern`。不明确的固定点必须记入拒绝记录，不能猜测坐标，也不能从
+Fenix 或参考 BGL 回填。
 
-参考 `00_enroute.bgl` 含 135 条 VOR 和 143 条 NDB。Fenix
-`Navaids.ID=11396..11515` 是连续的 120 条中国 VOR 增量块，已全部按标识和
-坐标匹配参考 BGL；剩余 15 条 VOR 与 NDB 的精确来源规则仍在差分确认中，
-当前不得将参考 BGL 记录反向固化为转换输入。
+等待表与 SID/STAR/IAP 的程序编码表是不同的语义表面。解析器进入等待标题后会
+停止普通程序腿归属，直到观察到下一条程序标题；这避免把跑道编号误当作程序名称。
+对应回归测试为 `test_database_holding_titles_keep_time_and_do_not_become_procedure_legs`
+和 `test_airport_projection_emits_source_backed_holding_pattern`。
+
+PDF 缓存载荷带有提取器版本。修改可影响证据解释的规则时，必须递增
+`_EVIDENCE_CACHE_VERSION`，并以新缓存进行冷读与热读一致性复核；不得依据旧缓存
+中的统计或程序分类作出发布、部署或数据覆盖决定。
 
 ## 验证与发布
 
@@ -94,3 +97,12 @@ Fenix `WaypointLookup` 可能为同一 waypoint ID 保存多条国家码记录�
 7. 退出飞行和退出模拟器稳定性验证。
 
 实机验证完成前只允许测试版，不创建正式 Release。
+
+## 当前限制
+
+- 当前候选已经可以生成两个具有 BGL、`bglIndex.bout`、`layout.json`、
+  `manifest.json` 和 ContentInfo 的测试覆盖包，但与参考成品同名文件尚未逐字节
+  收敛。
+- 程序标题分类仍有少量复杂双栏版式和无分隔程序名需要继续以 424 PDF 原文处理。
+- 在 `byte_equal_reference=true` 且完成实机验证前，任何候选都不得覆盖
+  `F:\games\community\Community`，不得创建正式 Release。

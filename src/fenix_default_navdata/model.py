@@ -169,6 +169,7 @@ class ProcedureChart:
     standard_routes: tuple["ChartStandardProcedureRoute", ...] = ()
     table_standard_routes: tuple["ChartStandardProcedureRoute", ...] = ()
     has_missed_approach: bool = False
+    holding_evidence: tuple["ChartHoldingEvidence", ...] = ()
 
 
 @dataclass(frozen=True)
@@ -219,6 +220,21 @@ class ChartTerminalLeg:
     arc_radius_nm: float | None = None
     waypoint_description_code: str = ""
     speed_limit_descriptor: str | None = None
+
+
+@dataclass(frozen=True)
+class ChartHoldingEvidence:
+    """One explicitly coded holding pattern from a terminal database page."""
+
+    kind: str
+    runways: tuple[str, ...]
+    fix_ident: str
+    inbound_course: float | None
+    turn_direction: str
+    time_minutes: float | None
+    minimum_altitude_meters: float | None
+    speed_limit_knots: int | None
+    raw: str
 
 
 @dataclass(frozen=True)

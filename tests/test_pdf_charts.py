@@ -1,4 +1,8 @@
-from fenix_default_navdata.pdf_charts import extract_positioned_coordinate_page_points
+from fenix_default_navdata.pdf_charts import (
+    extract_positioned_coordinate_page_points,
+    extract_terminal_holding_evidence,
+    extract_terminal_leg_evidence,
+)
 
 
 def test_positioned_coordinate_pages_allow_baseline_drift_without_cross_column_pairing():
@@ -16,4 +20,66 @@ def test_positioned_coordinate_pages_allow_baseline_drift_without_cross_column_p
     ] == [
         ("HA364", 28.403917, 113.210361),
         ("BL723", 44.891556, 82.329917),
+    ]
+
+
+def test_database_holding_titles_keep_time_and_do_not_become_procedure_legs():
+    text = """
+    RWY01/18L/18R/19/36L/36R 离场等待（出航时间：1.5min）
+    HM IGMOR Y 109 L 6000 RNAV1
+    HM BOTPU Y 281 R 6000 RNAV1
+    RWY01/36L/36R 进场等待（出航时间：1min）
+    HM AA168 Y 099 R 4500 RNAV1
+    RWY01 进近过渡 AA141
+    IF AA141 1500 MAX210 RNAV1
+    """
+
+    holdings = extract_terminal_holding_evidence(text)
+
+    assert [
+        (
+            holding.fix_ident,
+            holding.runways,
+            holding.inbound_course,
+            holding.turn_direction,
+            holding.time_minutes,
+            holding.minimum_altitude_meters,
+        )
+        for holding in holdings
+    ] == [
+        ("IGMOR", ("01", "18L", "18R", "19", "36L", "36R"), 109, "L", 1.5, 6000),
+        ("BOTPU", ("01", "18L", "18R", "19", "36L", "36R"), 281, "R", 1.5, 6000),
+        ("AA168", ("01", "36L", "36R"), 99, "R", 1, 4500),
+    ]
+    assert [
+        (leg.procedure_label, leg.procedure_kind, leg.leg_type, leg.fix_ident)
+        for leg in extract_terminal_leg_evidence(text)
+    ] == [("R01", "进近过渡", "IF", "AA141")]
+
+
+def test_unnamed_runway_transition_does_not_become_numeric_procedure_label():
+    text = """
+    RWY33/34L/34R 跑道过渡
+    IF SZ161 RNP1
+    TF NLG 1500 MAX205 RNP1
+    RWY15/16L/16R/33/34L/34R 进场 SAREX3
+    IF SAREX RNP1
+    TF SZ405 RNP1
+    """
+
+    legs = extract_terminal_leg_evidence(text)
+
+    assert [(leg.procedure_label, leg.procedure_kind, leg.runway, leg.fix_ident) for leg in legs] == [
+        ("SAREX-3", "进场", "15", "SAREX"),
+        ("SAREX-3", "进场", "15", "SZ405"),
+        ("SAREX-3", "进场", "16L", "SAREX"),
+        ("SAREX-3", "进场", "16L", "SZ405"),
+        ("SAREX-3", "进场", "16R", "SAREX"),
+        ("SAREX-3", "进场", "16R", "SZ405"),
+        ("SAREX-3", "进场", "33", "SAREX"),
+        ("SAREX-3", "进场", "33", "SZ405"),
+        ("SAREX-3", "进场", "34L", "SAREX"),
+        ("SAREX-3", "进场", "34L", "SZ405"),
+        ("SAREX-3", "进场", "34R", "SAREX"),
+        ("SAREX-3", "进场", "34R", "SZ405"),
     ]

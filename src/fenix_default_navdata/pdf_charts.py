@@ -19,10 +19,10 @@ from typing import Callable
 import pymupdf
 from pypdf import PdfReader
 
-from .model import ChartFixCoordinate, ChartRouteFix, ChartStandardProcedureRoute, ChartTerminalLeg, Ils, ProcedureChart, SourceRef
+from .model import ChartFixCoordinate, ChartHoldingEvidence, ChartRouteFix, ChartStandardProcedureRoute, ChartTerminalLeg, Ils, ProcedureChart, SourceRef
 
 
-_EVIDENCE_CACHE_VERSION = 31
+_EVIDENCE_CACHE_VERSION = 33
 
 
 _PROCEDURE = re.compile(r"\b([A-Z0-9]{2,6}-\d{2}[AD])\b")
@@ -41,7 +41,7 @@ _CHART_COORDINATE = re.compile(
 _DATABASE_PROCEDURE = re.compile(
     r"\bRWY\s?(?P<runway>\d{2}[LRC]?)(?:\s*/\s*(?:RWY\s?)?\d{2}[LRC]?)*\s*"
     r"(?:(?P<kind>\u79bb\u573a|\u8fdb\u573a|\u7b49\u5f85)\s*|)[^\n]*?"
-    r"(?P<label_base>[A-Z0-9]{1,6}?)-?(?P<label_suffix>\d{1,2}[A-Z]{1,2})(?:\b|\()"
+    r"(?P<label_base>[A-Z][A-Z0-9]{0,5}?)-?(?P<label_suffix>\d{1,2}[A-Z]{0,2})(?:\b|\()"
 )
 _DATABASE_COMPOUND_PROCEDURE = re.compile(
     r"\bRWY\s?(?P<runway>\d{2}[LRC]?)\s*(?P<kind>\u79bb\u573a|\u8fdb\u573a)\s*"
@@ -51,6 +51,12 @@ _DATABASE_NUMERIC_PROCEDURE = re.compile(
     r"\bRWY\s?(?P<runway>\d{2}[LRC]?)(?:\s*/\s*(?:RWY\s?)?\d{2}[LRC]?)*\s*"
     r"(?:(?P<kind>\u79bb\u573a|\u8fdb\u573a|\u7b49\u5f85)\s*|)[^\n]*?"
     r"(?P<label_base>[A-Z][A-Z0-9]{0,5}?)(?P<label_suffix>\d{2})(?:\b|\()"
+)
+_DATABASE_HOLDING = re.compile(
+    r"\bRWY\s?(?P<runway>\d{2}[LRC]?)(?:\s*/\s*(?:RWY\s?)?\d{2}[LRC]?)*\s*"
+    r"(?:(?P<kind>\u79bb\u573a|\u8fdb\u573a|\u590d\u98de|\u8fdb\u8fd1)\s*)?\u7b49\u5f85"
+    r"(?:\s*[\uff08(]\s*\u51fa\u822a\u65f6\u95f4\s*[:\uff1a]\s*(?P<time>\d+(?:\.\d+)?)\s*min\s*[\uff09)])?",
+    re.IGNORECASE,
 )
 _DATABASE_APPROACH_PROCEDURE = re.compile(
     r"\bRWY\s?(?P<runway>\d{2}[LRC]?)\s*(?:(?:RNP\s+)?ILS\s*)?(?:AR\s+[WXYZ](?:\s+[WXYZ])?\s*)?"
@@ -582,6 +588,61 @@ def _database_leg_attributes(
     return course, altitude, turn_direction, speed
 
 
+def extract_terminal_holding_evidence(text: str) -> tuple[ChartHoldingEvidence, ...]:
+    """Return the explicit holding rows associated with a holding-table title.
+
+    These pages use an HM/HF/HA table for airport-level holding patterns rather
+    than SID/STAR procedure names.  Keeping this separate prevents a runway
+    number inside the title from becoming a fabricated procedure identifier.
+    """
+    result: list[ChartHoldingEvidence] = []
+    active_heading: re.Match[str] | None = None
+    lines = [raw_line.strip() for raw_line in text.splitlines()]
+    for line_number, line in enumerate(lines):
+        holding_heading = _DATABASE_HOLDING.search(line)
+        if holding_heading is not None:
+            active_heading = holding_heading
+            continue
+        if active_heading is None:
+            continue
+        legs = list(_DATABASE_LEG.finditer(line))
+        if legs and any(leg["leg_type"] not in {"HA", "HF", "HM"} for leg in legs):
+            active_heading = None
+            continue
+        if not legs:
+            continue
+        for index, leg in enumerate(legs):
+            leg_type = leg["leg_type"]
+            if leg_type not in {"HA", "HF", "HM"} or not leg["fix"]:
+                continue
+            end = legs[index + 1].start() if index + 1 < len(legs) else len(line)
+            fragment = line[leg.start():end].strip()
+            course, altitude, turn, speed = _database_leg_attributes(
+                lines,
+                line_number,
+                leg_type,
+                leg["fix"],
+                inline_text=fragment,
+                read_following_rows=len(legs) == 1,
+            )
+            result.append(ChartHoldingEvidence(
+                kind=active_heading["kind"],
+                runways=_database_heading_runways(active_heading.group(0)),
+                fix_ident=leg["fix"].upper(),
+                inbound_course=course,
+                turn_direction=turn or "R",
+                time_minutes=(
+                    float(active_heading["time"])
+                    if active_heading.groupdict().get("time")
+                    else None
+                ),
+                minimum_altitude_meters=altitude,
+                speed_limit_knots=speed,
+                raw=fragment,
+            ))
+    return tuple(result)
+
+
 def extract_terminal_leg_evidence(text: str) -> tuple[ChartTerminalLeg, ...]:
     """Extract ordered database-chart rows without inferring ARINC semantics.
 
@@ -595,6 +656,7 @@ def extract_terminal_leg_evidence(text: str) -> tuple[ChartTerminalLeg, ...]:
     active_kind = ""
     active_transition = ""
     split_combined_approach_missed = False
+    holding_active = False
     active_rows: list[tuple[str, str | None, str, float | None, float | None, str | None, int | None, str | None]] = []
     pending_rows: list[tuple[str, str | None, str, float | None, float | None, str | None, int | None, str | None]] = []
 
@@ -611,6 +673,18 @@ def extract_terminal_leg_evidence(text: str) -> tuple[ChartTerminalLeg, ...]:
 
     lines = [raw_line.strip() for raw_line in text.splitlines()]
     for line_number, line in enumerate(lines):
+        holding_heading = _DATABASE_HOLDING.search(line)
+        if holding_heading is not None:
+            flush()
+            active_label = ""
+            active_runways = ()
+            active_kind = ""
+            active_transition = ""
+            active_rows = []
+            pending_rows = []
+            split_combined_approach_missed = False
+            holding_active = True
+            continue
         compound_heading = _DATABASE_COMPOUND_PROCEDURE.search(line)
         heading = compound_heading or _DATABASE_PROCEDURE.search(line) or _DATABASE_NUMERIC_PROCEDURE.search(line)
         adjacent_transition_heading = _DATABASE_ADJACENT_APPROACH_TRANSITION.search(line) or _DATABASE_BARE_APPROACH_TRANSITION.search(line)
@@ -649,6 +723,9 @@ def extract_terminal_leg_evidence(text: str) -> tuple[ChartTerminalLeg, ...]:
                 active_rows = pending_rows
                 split_combined_approach_missed = False
             pending_rows = []
+            holding_active = False
+            continue
+        if holding_active:
             continue
         legs = list(_DATABASE_LEG.finditer(line))
         if not legs:
@@ -750,6 +827,7 @@ def _chart_to_payload(chart: ProcedureChart) -> dict[str, object]:
         "standard_routes": [route.__dict__ for route in chart.standard_routes],
         "table_standard_routes": [route.__dict__ for route in chart.table_standard_routes],
         "has_missed_approach": chart.has_missed_approach,
+        "holding_evidence": [holding.__dict__ for holding in chart.holding_evidence],
     }
 
 
@@ -777,6 +855,10 @@ def _chart_from_payload(payload: dict[str, object]) -> ProcedureChart:
             for item in payload.get("table_standard_routes", [])
         ),
         has_missed_approach=bool(payload.get("has_missed_approach", False)),
+        holding_evidence=tuple(
+            ChartHoldingEvidence(**item)
+            for item in payload.get("holding_evidence", [])
+        ),
     )
 
 
@@ -828,6 +910,7 @@ def _chart_from_text(pdf: Path, airport: str, chart_type: str, chart_name: str, 
         terminal_legs=extract_terminal_leg_evidence(text),
         fix_coordinates=extract_fix_coordinates(text) + coordinates,
         source=SourceRef(str(pdf), page_number, page_number, file_hash),
+        holding_evidence=extract_terminal_holding_evidence(text),
         has_missed_approach="复飞程序" in re.sub(r"\s+", "", text),
     )
 
