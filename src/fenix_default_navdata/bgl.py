@@ -39,6 +39,8 @@ class XmlProjection:
     waypoints: int
     navaids: int
     airway_routes: int
+    skipped_enroute_waypoints: int
+    skipped_airway_legs: int
     procedure_segments: int
     rejected_records: int
     rejected_procedures: int
@@ -1402,9 +1404,23 @@ def _waypoint_identity(
 def _append_enroute(
     root: ET.Element,
     model: NavModel,
-) -> tuple[int, int, int]:
-    points = list(model.waypoints)
-    for leg in model.airway_legs:
+) -> tuple[int, int, int, int, int]:
+    """Write only enroute records that meet the SDK's required region contract."""
+    points = [point for point in model.waypoints if point.country]
+    skipped_waypoints = len(model.waypoints) - len(points)
+    resolved_legs = [
+        leg for leg in model.airway_legs
+        if None not in {
+            leg.start_latitude,
+            leg.start_longitude,
+            leg.end_latitude,
+            leg.end_longitude,
+        }
+        and leg.start_country
+        and leg.end_country
+    ]
+    skipped_legs = len(model.airway_legs) - len(resolved_legs)
+    for leg in resolved_legs:
         if leg.start_latitude is not None and leg.start_longitude is not None:
             points.append(type("_Point", (), {
                 "ident": leg.start_ident,
@@ -1447,12 +1463,7 @@ def _append_enroute(
         tuple[str, str, str],
         list[tuple[str, str, str, dict[str, str]]],
     ] = {}
-    for leg in sorted(model.airway_legs, key=lambda item: (item.airway, item.sequence)):
-        if None in {
-            leg.start_latitude, leg.start_longitude,
-            leg.end_latitude, leg.end_longitude,
-        }:
-            continue
+    for leg in sorted(resolved_legs, key=lambda item: (item.airway, item.sequence)):
         start_key = _waypoint_identity(
             leg.start_ident,
             leg.start_country,
@@ -1555,7 +1566,13 @@ def _append_enroute(
                 ident=navaid.ident[:8],
                 name=name[:48],
             ))
-    return len(ordered_points), len(navaids), len({leg.airway for leg in model.airway_legs})
+    return (
+        len(ordered_points),
+        len(navaids),
+        len({leg.airway for leg in resolved_legs}),
+        skipped_waypoints,
+        skipped_legs,
+    )
 
 
 def write_bglcomp_xml(
@@ -1762,8 +1779,16 @@ def write_bglcomp_xml(
     enroute_waypoints = 0
     enroute_navaids = 0
     airway_routes = 0
+    skipped_enroute_waypoints = 0
+    skipped_airway_legs = 0
     if scope in {"all", "enroute"}:
-        enroute_waypoints, enroute_navaids, airway_routes = _append_enroute(root, model)
+        (
+            enroute_waypoints,
+            enroute_navaids,
+            airway_routes,
+            skipped_enroute_waypoints,
+            skipped_airway_legs,
+        ) = _append_enroute(root, model)
 
     ET.indent(root, space="  ")
     ET.ElementTree(root).write(output, encoding="utf-8", xml_declaration=True)
@@ -1785,6 +1810,8 @@ def write_bglcomp_xml(
         ),
         navaids=enroute_navaids,
         airway_routes=airway_routes,
+        skipped_enroute_waypoints=skipped_enroute_waypoints,
+        skipped_airway_legs=skipped_airway_legs,
         procedure_segments=projected_procedures,
         rejected_records=len(model.rejected_records),
         rejected_procedures=len(model.rejected_procedures),
