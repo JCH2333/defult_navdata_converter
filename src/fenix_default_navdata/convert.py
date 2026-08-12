@@ -17,6 +17,7 @@ def convert(
     cycle: Cycle,
     reference: Path | None = None,
     compiler: Path | None = None,
+    pdf_cache: Path | None = None,
 ) -> dict[str, object]:
     validate_cycle(cycle)
     result = build_candidate(
@@ -27,6 +28,7 @@ def convert(
         cycle=cycle,
         compiler=find_compiler(compiler),
         reference=reference.resolve() if reference else None,
+        pdf_cache=pdf_cache,
     )
     (output / "conversion-report.json").write_text(
         json.dumps(result, ensure_ascii=False, indent=2, default=str) + "\n", encoding="utf-8",

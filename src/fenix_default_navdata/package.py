@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 from pathlib import Path
 
@@ -167,6 +168,7 @@ def build_candidate(
     cycle: Cycle,
     compiler: CompilerInfo,
     reference: Path | None = None,
+    pdf_cache: Path | None = None,
 ) -> dict[str, object]:
     """复制全球官方基线并用 424 原始数据生成中国覆盖层候选。
 
@@ -179,9 +181,13 @@ def build_candidate(
     _copy_tree(nav_jepp, output / JEPP_PACKAGE)
     work = output / "_work"
     work.mkdir(exist_ok=True)
+    if pdf_cache is None:
+        cache_root = Path(os.environ.get("LOCALAPPDATA", str(output.parent)))
+        pdf_cache = cache_root / "default_navdata_converter" / f"pdf-evidence-cache-{cycle.number}r{cycle.revision}"
+    pdf_cache = pdf_cache.resolve()
     model = load_naip(
         raw_root,
-        pdf_cache=work / "pdf-evidence-cache",
+        pdf_cache=pdf_cache,
         include_terminal_documents=True,
     )
     report: dict[str, object] = {
@@ -192,6 +198,7 @@ def build_candidate(
         "revision": cycle.revision,
         "compiler": {"path": str(compiler.path) if compiler.path else None, "kind": compiler.kind, "reason": compiler.reason},
         "source": {"raw_424": str(raw_root)},
+        "pdf_cache": str(pdf_cache),
         "official_baseline": {"base": str(nav_base), "jepp": str(nav_jepp)},
         "reference": str(reference) if reference else None,
         "model": {

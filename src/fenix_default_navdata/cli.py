@@ -36,6 +36,7 @@ def build_parser() -> argparse.ArgumentParser:
     build.add_argument("--reference", help="Default navdata 2608R1 参考目录")
     build.add_argument("--output", required=True, help="新的候选目录")
     build.add_argument("--bglcomp", help="合法 BglComp.exe 路径")
+    build.add_argument("--pdf-cache", help="可复用的 PDF 解析缓存目录")
     validate = sub.add_parser("validate", help="验证候选")
     validate.add_argument("--candidate", required=True)
     validate.add_argument("--reference")
@@ -66,6 +67,7 @@ def main(argv: list[str] | None = None) -> int:
             cycle=DEFAULT_CYCLE,
             reference=reference,
             compiler=_path(args.bglcomp),
+            pdf_cache=_path(args.pdf_cache),
         )
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0

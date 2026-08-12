@@ -12,6 +12,7 @@
 - 生成符合 SDK `bglcomp.xsd` 的确定性设施 XML。
 - 自动探测 MSFS 2024 SDK `fspackagetool.exe`。
 - 通过纯 ASCII 暂存项目调用 Package Tool，生成 BGL、`bglIndex.bout`、包元数据与 ContentInfo。
+- 将 PDF 解析证据缓存到本机可复用目录，长时间转换中断后可以断点续跑。
 - 比较参考成品目录的逐文件大小和 SHA-256。
 - 提供命令行、Tk GUI、备份、恢复、测试版部署保护和 GitHub 预发布更新检查。
 
@@ -49,6 +50,7 @@ python -m fenix_default_navdata.cli build `
 ```
 
 `detect` 与 GUI 会自动查找当前工作区的 424 2608 原始目录和官方双基线。
+需要手动指定可复用缓存时，使用 `--pdf-cache`。
 
 ## 安全边界
 
