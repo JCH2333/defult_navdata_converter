@@ -117,6 +117,23 @@ def _feet(value: str) -> int:
     return round(_float(value) * 3.28084)
 
 
+def _navaid_elevation_feet(value: str, unit: str) -> int:
+    """Convert a populated 424 navaid elevation to the model's feet unit.
+
+    The 2608 VOR table declares metric vertical distance with ``M``.  Three
+    populated rows omit that otherwise uniform unit, including CKA, whose
+    source/target comparison confirms the same meter-to-feet conversion.
+    Missing elevations remain zero; an unexpected explicit unit is rejected
+    instead of silently changing its physical meaning.
+    """
+    if not (value or "").strip():
+        return 0
+    normalized_unit = (unit or "").strip().upper()
+    if normalized_unit not in {"", "M"}:
+        raise ValueError(f"unsupported navaid vertical unit: {unit!r}")
+    return _feet(value)
+
+
 def _airport_altitude_feet(value: str) -> int:
     """Project airport transition heights to Fenix's 100-foot resolution."""
     return int(round(_float(value) * 3.28084, -2))
@@ -152,7 +169,7 @@ def runway_threshold(
 
 
 def romanize_name(value: str) -> str:
-    """Match Fenix's uppercase, separator-free Chinese place-name spelling."""
+    """Map a Chinese source name to the observed uppercase pinyin spelling."""
     return "".join(lazy_pinyin(value or "")).upper()
 
 
@@ -305,7 +322,9 @@ def load_naip(
                 model.navaids.append(Navaid(row["SIGNIFICANT_POINT_ID"], row.get("CODE_ID") or "", kind,
                     row.get("TXT_NAME") or "", parse_dms(row.get("GEO_LAT_ACCURACY") or ""),
                     parse_dms(row.get("GEO_LONG_ACCURACY") or ""), _float(row.get("VAL_FREQ") or "0") / divisor,
-                    _float(row.get("VAL_MAG_VAR") or "0"), _number(row.get("VAL_ELEV") or "0"),
+                    _float(row.get("VAL_MAG_VAR") or "0"), _navaid_elevation_feet(
+                        row.get("VAL_ELEV") or "0", row.get("UOM_DIST_VER") or "",
+                    ),
                     navaid_country(row.get("SERVICED_AIRPORT") or "", row.get("CODE_FIR") or ""), SourceRef(filename, row_number)))
             except ValueError:
                 model.rejected_records.append(RejectedRecord(

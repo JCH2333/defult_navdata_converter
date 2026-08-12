@@ -82,3 +82,24 @@ def test_load_naip_retains_each_runways_own_airport_key(tmp_path: Path) -> None:
         ("21", "airport"),
         ("09", "airport-two"),
     ]
+
+
+def test_load_naip_converts_vor_elevation_meters_and_keeps_raw_navaid_name(tmp_path: Path) -> None:
+    root = _minimal_naip_root(tmp_path, "沥青")
+    _write_csv(root, "VOR.csv", "\n".join((
+        "SIGNIFICANT_POINT_ID,CODE_ID,TXT_NAME,GEO_LAT_ACCURACY,GEO_LONG_ACCURACY,VAL_FREQ,VAL_MAG_VAR,VAL_ELEV,UOM_DIST_VER,SERVICED_AIRPORT,CODE_FIR",
+        "kns,KNS,喀纳斯,N481315,E0870030,111.2,-5.2,1200,M,ZWKN,乌鲁木齐情报区",
+        "cka,CKA,茶卡,N364653,E0990656,115.9,-7.0,3146,,,兰州情报区",
+    )))
+    _write_csv(root, "NDB.csv", "\n".join((
+        "SIGNIFICANT_POINT_ID,CODE_ID,TXT_NAME,GEO_LAT_ACCURACY,GEO_LONG_ACCURACY,VAL_FREQ,VAL_MAG_VAR,VAL_ELEV,UOM_DIST_VER,SERVICED_AIRPORT,CODE_FIR",
+        "dm,DM,泽当,N291522,E0914551,435,-0.5,,,,昆明情报区",
+    )))
+
+    model = load_naip(root, include_terminal_documents=False)
+
+    assert [(item.kind, item.ident, item.name, item.elevation_ft) for item in model.navaids] == [
+        ("VOR", "KNS", "喀纳斯", 3937),
+        ("VOR", "CKA", "茶卡", 10322),
+        ("NDB", "DM", "泽当", 0),
+    ]

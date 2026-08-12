@@ -17,6 +17,7 @@ from pathlib import Path
 from .model import NavModel, Runway, is_china_icao
 from .pdf_charts import approach_procedure_name_candidates
 from .profile import Cycle
+from .source import romanize_name
 
 
 class CompilerUnavailable(RuntimeError):
@@ -73,9 +74,31 @@ _PROCEDURE_KIND_MAP = {
 }
 _IAP_KINDS = {"approach_transition", "approach", "missed"}
 
+# The default MSFS 2608R1 BGL uses these established aviation spellings rather
+# than pypinyin's character-by-character readings.  Keep them in this target
+# adapter: the normalized source model intentionally retains the raw 424 name.
+_DEFAULT_NAVAID_NAME_OVERRIDES = {
+    "霍林郭勒": "HUOLINGUOLE",
+    "库尔勒": "KUERLE",
+    "阿拉尔": "ALAE",
+    "克拉玛依": "KALAMAYI",
+    "吐鲁番": "TURPAN",
+    "长武": "CHANGWU",
+    "长治": "CHANGZHI",
+    "昌都": "CHANGDU",
+}
+
 
 def _procedure_kind(kind: str) -> str:
     return _PROCEDURE_KIND_MAP.get((kind or "").strip(), "")
+
+
+def _default_navaid_name(value: str) -> str:
+    """Project a raw 424 navaid name to the default MSFS display spelling."""
+    name = (value or "").strip()
+    if name.isascii():
+        return name
+    return _DEFAULT_NAVAID_NAME_OVERRIDES.get(name, romanize_name(name))
 
 
 def _iap_section_kind(segment) -> str:
@@ -1497,6 +1520,7 @@ def _append_enroute(
                 ET.SubElement(route, direction, attrs)
     navaids = sorted(model.navaids, key=lambda item: (item.kind, item.ident, item.key))
     for navaid in navaids:
+        name = _default_navaid_name(navaid.name)
         if navaid.kind == "VOR":
             vor = ET.SubElement(root, "Vor", _attrs(
                 lat=_float(navaid.latitude),
@@ -1508,7 +1532,7 @@ def _append_enroute(
                 range=_nautical_miles(125),
                 region=navaid.country[:2],
                 ident=navaid.ident[:8],
-                name=navaid.name[:48],
+                name=name[:48],
                 nav="TRUE",
                 dme="TRUE",
             ))
@@ -1529,7 +1553,7 @@ def _append_enroute(
                 magvar=_float(navaid.magnetic_variation, 3),
                 region=navaid.country[:2],
                 ident=navaid.ident[:8],
-                name=navaid.name[:48],
+                name=name[:48],
             ))
     return len(ordered_points), len(navaids), len({leg.airway for leg in model.airway_legs})
 

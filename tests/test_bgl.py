@@ -16,6 +16,7 @@ from fenix_default_navdata.model import (
     Holding,
     Ils,
     NavModel,
+    Navaid,
     ProcedureChart,
     ProcedureSegment,
     Runway,
@@ -57,6 +58,57 @@ def test_bgl_xml_is_deterministic(tmp_path: Path):
         "waypointIdent": "END",
         "waypointType": "NAMED",
         "altitudeMinimum": "0F",
+    }
+
+
+def test_enroute_projection_romanizes_chinese_navaid_names(tmp_path: Path):
+    model = NavModel(Path("source"))
+    source = SourceRef("VOR.csv", 2)
+    model.navaids.extend((
+        Navaid("vor", "KNS", "VOR", "喀纳斯", 48.220000, 87.008333, 111.2, -5.2, 3937, "ZW", source),
+        Navaid("ndb", "DM", "NDB", "泽当", 29.256111, 91.764167, 435.0, -0.5, 0, "ZU", source),
+    ))
+
+    output = tmp_path / "navaids.xml"
+    write_bglcomp_xml(model, DEFAULT_CYCLE, output, scope="enroute")
+
+    root = ET.parse(output).getroot()
+    assert root.find("Vor").attrib["name"] == "KANASI"
+    assert root.find("Vor").attrib["alt"] == "3937F"
+    assert root.find("Ndb").attrib["name"] == "ZEDANG"
+
+
+def test_enroute_projection_uses_verified_default_navaid_name_exceptions(tmp_path: Path):
+    model = NavModel(Path("source"))
+    source = SourceRef("VOR.csv", 2)
+    model.navaids.extend((
+        Navaid("dgl", "DGL", "VOR", "霍林郭勒", 45.469444, 119.503333, 112.4, -9.8, 3116, "ZB", source),
+        Navaid("kel", "KEL", "VOR", "库尔勒", 41.700000, 86.133333, 115.9, -2.0, 3035, "ZW", source),
+        Navaid("lua", "LUA", "VOR", "阿拉尔", 40.506667, 81.227500, 117.4, -2.0, 3369, "ZW", source),
+        Navaid("klm", "KLM", "VOR", "克拉玛依", 45.000000, 84.000000, 113.3, -4.0, 938, "ZW", source),
+        Navaid("ptg", "PTG", "VOR", "吐鲁番", 42.950000, 89.000000, 116.0, -3.0, 899, "ZW", source),
+        Navaid("ho", "HO", "NDB", "长武", 35.000000, 107.000000, 300.0, 0.0, 0, "ZL", source),
+        Navaid("sq", "SQ", "NDB", "长治", 36.000000, 113.000000, 300.0, 0.0, 0, "ZH", source),
+        Navaid("rg", "RG", "NDB", "昌都", 31.000000, 97.000000, 300.0, 0.0, 0, "ZP", source),
+    ))
+
+    output = tmp_path / "navaid-name-exceptions.xml"
+    write_bglcomp_xml(model, DEFAULT_CYCLE, output, scope="enroute")
+
+    root = ET.parse(output).getroot()
+    names = {
+        item.attrib["ident"]: item.attrib["name"]
+        for item in (*root.findall("Vor"), *root.findall("Ndb"))
+    }
+    assert names == {
+        "DGL": "HUOLINGUOLE",
+        "KEL": "KUERLE",
+        "LUA": "ALAE",
+        "KLM": "KALAMAYI",
+        "PTG": "TURPAN",
+        "HO": "CHANGWU",
+        "SQ": "CHANGZHI",
+        "RG": "CHANGDU",
     }
 
 
