@@ -28,7 +28,7 @@ def _version(value: str) -> tuple[int, int, int]:
 
 
 def check_prerelease() -> Release | None:
-    request = Request(API_URL, headers={"Accept": "application/vnd.github+json", "User-Agent": "fenix_to_default_navdata"})
+    request = Request(API_URL, headers={"Accept": "application/vnd.github+json", "User-Agent": "default_navdata_converter"})
     try:
         with urlopen(request, timeout=8) as response:
             releases = json.loads(response.read(2 * 1024 * 1024))
@@ -43,7 +43,7 @@ def check_prerelease() -> Release | None:
                 continue
         except (ValueError, TypeError):
             continue
-        asset_name = f"fenix-to-default-navdata-v{version}.zip"
+        asset_name = f"default-navdata-converter-v{version}.zip"
         asset = next((item for item in release.get("assets", []) if item.get("name") == asset_name), None)
         digest = str((asset or {}).get("digest", ""))
         if asset and digest.startswith("sha256:"):

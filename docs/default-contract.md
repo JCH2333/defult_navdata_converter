@@ -2,8 +2,8 @@
 
 ## 输入职责
 
-- 主内容来源：`424源数据\2608\Navdata（fnx2608N）\Navdata\nd.db3`，负责机场、跑道、ILS、终端航点、SID、STAR、IAP 与主要导航设施。
-- 航路补充：`424源数据\2608\2608` 中的结构化 CSV，重点使用匹配的 `RTE_SEG.csv` 与航路端点。
+- 主内容来源：`424源数据\2608\2608` 中的结构化 CSV/PDF，负责机场、跑道、ILS、终端航点、SID、STAR、IAP、航路与等待航线。
+- Fenix `nd.db3` 不参与默认通用数据转换；Fenix 适配器代码仅保留为历史回归材料。
 - 目标基线：Community 中的 `navigraph-nav-base` 与 `navigraph-nav-jepp`。
 - 只读参考：`424源数据\2608\Default navdata 2608R1`。
 

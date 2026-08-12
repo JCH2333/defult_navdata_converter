@@ -27,11 +27,10 @@ WARNING = "#f6c56f"
 class App:
     def __init__(self) -> None:
         self.root = tk.Tk()
-        self.root.title(f"Fenix → 默认通用导航数据 · {__version__} 测试版")
+        self.root.title(f"424 → 默认通用导航数据 · {__version__} 测试版")
         self.root.geometry("1120x760")
         self.root.minsize(900, 620)
         self.root.configure(bg=BG)
-        self.fenix = tk.StringVar()
         self.raw = tk.StringVar()
         self.base = tk.StringVar()
         self.jepp = tk.StringVar()
@@ -50,7 +49,7 @@ class App:
     def _build(self) -> None:
         header = tk.Frame(self.root, bg=BG, padx=26, pady=20)
         header.pack(fill=tk.X)
-        tk.Label(header, text="FENIX  →  DEFAULT NAVDATA", bg=BG, fg=TEXT, font=("Segoe UI", 20, "bold")).pack(anchor=tk.W)
+        tk.Label(header, text="424  →  DEFAULT NAVDATA", bg=BG, fg=TEXT, font=("Segoe UI", 20, "bold")).pack(anchor=tk.W)
         tk.Label(header, text="2608 来源解析 · 官方全球基线 · 中国覆盖层 · 可恢复部署", bg=BG, fg=MUTED, font=("Microsoft YaHei UI", 10)).pack(anchor=tk.W, pady=(4, 0))
         banner = tk.Frame(self.root, bg="#2c2416", highlightthickness=1, highlightbackground="#67512a", padx=14, pady=9)
         banner.pack(fill=tk.X, padx=26)
@@ -58,7 +57,6 @@ class App:
         paths = tk.Frame(self.root, bg=PANEL, highlightthickness=1, highlightbackground="#263544", padx=16, pady=14)
         paths.pack(fill=tk.X, padx=26, pady=14)
         rows = [
-            ("Fenix 2608 nd.db3", self.fenix, "file"),
             ("2608 原始目录", self.raw, "dir"),
             ("官方 nav-base", self.base, "dir"),
             ("官方 nav-jepp", self.jepp, "dir"),
@@ -110,7 +108,6 @@ class App:
     def _detect(self) -> None:
         detected = detect_paths()
         for variable, value in (
-            (self.fenix, detected.fenix_db),
             (self.raw, detected.raw_root),
             (self.base, detected.nav_base),
             (self.jepp, detected.nav_jepp),
@@ -132,8 +129,6 @@ class App:
             label for variable, label in directories
             if not Path(variable.get()).is_dir()
         ]
-        if not Path(self.fenix.get()).is_file():
-            missing.insert(0, "Fenix nd.db3")
         if missing:
             messagebox.showerror("输入不完整", "缺少：" + "、".join(missing))
             return False
@@ -156,7 +151,6 @@ class App:
         output = Path(self.output.get())
         self.status.set("正在解析来源并生成候选")
         self._run(lambda: convert(
-            Path(self.fenix.get()),
             Path(self.raw.get()),
             Path(self.base.get()),
             Path(self.jepp.get()),

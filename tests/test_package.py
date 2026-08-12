@@ -15,11 +15,10 @@ def test_missing_compiler_blocks_both_overlay_packages(tmp_path: Path, monkeypat
     base.mkdir()
     jepp.mkdir()
     monkeypatch.setattr(
-        "fenix_default_navdata.fenix_source.load_fenix_model",
-        lambda fenix, root, cycle: NavModel(root),
+        "fenix_default_navdata.package.load_naip",
+        lambda root, **kwargs: NavModel(root),
     )
     report = build_candidate(
-        fenix_db=tmp_path / "nd.db3",
         raw_root=raw,
         nav_base=base,
         nav_jepp=jepp,
@@ -42,8 +41,8 @@ def test_overlay_packages_compile_independently(tmp_path: Path, monkeypatch):
     base.mkdir()
     jepp.mkdir()
     monkeypatch.setattr(
-        "fenix_default_navdata.fenix_source.load_fenix_model",
-        lambda fenix, root, cycle: NavModel(root),
+        "fenix_default_navdata.package.load_naip",
+        lambda root, **kwargs: NavModel(root),
     )
 
     calls = []
@@ -60,7 +59,6 @@ def test_overlay_packages_compile_independently(tmp_path: Path, monkeypatch):
     )
 
     report = build_candidate(
-        fenix_db=tmp_path / "nd.db3",
         raw_root=raw,
         nav_base=base,
         nav_jepp=jepp,

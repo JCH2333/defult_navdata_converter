@@ -1268,7 +1268,7 @@ def write_bglcomp_xml(
     ET.register_namespace("xsi", "http://www.w3.org/2001/XMLSchema-instance")
     root = ET.Element("FSData", {
         "version": "9.0",
-        "source": "fenix_to_default_navdata",
+        "source": "default_navdata_converter",
     })
     ET.SubElement(root, "AiracCycle", {
         "cycleBegin": cycle.begin,

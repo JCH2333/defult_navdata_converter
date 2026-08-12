@@ -1,13 +1,13 @@
 # Default NavData Converter
 
-把中国 424/Fenix 导航数据投影为 Microsoft Flight Simulator 2024 默认通用导航数据覆盖包。
+把 424/2608 原始导航数据投影为 Microsoft Flight Simulator 2024 默认通用导航数据覆盖包。
 
 > 当前为测试版。转换结果尚未完成参考成品字节级收敛与实机验证，不发布正式 Release。
 
 ## 当前能力
 
-- 只读解析 Fenix 2608 `nd.db3`，以机场、跑道、ILS、终端程序和主要导航内容建立统一中间模型。
-- 解析匹配的 424 CSV，将 `RTE_SEG.csv` 航路与端点作为结构化补充。
+- 只读解析 424 2608 原始 CSV/PDF，以机场、跑道、ILS、终端程序和主要导航内容建立统一中间模型。
+- 使用 `RTE_SEG.csv` 航路、端点和终端文档作为内容来源。
 - 只读复制官方 `navigraph-nav-base` 与 `navigraph-nav-jepp` 全球基线。
 - 生成符合 SDK `bglcomp.xsd` 的确定性设施 XML。
 - 自动探测 MSFS 2024 SDK `fspackagetool.exe`。
@@ -43,17 +43,17 @@ python -m fenix_default_navdata.gui
 
 ```powershell
 python -m fenix_default_navdata.cli build `
-  --fenix "F:\...\Navdata\nd.db3" `
+  --raw "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
   --bglcomp "C:\MSFS 2024 SDK\Tools\bin\fspackagetool.exe" `
   --output output/candidate-2608-default
 ```
 
-`detect` 与 GUI 会自动查找当前工作区的 Fenix 2608 `nd.db3`。构建时会校验
-`CycleName=2608n1`，不匹配时拒绝继续。
+`detect` 与 GUI 会自动查找当前工作区的 424 2608 原始目录和官方双基线。
 
 ## 安全边界
 
 - 原始 CSV/PDF、官方 Community 包、参考 BGL、备份、日志和生成包均不进入仓库。
+- Fenix `nd.db3` 不参与本工具转换；Fenix 相关代码仅保留为历史适配器回归材料。
 - 参考成品只用于只读差分，绝不复制参考 BGL 冒充转换结果。
 - Package Tool 构建和 Community 覆盖前都要求 `FlightSimulator2024.exe` 已完全退出。
 - 覆盖前自动备份四个相关包；不完整候选始终拒绝部署。

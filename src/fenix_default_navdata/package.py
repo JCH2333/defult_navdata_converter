@@ -15,6 +15,7 @@ from .bgl import (
 )
 from .model import NavModel
 from .profile import Cycle
+from .source import load_naip
 
 
 BASE_PACKAGE = "navigraph-nav-base"
@@ -159,7 +160,6 @@ def _compile_xml_package(
 
 def build_candidate(
     *,
-    fenix_db: Path,
     raw_root: Path,
     nav_base: Path,
     nav_jepp: Path,
@@ -168,7 +168,7 @@ def build_candidate(
     compiler: CompilerInfo,
     reference: Path | None = None,
 ) -> dict[str, object]:
-    """复制全球官方基线并生成中国覆盖层候选。
+    """复制全球官方基线并用 424 原始数据生成中国覆盖层候选。
 
     失败时仍保留完整来源报告和 XML 投影，绝不会把参考成品偷偷复制为输出。
     """
@@ -177,9 +177,13 @@ def build_candidate(
     output.mkdir(parents=True)
     _copy_tree(nav_base, output / BASE_PACKAGE)
     _copy_tree(nav_jepp, output / JEPP_PACKAGE)
-    from .fenix_source import load_fenix_model
-
-    model = load_fenix_model(fenix_db, raw_root, cycle)
+    work = output / "_work"
+    work.mkdir(exist_ok=True)
+    model = load_naip(
+        raw_root,
+        pdf_cache=work / "pdf-evidence-cache",
+        include_terminal_documents=True,
+    )
     report: dict[str, object] = {
         "status": "candidate",
         "deployable": False,
@@ -187,7 +191,7 @@ def build_candidate(
         "airac": cycle.number,
         "revision": cycle.revision,
         "compiler": {"path": str(compiler.path) if compiler.path else None, "kind": compiler.kind, "reason": compiler.reason},
-        "source": {"fenix": str(fenix_db), "raw_424": str(raw_root)},
+        "source": {"raw_424": str(raw_root)},
         "official_baseline": {"base": str(nav_base), "jepp": str(nav_jepp)},
         "reference": str(reference) if reference else None,
         "model": {
@@ -210,8 +214,6 @@ def build_candidate(
             "默认 BGL 的字节级一致还需要相同版本的设施编译器、记录排序、索引和打包时间戳。",
         ],
     }
-    work = output / "_work"
-    work.mkdir(exist_ok=True)
     projection = write_bglcomp_xml(model, cycle, work / "china-navdata.xml")
     report["projection"] = {**projection.__dict__, "path": str(projection.path)}
     if compiler.path is None:

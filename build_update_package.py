@@ -23,7 +23,7 @@ def main() -> None:
     if match is None:
         raise RuntimeError("无法读取版本号")
     version = match.group(1)
-    archive_path = OUT / f"fenix-to-default-navdata-v{version}.zip"
+    archive_path = OUT / f"default-navdata-converter-v{version}.zip"
     entries = {}
     with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
         sources = sorted((ROOT / "src").rglob("*.py"))
