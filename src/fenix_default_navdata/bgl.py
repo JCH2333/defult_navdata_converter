@@ -11,10 +11,11 @@ import subprocess
 import tempfile
 import time
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .model import NavModel, Runway, is_china_icao
+from .pdf_charts import approach_procedure_name_candidates
 from .profile import Cycle
 
 
@@ -56,6 +57,32 @@ class _PhysicalRunway:
     length_ft: int
     width_ft: int
     surface: str
+
+
+_PROCEDURE_KIND_MAP = {
+    "离场": "departure",
+    "departure": "departure",
+    "进场": "arrival",
+    "arrival": "arrival",
+    "进近过渡": "approach_transition",
+    "approach_transition": "approach_transition",
+    "进近": "approach",
+    "approach": "approach",
+    "复飞": "missed",
+    "missed": "missed",
+}
+_IAP_KINDS = {"approach_transition", "approach", "missed"}
+
+
+def _procedure_kind(kind: str) -> str:
+    return _PROCEDURE_KIND_MAP.get((kind or "").strip(), "")
+
+
+def _iap_section_kind(segment) -> str:
+    kind = _procedure_kind(segment.kind)
+    if kind == "approach" and segment.transition:
+        return "approach_transition"
+    return kind
 
 
 def _simulator_pids() -> set[int]:
@@ -711,6 +738,181 @@ def _leg_center_ident(
     )
 
 
+def _terminal_point_for_leg(
+    points_by_ident: dict[tuple[str, str], list],
+    airport: str,
+    ident: str | None,
+    region: str,
+    latitude: float | None,
+    longitude: float | None,
+):
+    if not ident:
+        return None
+    candidates = points_by_ident.get((airport.upper(), ident.upper()), [])
+    if region:
+        regional = [
+            point for point in candidates
+            if (point.country or airport[:2]).upper()[:2] == region.upper()[:2]
+        ]
+        if regional:
+            candidates = regional
+    if latitude is not None and longitude is not None:
+        exact = [
+            point for point in candidates
+            if abs(point.latitude - latitude) < 1e-5
+            and abs(point.longitude - longitude) < 1e-5
+        ]
+        if exact:
+            return exact[0]
+    return candidates[0] if len(candidates) == 1 else None
+
+
+def _global_point_for_leg(
+    points_by_ident: dict[str, list],
+    airport: str,
+    ident: str | None,
+    latitude: float | None,
+    longitude: float | None,
+):
+    if not ident:
+        return None
+    candidates = points_by_ident.get(ident.upper(), [])
+    if latitude is not None and longitude is not None:
+        exact = [
+            point for point in candidates
+            if abs(point.latitude - latitude) < 1e-5
+            and abs(point.longitude - longitude) < 1e-5
+        ]
+        if exact:
+            return exact[0]
+    if len(candidates) == 1:
+        return candidates[0]
+    return None
+
+
+def _global_navaid_for_leg(
+    navaids_by_ident: dict[str, list],
+    ident: str | None,
+    latitude: float | None,
+    longitude: float | None,
+):
+    if not ident:
+        return None
+    candidates = navaids_by_ident.get(ident.upper(), [])
+    if latitude is not None and longitude is not None:
+        exact = [
+            navaid for navaid in candidates
+            if abs(navaid.latitude - latitude) < 1e-5
+            and abs(navaid.longitude - longitude) < 1e-5
+        ]
+        if exact:
+            return exact[0]
+    if len(candidates) == 1:
+        return candidates[0]
+    return None
+
+
+def _resolve_source_fix(
+    terminal_points_by_ident: dict[tuple[str, str], list],
+    global_points_by_ident: dict[str, list],
+    navaids_by_ident: dict[str, list],
+    airport: str,
+    ident: str | None,
+    region: str,
+    latitude: float | None,
+    longitude: float | None,
+):
+    terminal = _terminal_point_for_leg(
+        terminal_points_by_ident, airport, ident, region, latitude, longitude,
+    )
+    if terminal is not None:
+        return "TERMINAL_WAYPOINT", terminal
+    waypoint = _global_point_for_leg(
+        global_points_by_ident, airport, ident, latitude, longitude,
+    )
+    if waypoint is not None:
+        return "WAYPOINT", waypoint
+    navaid = _global_navaid_for_leg(
+        navaids_by_ident, ident, latitude, longitude,
+    )
+    if navaid is not None:
+        return navaid.kind, navaid
+    return "", None
+
+
+def _resolve_terminal_procedure_legs(model: NavModel) -> None:
+    """Attach coordinate-page terminal identity to parsed PDF legs."""
+    terminal_points_by_ident: dict[tuple[str, str], list] = {}
+    for point in model.terminal_waypoints:
+        terminal_points_by_ident.setdefault(
+            (point.airport.upper(), point.ident.upper()), [],
+        ).append(point)
+    global_points_by_ident: dict[str, list] = {}
+    for point in model.waypoints:
+        global_points_by_ident.setdefault(point.ident.upper(), []).append(point)
+    navaids_by_ident: dict[str, list] = {}
+    for navaid in model.navaids:
+        navaids_by_ident.setdefault(navaid.ident.upper(), []).append(navaid)
+
+    resolved_segments = []
+    for segment in model.procedure_segments:
+        resolved_legs = []
+        for leg in segment.legs:
+            fix_type, fix_source = _resolve_source_fix(
+                terminal_points_by_ident,
+                global_points_by_ident,
+                navaids_by_ident,
+                segment.airport,
+                leg.fix_ident,
+                leg.fix_region,
+                leg.fix_latitude,
+                leg.fix_longitude,
+            )
+            center_type, center_source = _resolve_source_fix(
+                terminal_points_by_ident,
+                global_points_by_ident,
+                navaids_by_ident,
+                segment.airport,
+                leg.center_ident,
+                leg.center_region,
+                leg.center_latitude,
+                leg.center_longitude,
+            )
+            resolved_legs.append(replace(
+                leg,
+                fix_type=leg.fix_type or (
+                    fix_type if fix_source else ""
+                ),
+                fix_region=leg.fix_region or (
+                    fix_source.country or segment.airport[:2]
+                    if fix_source else ""
+                ),
+                fix_latitude=(
+                    leg.fix_latitude if leg.fix_latitude is not None
+                    else fix_source.latitude if fix_source else None
+                ),
+                fix_longitude=(
+                    leg.fix_longitude if leg.fix_longitude is not None
+                    else fix_source.longitude if fix_source else None
+                ),
+                center_ident=leg.center_ident,
+                center_region=leg.center_region or (
+                    center_source.country or segment.airport[:2]
+                    if center_source else ""
+                ),
+                center_latitude=(
+                    leg.center_latitude if leg.center_latitude is not None
+                    else center_source.latitude if center_source else None
+                ),
+                center_longitude=(
+                    leg.center_longitude if leg.center_longitude is not None
+                    else center_source.longitude if center_source else None
+                ),
+            ))
+        resolved_segments.append(replace(segment, legs=tuple(resolved_legs)))
+    model.procedure_segments[:] = resolved_segments
+
+
 def _leg_attrs(legs, index: int, airport: str, identities) -> dict[str, str]:
     leg = legs[index]
     leg_type = leg.leg_type
@@ -935,21 +1137,97 @@ def _approach_type(label: str) -> str:
     }.get(first, "RNAV")
 
 
+def _iap_matching_charts(model: NavModel, segment) -> list:
+    return [
+        chart for chart in model.procedure_charts
+        if chart.airport == segment.airport
+        and chart.chart_type == "instrument-approach-index"
+        and segment.runway in chart.runways
+        and segment.label in approach_procedure_name_candidates(
+            chart.chart_name, chart.runways, segment.airport,
+        )
+    ]
+
+
+def _split_iap_at_explicit_runway_map(model: NavModel, segment):
+    """Split a combined source section only at an explicit runway MAP."""
+    charts = _iap_matching_charts(model, segment)
+    if len(charts) != 1 or not charts[0].has_missed_approach:
+        return None
+    pattern = re.compile(rf"^RW{re.escape(segment.runway)}[LRC]?$")
+    candidates = [
+        index for index, leg in enumerate(segment.legs)
+        if leg.fix_ident and pattern.fullmatch(leg.fix_ident.upper())
+    ]
+    if len(candidates) != 1 or candidates[0] == len(segment.legs) - 1:
+        return None
+    boundary = candidates[0] + 1
+    return segment.legs[:boundary], segment.legs[boundary:]
+
+
+def _approach_sections(model: NavModel, segments: list):
+    """Group source approach sections and retain only same-page sharing."""
+    groups: dict[tuple[str, str, str], list] = {}
+    for segment in segments:
+        if _iap_section_kind(segment) in _IAP_KINDS:
+            groups.setdefault(
+                (segment.airport, segment.label, segment.runway), [],
+            ).append(segment)
+
+    for (segment_airport, label, runway), selected in sorted(groups.items()):
+        primary = [
+            segment for segment in selected
+            if _iap_section_kind(segment) == "approach"
+        ]
+        transitions = [
+            segment for segment in selected
+            if _iap_section_kind(segment) == "approach_transition"
+        ]
+        missed = [
+            segment for segment in selected
+            if _iap_section_kind(segment) == "missed"
+        ]
+        if "-" in label and len(primary) == 1:
+            base_label = label.split("-", 1)[0]
+            shared = groups.get((segment_airport, base_label, runway), [])
+            source = primary[0].source
+            transitions.extend(
+                segment for segment in shared
+                if _iap_section_kind(segment) == "approach_transition"
+                and segment.source.file == source.file
+                and segment.source.page == source.page
+            )
+            missed.extend(
+                segment for segment in shared
+                if _iap_section_kind(segment) == "missed"
+                and segment.source.file == source.file
+                and segment.source.page == source.page
+            )
+        yield label, runway, transitions, primary, missed
+
+
 def _append_approaches(
     airport_element: ET.Element,
     airport: str,
+    model: NavModel,
     segments: list,
     runways: list,
     identities,
 ) -> None:
     runway_headings = {runway.ident: runway.true_heading for runway in runways}
-    keys = sorted({(segment.label, segment.runway) for segment in segments})
-    for label, runway in keys:
-        selected = [
-            segment for segment in segments
-            if segment.label == label and segment.runway == runway
+    for label, runway, transitions, primary, missed in _approach_sections(
+        model, segments,
+    ):
+        if len(primary) != 1 or not primary[0].legs:
+            continue
+        split = _split_iap_at_explicit_runway_map(model, primary[0])
+        primary_legs = primary[0].legs if split is None else split[0]
+        split_missed_legs = () if split is None else split[1]
+        all_legs = list(primary_legs) + [
+            leg for segment in transitions for leg in segment.legs
+        ] + list(split_missed_legs) + [
+            leg for segment in missed for leg in segment.legs
         ]
-        all_legs = [leg for segment in selected for leg in segment.legs]
         first_fix = next((leg for leg in all_legs if leg.fix_ident), None)
         first_altitude = next(
             (leg.altitude1_ft for leg in all_legs if leg.altitude1_ft is not None),
@@ -982,19 +1260,24 @@ def _append_approaches(
             heading=_float(heading or 0, 3),
             missedAltitude=_feet(missed_altitude),
         ))
-        common_legs = [
-            leg for segment in selected if not segment.transition for leg in segment.legs
-        ]
-        if common_legs:
+        if primary_legs:
             _append_legs(
                 ET.SubElement(approach, "ApproachLegs"),
-                common_legs,
+                primary_legs,
                 airport,
                 identities,
             )
-        for segment in selected:
-            if not segment.transition:
-                continue
+        if split_missed_legs or missed:
+            missed_element = ET.SubElement(approach, "MissedApproachLegs")
+            if split_missed_legs:
+                _append_legs(
+                    missed_element, split_missed_legs, airport, identities,
+                )
+            for segment in missed:
+                _append_legs(
+                    missed_element, segment.legs, airport, identities,
+                )
+        for segment in transitions:
             first_transition_fix = next(
                 (leg for leg in segment.legs if leg.fix_ident),
                 None,
@@ -1037,19 +1320,20 @@ def _append_airport_procedures(
     _append_departures(
         airport_element,
         airport,
-        [segment for segment in segments if segment.kind == "departure"],
+        [segment for segment in segments if _procedure_kind(segment.kind) == "departure"],
         identities,
     )
     _append_arrivals(
         airport_element,
         airport,
-        [segment for segment in segments if segment.kind == "arrival"],
+        [segment for segment in segments if _procedure_kind(segment.kind) == "arrival"],
         identities,
     )
     _append_approaches(
         airport_element,
         airport,
-        [segment for segment in segments if segment.kind == "approach"],
+        model,
+        [segment for segment in segments if _procedure_kind(segment.kind) in _IAP_KINDS],
         runways,
         identities,
     )
@@ -1265,6 +1549,7 @@ def write_bglcomp_xml(
     版本匹配的官方设施编译器决定。
     """
     output.parent.mkdir(parents=True, exist_ok=True)
+    _resolve_terminal_procedure_legs(model)
     ET.register_namespace("xsi", "http://www.w3.org/2001/XMLSchema-instance")
     root = ET.Element("FSData", {
         "version": "9.0",

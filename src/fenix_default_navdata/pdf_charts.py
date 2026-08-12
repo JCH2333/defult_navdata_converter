@@ -313,7 +313,11 @@ def extract_positioned_coordinate_page_points(words: list[tuple[float, float, fl
         candidates = [
             (identifier_x, identifier_y, identifier)
             for identifier_x, identifier_y, identifier in identifiers
-            if identifier_x < coordinate_x and abs(identifier_y - coordinate_y) <= 3
+            if (
+                identifier_x < coordinate_x
+                and coordinate_x - identifier_x <= 120
+                and abs(identifier_y - coordinate_y) <= 5
+            )
         ]
         if not candidates:
             continue

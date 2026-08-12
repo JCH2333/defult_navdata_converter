@@ -15,6 +15,7 @@ from fenix_default_navdata.model import (
     ChartTerminalLeg,
     Ils,
     NavModel,
+    ProcedureChart,
     ProcedureSegment,
     Runway,
     SourceRef,
@@ -103,6 +104,160 @@ def test_airport_projection_filters_prefix_and_emits_ils_and_procedure(tmp_path:
     assert leg_attributes["turnDirection"] == "E"
     assert len(root.findall("Waypoint")) == 1
     assert projection.waypoints == 2
+
+
+def test_airport_projection_maps_raw_chinese_procedure_kinds_and_iap_sections(
+    tmp_path: Path,
+):
+    model = NavModel(Path("source"))
+    source = SourceRef("approach.pdf", 1, 1, "hash")
+    model.airports["a"] = Airport(
+        "a", "ZBCF", "ZBCF", 35.0, 105.0, 1000, 18000, 180, source,
+    )
+    model.runways.append(Runway(
+        "r", "a", "03", 30.0, 10000, 150, "ASP", 1000, source,
+    ))
+    model.terminal_waypoints.extend([
+        TerminalWaypoint(f"point-{ident}", "ZBCF", ident, 35.0 + index / 100, 105.0, source, "ZB")
+        for index, ident in enumerate(("DEP01", "ARR01", "TRANS", "IAF", "RW03", "MAHF", "MISSED"))
+    ])
+    model.procedure_segments.extend([
+        ProcedureSegment(
+            "ZBCF", "SID01", "离场", "03", "", (
+                ChartTerminalLeg(
+                    "SID01", "03", "TF", "DEP01", "fixture",
+                    sequence=1, fix_region="ZB", fix_type="TERMINAL_WAYPOINT",
+                    fix_latitude=35.01, fix_longitude=105.0,
+                ),
+            ), source,
+        ),
+        ProcedureSegment(
+            "ZBCF", "STAR01", "进场", "", "ARRTR", (
+                ChartTerminalLeg(
+                    "STAR01", "", "TF", "ARR01", "fixture",
+                    sequence=1, fix_region="ZB", fix_type="TERMINAL_WAYPOINT",
+                    fix_latitude=35.02, fix_longitude=105.0,
+                ),
+            ), source,
+        ),
+        ProcedureSegment(
+            "ZBCF", "R03", "进近过渡", "03", "TRANS", (
+                ChartTerminalLeg(
+                    "R03", "03", "IF", "TRANS", "fixture",
+                    sequence=1, transition="TRANS", fix_region="ZB",
+                    fix_type="TERMINAL_WAYPOINT", fix_latitude=35.03, fix_longitude=105.0,
+                ),
+            ), source,
+        ),
+        ProcedureSegment(
+            "ZBCF", "R03-Z", "进近", "03", "", (
+                ChartTerminalLeg(
+                    "R03-Z", "03", "IF", "IAF", "fixture",
+                    sequence=1, fix_region="ZB", fix_type="TERMINAL_WAYPOINT",
+                    fix_latitude=35.04, fix_longitude=105.0,
+                ),
+                ChartTerminalLeg(
+                    "R03-Z", "03", "TF", "RW03", "fixture",
+                    sequence=2, fix_region="ZB", fix_type="TERMINAL_WAYPOINT",
+                    fix_latitude=35.05, fix_longitude=105.0,
+                ),
+                ChartTerminalLeg(
+                    "R03-Z", "03", "DF", "MISSED", "fixture",
+                    sequence=3, fix_region="ZB", fix_type="TERMINAL_WAYPOINT",
+                    fix_latitude=35.06, fix_longitude=105.0,
+                ),
+            ), source,
+        ),
+        ProcedureSegment(
+            "ZBCF", "R03", "复飞", "03", "", (
+                ChartTerminalLeg(
+                    "R03", "03", "DF", "MAHF", "fixture",
+                    sequence=1, fix_region="ZB", fix_type="TERMINAL_WAYPOINT",
+                    fix_latitude=35.06, fix_longitude=105.0,
+                ),
+            ), source,
+        ),
+    ])
+    model.procedure_charts.append(ProcedureChart(
+        "ZBCF", "ZBCF-5Z03.pdf", 1, "instrument-approach-index",
+        "RNP Z RWY03", "text", (), ("03",), (), (), (), source,
+        has_missed_approach=True,
+    ))
+
+    output = tmp_path / "raw-kinds.xml"
+    write_bglcomp_xml(model, DEFAULT_CYCLE, output, scope="airports")
+
+    airport = ET.parse(output).getroot().find("Airport")
+    assert airport is not None
+    assert airport.find("Departure[@name='SID01']") is not None
+    assert airport.find("Arrival[@name='STAR01']") is not None
+    approach = airport.find("Approach[@suffix='Z']")
+    assert approach is not None
+    assert approach.find("ApproachLegs/Leg[@fixIdent='IAF']") is not None
+    assert approach.find("Transition[@name='TRANS']") is not None
+    missed = approach.find("MissedApproachLegs")
+    assert missed is not None
+    assert [leg.attrib["fixIdent"] for leg in missed.findall("Leg")] == ["MISSED", "MAHF"]
+
+
+def test_terminal_coordinate_evidence_fills_missing_leg_identity(tmp_path: Path):
+    model = NavModel(Path("source"))
+    source = SourceRef("approach.pdf", 1, 1, "hash")
+    model.airports["a"] = Airport(
+        "a", "ZBCF", "ZBCF", 35.0, 105.0, 1000, 18000, 180, source,
+    )
+    model.runways.append(Runway(
+        "r", "a", "03", 30.0, 10000, 150, "ASP", 1000, source,
+    ))
+    model.terminal_waypoints.append(
+        TerminalWaypoint("point", "ZBCF", "IAF01", 35.1, 105.1, source, "ZB"),
+    )
+    model.procedure_segments.append(ProcedureSegment(
+        "ZBCF", "R03", "进近", "03", "", (
+            ChartTerminalLeg("R03", "03", "IF", "IAF01", "fixture"),
+        ), source,
+    ))
+
+    output = tmp_path / "resolved-leg.xml"
+    write_bglcomp_xml(model, DEFAULT_CYCLE, output, scope="airports")
+
+    leg = ET.parse(output).getroot().find("Airport/Approach/ApproachLegs/Leg")
+    assert leg is not None
+    assert leg.attrib["fixType"] == "TERMINAL_WAYPOINT"
+    assert leg.attrib["fixRegion"] == "ZB"
+    assert leg.attrib["fixIdent"] == "IAF01"
+
+
+def test_global_designated_waypoint_fills_cross_airport_procedure_leg(
+    tmp_path: Path,
+):
+    model = NavModel(Path("source"))
+    source = SourceRef("DESIGNATED_POINT.csv", 2)
+    model.airports["a"] = Airport(
+        "a", "ZYBA", "ZYBA", 45.0, 123.0, 500, 18000, 180, source,
+    )
+    model.runways.append(Runway(
+        "r", "a", "07", 60.0, 10000, 150, "ASP", 500, source,
+    ))
+    model.waypoints.append(
+        Waypoint("global", "P105", "P105", 44.81, 123.075, source, "ZY"),
+    )
+    model.procedure_segments.append(ProcedureSegment(
+        "ZYBA", "P105-08A", "进场", "07", "", (
+            ChartTerminalLeg("P105-08A", "07", "IF", "P105", "fixture"),
+        ), source,
+    ))
+
+    output = tmp_path / "global-leg.xml"
+    write_bglcomp_xml(model, DEFAULT_CYCLE, output, scope="airports")
+
+    leg = ET.parse(output).getroot().find(
+        "Airport/Arrival/RunwayTransitions/RunwayTransitionLegs/Leg",
+    )
+    assert leg is not None
+    assert leg.attrib["fixType"] == "WAYPOINT"
+    assert leg.attrib["fixRegion"] == "ZY"
+    assert leg.attrib["fixIdent"] == "P105"
 
 
 def test_reciprocal_runway_ends_become_one_physical_runway(tmp_path: Path):
