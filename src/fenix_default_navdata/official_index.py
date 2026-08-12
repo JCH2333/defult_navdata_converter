@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import json
+import math
 import os
 import shutil
 import sqlite3
@@ -18,13 +19,19 @@ from .baseline import BaselineError, BaselineIndex, load_baseline_sqlite
 BASE_PACKAGE = "navigraph-nav-base"
 JEPP_PACKAGE = "navigraph-nav-jepp"
 _PACKAGE_NAMES = (BASE_PACKAGE, JEPP_PACKAGE)
-_METADATA_VERSION = 2
+_METADATA_VERSION = 3
 _READER_MIRROR_MODE = "neutral-community-bgl-mirror-v1"
 _READER_MIRROR_NAMES = {
     BASE_PACKAGE: "official-core-reader-probe",
     JEPP_PACKAGE: "official-jepp-reader-probe",
 }
 _READER_BGL_PREFIXES = ("nax", "nvx", "atx")
+_INDEXED_RECORD_TABLES = (
+    ("VOR", "vor"),
+    ("NDB", "ndb"),
+    ("WAYPOINT", "waypoint"),
+)
+_WAYPOINT_REQUIRED_COLUMNS = {"file_id", "ident", "region", "laty", "lonx"}
 
 
 class OfficialIndexError(RuntimeError):
@@ -91,34 +98,62 @@ class _ReaderMirrorPlan:
 
 @dataclass(frozen=True)
 class OfficialNavaidIndex:
-    """已通过来源校验的官方 VOR/NDB 设施索引。"""
+    """已通过来源校验的官方 VOR/NDB/航点索引。"""
 
     database: Path
     metadata_path: Path
     baseline: BaselineIndex
+    waypoints: tuple["OfficialWaypoint", ...]
     metadata: dict[str, object]
     reused: bool
 
     @property
     def verified(self) -> bool:
-        return True
+        return (
+            self.metadata.get("metadata_version") == _METADATA_VERSION
+            and self.metadata.get("status") == "verified"
+        )
 
     def to_report(self) -> dict[str, object]:
         packages = self.metadata.get("packages")
         database = self.metadata.get("database")
         reader = self.metadata.get("reader")
-        provenance = self.metadata.get("facility_provenance")
+        provenance = self.metadata.get("record_provenance")
         return {
-            "verified": True,
+            "verified": self.verified,
             "database": str(self.database),
             "metadata": str(self.metadata_path),
             "reused": self.reused,
             "packages": packages if isinstance(packages, dict) else {},
             "database_info": database if isinstance(database, dict) else {},
             "reader": reader if isinstance(reader, dict) else {},
-            "facility_provenance": provenance if isinstance(provenance, dict) else {},
+            "record_provenance": provenance if isinstance(provenance, dict) else {},
+            "waypoint_rows": len(self.waypoints),
             "warnings": self.metadata.get("warnings", []),
         }
+
+
+@dataclass(frozen=True)
+class OfficialWaypoint:
+    """一条来源已验证的官方航点，仅用于区域码判定。"""
+
+    ident: str
+    region: str
+    latitude: float
+    longitude: float
+    source: str
+    row_id: int
+
+    @property
+    def sort_key(self) -> tuple[object, ...]:
+        return (
+            self.ident,
+            self.region,
+            self.latitude,
+            self.longitude,
+            self.source,
+            self.row_id,
+        )
 
 
 def metadata_path_for(database: Path) -> Path:
@@ -490,7 +525,7 @@ def _provenance_rows(
     database: Path,
     plans: dict[str, _ReaderMirrorPlan],
 ) -> dict[str, object]:
-    """将读取器设施来源反向映射回当前官方双包的 BGL 计划。"""
+    """将读取器记录来源反向映射回当前官方双包的 BGL 计划。"""
     path = database.resolve()
     try:
         connection = sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True)
@@ -504,19 +539,28 @@ def _provenance_rows(
                 "SELECT name FROM sqlite_master WHERE type='table'"
             )
         }
-        if not {"bgl_file", "vor", "ndb"}.issubset(tables):
-            raise OfficialIndexError("设施索引缺少 bgl_file、vor 或 ndb 来源表")
+        expected_tables = {"bgl_file"} | {
+            table for _, table in _INDEXED_RECORD_TABLES
+        }
+        missing_tables = sorted(expected_tables - tables)
+        if missing_tables:
+            raise OfficialIndexError(
+                "官方索引缺少来源表: " + ", ".join(missing_tables)
+            )
         columns = {
             table: {
                 str(row[1]).lower()
                 for row in connection.execute(f'PRAGMA table_info("{table}")')
             }
-            for table in ("bgl_file", "vor", "ndb")
+            for table in expected_tables
         }
         required = {
             "bgl_file": {"bgl_file_id", "filepath"},
-            "vor": {"file_id"},
-            "ndb": {"file_id"},
+            **{
+                table: {"file_id"}
+                for _, table in _INDEXED_RECORD_TABLES
+            },
+            "waypoint": _WAYPOINT_REQUIRED_COLUMNS | {"file_id"},
         }
         missing = {
             table: sorted(required[table] - columns[table])
@@ -527,27 +571,43 @@ def _provenance_rows(
             detail = "; ".join(
                 f"{table}: {', '.join(names)}" for table, names in missing.items()
             )
-            raise OfficialIndexError(f"设施索引来源字段不完整: {detail}")
-        rows = connection.execute(
+            raise OfficialIndexError(f"官方索引来源字段不完整: {detail}")
+        dangling: list[str] = []
+        for kind, table in _INDEXED_RECORD_TABLES:
+            count = int(connection.execute(
+                f"""
+                SELECT COUNT(*)
+                FROM \"{table}\" AS item
+                LEFT JOIN bgl_file AS source ON source.bgl_file_id = item.file_id
+                WHERE source.bgl_file_id IS NULL
+                """
+            ).fetchone()[0])
+            if count:
+                dangling.append(f"{kind}={count}")
+        if dangling:
+            raise OfficialIndexError(
+                "官方索引包含无法回溯到 BGL 的记录: " + ", ".join(dangling)
+            )
+        query = "\nUNION ALL\n".join(
+            f"""
+            SELECT '{kind}' AS kind, source.filepath AS filepath, COUNT(*) AS records
+            FROM \"{table}\" AS item
+            JOIN bgl_file AS source ON source.bgl_file_id = item.file_id
+            GROUP BY source.filepath
             """
-            SELECT 'VOR' AS kind, f.filepath AS filepath, COUNT(*) AS records
-            FROM vor AS item
-            JOIN bgl_file AS f ON f.bgl_file_id = item.file_id
-            GROUP BY f.filepath
-            UNION ALL
-            SELECT 'NDB' AS kind, f.filepath AS filepath, COUNT(*) AS records
-            FROM ndb AS item
-            JOIN bgl_file AS f ON f.bgl_file_id = item.file_id
-            GROUP BY f.filepath
-            """
-        ).fetchall()
+            for kind, table in _INDEXED_RECORD_TABLES
+        )
+        rows = connection.execute(query).fetchall()
     except sqlite3.DatabaseError as error:
-        raise OfficialIndexError(f"读取设施索引来源时失败: {path}: {error}") from error
+        raise OfficialIndexError(f"读取官方索引来源时失败: {path}: {error}") from error
     finally:
         connection.close()
     if not rows:
-        raise OfficialIndexError("设施索引没有可追溯的 VOR/NDB BGL 来源")
-    source_counts = {name: {"VOR": 0, "NDB": 0} for name in _PACKAGE_NAMES}
+        raise OfficialIndexError("官方索引没有可追溯的 VOR/NDB/航点 BGL 来源")
+    source_counts = {
+        name: {kind: 0 for kind, _ in _INDEXED_RECORD_TABLES}
+        for name in _PACKAGE_NAMES
+    }
     source_files: set[tuple[str, str]] = set()
     expected = {
         name: plan.expected_paths
@@ -584,6 +644,15 @@ def _provenance_rows(
         )
     if not source_files:
         raise OfficialIndexError("设施索引没有来自暂存官方双包的 BGL 来源")
+    missing_kinds = [
+        kind
+        for kind, _ in _INDEXED_RECORD_TABLES
+        if sum(counts[kind] for counts in source_counts.values()) == 0
+    ]
+    if missing_kinds:
+        raise OfficialIndexError(
+            "官方索引缺少可追溯的记录类型: " + ", ".join(missing_kinds)
+        )
     return {
         "source_bgl_files": len(source_files),
         "record_counts": source_counts,
@@ -594,6 +663,84 @@ def _provenance_rows(
             },
         },
     }
+
+
+def _load_verified_waypoints(database: Path) -> tuple[OfficialWaypoint, ...]:
+    """读取已验证 SQLite 的官方航点，保留其 BGL 来源供严格区域匹配使用。"""
+    path = database.resolve()
+    try:
+        connection = sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True)
+        connection.row_factory = sqlite3.Row
+    except sqlite3.DatabaseError as error:
+        raise OfficialIndexError(f"无法读取官方航点索引: {path}: {error}") from error
+    try:
+        tables = {
+            str(row[0]).lower()
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+        if not {"bgl_file", "waypoint"}.issubset(tables):
+            raise OfficialIndexError("官方索引缺少 bgl_file 或 waypoint 表")
+        columns = {
+            str(row[1]).lower()
+            for row in connection.execute('PRAGMA table_info("waypoint")')
+        }
+        missing = sorted(_WAYPOINT_REQUIRED_COLUMNS - columns)
+        if missing:
+            raise OfficialIndexError(
+                "官方索引 waypoint 表缺少列: " + ", ".join(missing)
+            )
+        rows = connection.execute(
+            """
+            SELECT item.rowid AS _official_rowid, item.ident, item.region,
+                   item.laty, item.lonx, source.filepath AS source
+            FROM waypoint AS item
+            JOIN bgl_file AS source ON source.bgl_file_id = item.file_id
+            ORDER BY item.rowid
+            """
+        ).fetchall()
+    except sqlite3.DatabaseError as error:
+        raise OfficialIndexError(f"读取官方航点索引时失败: {path}: {error}") from error
+    finally:
+        connection.close()
+    if not rows:
+        raise OfficialIndexError("官方索引 waypoint 表为空")
+    records: list[OfficialWaypoint] = []
+    for row in rows:
+        row_id = int(row["_official_rowid"])
+        ident = str(row["ident"] or "").strip().upper()
+        region = str(row["region"] or "").strip().upper()[:2]
+        source = str(row["source"] or "").strip()
+        if not ident or not region or not source:
+            raise OfficialIndexError(
+                f"官方索引 waypoint 行 {row_id} 缺少 ident、region 或 BGL 来源"
+            )
+        try:
+            latitude = float(row["laty"])
+            longitude = float(row["lonx"])
+        except (TypeError, ValueError) as error:
+            raise OfficialIndexError(
+                f"官方索引 waypoint 行 {row_id} 坐标不是数字"
+            ) from error
+        if (
+            not math.isfinite(latitude)
+            or not math.isfinite(longitude)
+            or not -90 <= latitude <= 90
+            or not -180 <= longitude <= 180
+        ):
+            raise OfficialIndexError(
+                f"官方索引 waypoint 行 {row_id} 坐标超出范围"
+            )
+        records.append(OfficialWaypoint(
+            ident=ident,
+            region=region,
+            latitude=latitude,
+            longitude=longitude,
+            source=source,
+            row_id=row_id,
+        ))
+    return tuple(sorted(records, key=lambda item: item.sort_key))
 
 
 def _warning_lines(stdout: str, stderr: str, returncode: int) -> list[str]:
@@ -728,9 +875,9 @@ def load_verified_official_navaid_index(
         raise OfficialIndexError("官方设施索引侧车缺少数据库校验信息")
     if database_info.get("sha256") != _sha256(database):
         raise OfficialIndexError("官方设施索引 SQLite 的 SHA-256 与侧车不一致")
-    recorded_provenance = metadata.get("facility_provenance")
+    recorded_provenance = metadata.get("record_provenance")
     if not isinstance(recorded_provenance, dict):
-        raise OfficialIndexError("官方设施索引侧车缺少设施来源统计")
+        raise OfficialIndexError("官方索引侧车缺少记录来源统计")
     plans = {
         name: _reader_mirror_plan(name, fingerprints[name].source)
         for name in _PACKAGE_NAMES
@@ -744,22 +891,32 @@ def load_verified_official_navaid_index(
         },
     }
     if recorded_provenance.get("reader_mirror") != expected_mirror:
-        raise OfficialIndexError("官方设施索引的读取器镜像契约与当前官方包不一致")
+        raise OfficialIndexError("官方索引的读取器镜像契约与当前官方包不一致")
     provenance = _provenance_rows(database, plans)
     for field in ("source_bgl_files", "record_counts", "reader_mirror"):
         if recorded_provenance.get(field) != provenance.get(field):
-            raise OfficialIndexError(f"官方设施索引的 {field} 与侧车不一致")
+            raise OfficialIndexError(f"官方索引的 {field} 与侧车不一致")
     try:
         baseline = load_baseline_sqlite(database)
     except BaselineError as error:
         raise OfficialIndexError(str(error)) from error
     for kind, expected_key in (("VOR", "vor_rows"), ("NDB", "ndb_rows")):
         if database_info.get(expected_key) != baseline.counts_by_kind[kind]:
-            raise OfficialIndexError(f"官方设施索引 {kind} 行数与侧车不一致")
+            raise OfficialIndexError(f"官方索引 {kind} 行数与侧车不一致")
+    waypoints = _load_verified_waypoints(database)
+    if database_info.get("waypoint_rows") != len(waypoints):
+        raise OfficialIndexError("官方索引 WAYPOINT 行数与侧车不一致")
+    recorded_waypoint_rows = sum(
+        int(counts.get("WAYPOINT", 0))
+        for counts in provenance["record_counts"].values()
+    )
+    if recorded_waypoint_rows != len(waypoints):
+        raise OfficialIndexError("官方索引 WAYPOINT 来源统计与实际行数不一致")
     return OfficialNavaidIndex(
         database=database,
         metadata_path=metadata_path,
         baseline=baseline,
+        waypoints=waypoints,
         metadata=metadata,
         reused=reused,
     )
@@ -775,12 +932,12 @@ def build_official_navaid_index(
     force: bool = False,
     timeout_seconds: int = 3600,
 ) -> OfficialNavaidIndex:
-    """从当前官方双包生成并验证只读 VOR/NDB 索引。
+    """从当前官方双包生成并验证只读 VOR/NDB/航点索引。
 
     读取器永远接收纯 ASCII 暂存根目录。官方包名会触发其依赖完整游戏骨架的
     专用分支，因此暂存区只创建经过逐文件 SHA-256 校验的中性 BGL 镜像。读取
     器退出代码只作为诊断信息；最终是否成功取决于 SQLite 完整性、双包树指纹
-    和每条设施记录到官方 BGL 计划的反向来源校验。
+            和每条 VOR/NDB/航点记录到官方 BGL 计划的反向来源校验。
     """
     if timeout_seconds <= 0:
         raise ValueError("设施索引读取超时必须为正数")
@@ -861,6 +1018,13 @@ def build_official_navaid_index(
             baseline = load_baseline_sqlite(produced_database)
         except BaselineError as error:
             raise OfficialIndexError(str(error)) from error
+        waypoints = _load_verified_waypoints(produced_database)
+        source_waypoint_rows = sum(
+            int(counts.get("WAYPOINT", 0))
+            for counts in provenance["record_counts"].values()
+        )
+        if source_waypoint_rows != len(waypoints):
+            raise OfficialIndexError("官方索引 WAYPOINT 来源统计与实际行数不一致")
         current_fingerprints = fingerprint_official_packages(nav_base, nav_jepp)
         if any(
             current_fingerprints[name].tree_sha256 != fingerprints[name].tree_sha256
@@ -885,8 +1049,9 @@ def build_official_navaid_index(
                 "sha256": _sha256(target),
                 "vor_rows": baseline.counts_by_kind["VOR"],
                 "ndb_rows": baseline.counts_by_kind["NDB"],
+                "waypoint_rows": len(waypoints),
             },
-            "facility_provenance": provenance,
+            "record_provenance": provenance,
             "warnings": (
                 ([
                     "读取器将索引标记为 BROKEN；已仅在 SQLite 完整性、设施表和官方双包 BGL 来源全部通过后接受。"

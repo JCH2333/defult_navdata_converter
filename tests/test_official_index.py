@@ -64,6 +64,14 @@ def _write_reader_index(output: Path, base_bgl: Path, jepp_bgl: Path) -> None:
             laty REAL,
             name TEXT
         );
+        CREATE TABLE waypoint (
+            waypoint_id INTEGER PRIMARY KEY,
+            file_id INTEGER NOT NULL,
+            ident TEXT,
+            region TEXT,
+            lonx REAL,
+            laty REAL
+        );
         """
     )
     connection.executemany(
@@ -80,6 +88,12 @@ def _write_reader_index(output: Path, base_bgl: Path, jepp_bgl: Path) -> None:
         """
         INSERT INTO ndb(file_id, ident, region, frequency, mag_var, altitude, lonx, laty, name)
         VALUES (2, 'JEPP', 'ZB', 44500, 0.0, 100, 106.0, 36.0, 'JEPP')
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO waypoint(file_id, ident, region, lonx, laty)
+        VALUES (1, 'POINT', 'ZB', 105.5, 35.5)
         """
     )
     connection.commit()
@@ -153,8 +167,11 @@ def test_builds_ascii_staged_verified_index_and_reuses_it(tmp_path: Path, monkey
     metadata = json.loads(metadata_path_for(output).read_text(encoding="utf-8"))
     assert metadata["status"] == "verified"
     assert metadata["reader"]["returncode"] == 1
-    assert metadata["facility_provenance"]["record_counts"][BASE_PACKAGE]["VOR"] == 1
-    assert metadata["facility_provenance"]["record_counts"][JEPP_PACKAGE]["NDB"] == 1
+    assert metadata["database"]["waypoint_rows"] == 1
+    assert metadata["record_provenance"]["record_counts"][BASE_PACKAGE]["VOR"] == 1
+    assert metadata["record_provenance"]["record_counts"][BASE_PACKAGE]["WAYPOINT"] == 1
+    assert metadata["record_provenance"]["record_counts"][JEPP_PACKAGE]["NDB"] == 1
+    assert [(item.ident, item.region) for item in created.waypoints] == [("POINT", "ZB")]
 
     reused = build_official_navaid_index(
         nav_base=base,
@@ -271,3 +288,79 @@ def test_foreign_bgl_provenance_rejects_index_before_writing_output(tmp_path: Pa
 
     assert not output.exists()
     assert not metadata_path_for(output).exists()
+
+
+def test_foreign_waypoint_provenance_rejects_index_before_writing_output(tmp_path: Path, monkeypatch):
+    base = _write_package(tmp_path, BASE_PACKAGE, "NVX00000.bgl")
+    jepp = _write_package(tmp_path, JEPP_PACKAGE, "NAX00000.bgl")
+    reader = tmp_path / "navdatareader.exe"
+    reader.write_bytes(b"reader-fixture")
+    output = tmp_path / "official.sqlite"
+
+    def fake_reader(command: list[str], *, cwd: Path, timeout_seconds: int):
+        root = _reader_command_value(command, "-b")
+        database = _reader_command_value(command, "-o")
+        _write_reader_index(
+            database,
+            _staged_bgl(root, BASE_PACKAGE, "NVX00000.bgl"),
+            _staged_bgl(root, JEPP_PACKAGE, "NAX00000.bgl"),
+        )
+        connection = sqlite3.connect(database)
+        connection.execute(
+            "UPDATE bgl_file SET filepath = ? WHERE bgl_file_id = 1",
+            (str(tmp_path / "foreign" / "waypoint-source.bgl"),),
+        )
+        connection.commit()
+        connection.close()
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr("fenix_default_navdata.official_index._run_reader", fake_reader)
+
+    with pytest.raises(OfficialIndexError, match="不属于暂存官方双包"):
+        build_official_navaid_index(
+            nav_base=base,
+            nav_jepp=jepp,
+            output=output,
+            reader=reader,
+            cache_root=tmp_path / "cache",
+        )
+
+    assert not output.exists()
+    assert not metadata_path_for(output).exists()
+
+
+def test_old_sidecar_version_is_explicitly_rejected(tmp_path: Path, monkeypatch):
+    base = _write_package(tmp_path, BASE_PACKAGE, "NVX00000.bgl")
+    jepp = _write_package(tmp_path, JEPP_PACKAGE, "NAX00000.bgl")
+    reader = tmp_path / "navdatareader.exe"
+    reader.write_bytes(b"reader-fixture")
+    output = tmp_path / "official.sqlite"
+
+    def fake_reader(command: list[str], *, cwd: Path, timeout_seconds: int):
+        root = _reader_command_value(command, "-b")
+        _write_reader_index(
+            _reader_command_value(command, "-o"),
+            _staged_bgl(root, BASE_PACKAGE, "NVX00000.bgl"),
+            _staged_bgl(root, JEPP_PACKAGE, "NAX00000.bgl"),
+        )
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr("fenix_default_navdata.official_index._run_reader", fake_reader)
+    build_official_navaid_index(
+        nav_base=base,
+        nav_jepp=jepp,
+        output=output,
+        reader=reader,
+        cache_root=tmp_path / "cache",
+    )
+    sidecar = metadata_path_for(output)
+    metadata = json.loads(sidecar.read_text(encoding="utf-8"))
+    metadata["metadata_version"] = 2
+    sidecar.write_text(json.dumps(metadata), encoding="utf-8")
+
+    with pytest.raises(OfficialIndexError, match="侧车版本不支持"):
+        load_verified_official_navaid_index(
+            output,
+            nav_base=base,
+            nav_jepp=jepp,
+        )
