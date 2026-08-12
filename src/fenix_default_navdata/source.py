@@ -10,7 +10,15 @@ from pypinyin import lazy_pinyin
 import pymupdf
 
 from .model import CN_PREFIXES, Airport, AirwayLeg, NavModel, Navaid, ProcedureSegment, RejectedProcedure, RejectedRecord, Runway, SourceRef, TerminalWaypoint, Waypoint, is_china_icao
-from .pdf_charts import extract_airport_ad219_ils, extract_airport_approach_charts, extract_airport_coordinate_pages, extract_airport_database_charts, extract_airport_standard_procedure_charts
+from .pdf_charts import (
+    _is_instrument_approach_index_row,
+    _is_standard_procedure_index_row,
+    extract_airport_ad219_ils,
+    extract_airport_approach_charts,
+    extract_airport_coordinate_pages,
+    extract_airport_database_charts,
+    extract_airport_standard_procedure_charts,
+)
 
 
 _FIR_COUNTRIES = {
@@ -566,14 +574,16 @@ def _reject_unparsed_charts(model: NavModel) -> None:
     for index in sorted(terminal.glob("*/Charts.csv")):
         airport = index.parent.name
         for row_number, row in enumerate(_rows(index), start=2):
-            kind = row.get("ChartTypeEx_CH") or ""
             chart = row.get("ChartName") or f"第{row_number}行"
-            # Database-coding pages are handled by _load_terminal_database_charts.
-            # Their publisher type is also an instrument chart, so excluding
-            # them here prevents a successfully parsed source page from being
-            # reported as an unparsed procedure.
-            if "数据库编码" in chart:
+            # Database, standard-procedure, and coordinate pages each have an
+            # explicit source-evidence path.  Only indexed instrument
+            # approach pages remain outside the current leg decoder.
+            if (
+                "数据库编码" in chart
+                or "航路点坐标" in chart
+                or _is_standard_procedure_index_row(row)
+            ):
                 continue
-            if "仪表" not in kind and "进近" not in kind:
+            if not _is_instrument_approach_index_row(row):
                 continue
             model.rejected_procedures.append(RejectedProcedure(airport, chart, "终端 PDF 语义提取尚未完成", SourceRef(str(index.relative_to(model.root)), row_number)))
