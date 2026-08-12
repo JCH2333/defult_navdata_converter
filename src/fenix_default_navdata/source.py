@@ -396,14 +396,25 @@ def load_naip(
             try:
                 latitude = parse_dms(row.get("GEO_LAT_ACCURACY") or "")
                 longitude = parse_dms(row.get("GEO_LONG_ACCURACY") or "")
-                country = navaid_country(row.get("SERVICED_AIRPORT") or "", row.get("CODE_FIR") or "")
+                serviced_airport = (row.get("SERVICED_AIRPORT") or "").strip().upper()
+                code_fir = (row.get("CODE_FIR") or "").strip()
+                country = navaid_country(serviced_airport, code_fir)
                 navaid = Navaid(row["SIGNIFICANT_POINT_ID"], row.get("CODE_ID") or "", kind,
                     row.get("TXT_NAME") or "", latitude,
                     longitude, _float(row.get("VAL_FREQ") or "0") / divisor,
                     _float(row.get("VAL_MAG_VAR") or "0"), _navaid_elevation_feet(
                         row.get("VAL_ELEV") or "0", row.get("UOM_DIST_VER") or "",
                     ),
-                    country, SourceRef(filename, row_number))
+                    country, SourceRef(filename, row_number),
+                    code_in_airway=(row.get("CODE_IN_AIRWAY") or "").strip().upper(),
+                    purpose=(row.get("PURPOSE") or "").strip().upper(),
+                    is_rep_atc=(row.get("IS_REP_ATC") or "").strip().upper(),
+                    route_restrict=(row.get("ROUTE_RESTRICT") or "").strip().upper(),
+                    is_trans_point=(row.get("IS_TRANS_POINT") or "").strip().upper(),
+                    is_border_point=(row.get("IS_BORDER_POINT") or "").strip().upper(),
+                    serviced_airport=serviced_airport,
+                    code_fir=code_fir,
+                )
                 model.navaids.append(navaid)
                 _register_airway_endpoint_country(
                     airway_endpoint_countries,

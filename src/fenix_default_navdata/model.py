@@ -62,6 +62,16 @@ class Navaid:
     country: str
     source: SourceRef
     terminal: bool = False
+    # Keep the 424 selection flags on the neutral record.  Target adapters may
+    # interpret them differently, but must not need to reopen raw CSV files.
+    code_in_airway: str = ""
+    purpose: str = ""
+    is_rep_atc: str = ""
+    route_restrict: str = ""
+    is_trans_point: str = ""
+    is_border_point: str = ""
+    serviced_airport: str = ""
+    code_fir: str = ""
 
 
 @dataclass(frozen=True)

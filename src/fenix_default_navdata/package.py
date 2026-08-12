@@ -14,7 +14,8 @@ from .bgl import (
     write_bglcomp_xml,
     write_package_project,
 )
-from .baseline import NavaidDiff, diff_navaids
+from .baseline import NavaidDiff
+from .default_navaids import DefaultNavaidSelection, select_default_navaids
 from .model import NavModel
 from .official_index import (
     OfficialIndexError,
@@ -212,6 +213,7 @@ def build_candidate(
         include_terminal_documents=True,
     )
     navaid_diff: NavaidDiff | None = None
+    navaid_selection: DefaultNavaidSelection | None = None
     region_resolution: OfficialRegionResolution | None = None
     selected_navaids: tuple = ()
     baseline_error: str | None = None
@@ -224,6 +226,11 @@ def build_candidate(
         "verified": False,
         "database": str(baseline_db) if baseline_db else None,
         "reason": "未提供经过来源校验的官方设施索引 SQLite",
+    }
+    navaid_selection_report: dict[str, object] = {
+        "navaid_selection_verified": False,
+        "reason": "未提供经过来源校验的官方设施索引 SQLite",
+        "selected_missing": 0,
     }
     if baseline_db is not None:
         try:
@@ -238,15 +245,17 @@ def build_candidate(
                 coordinate_tolerance_nm=OFFICIAL_REGION_TOLERANCE_NM,
             )
             baseline_index = official_index.baseline
-            navaid_diff = diff_navaids(
+            navaid_selection = select_default_navaids(
                 model.navaids,
                 baseline_index,
                 coordinate_tolerance_nm=baseline_tolerance_nm,
             )
+            navaid_diff = navaid_selection.strict_diff
             baseline_report = official_index.to_report()
             region_resolution_report = region_resolution.to_report()
-            if navaid_diff.navaid_diff_verified:
-                selected_navaids = navaid_diff.selected_navaids
+            navaid_selection_report = navaid_selection.to_report()
+            if navaid_selection.navaid_selection_verified:
+                selected_navaids = navaid_selection.selected_navaids
         except (OfficialIndexError, RegionResolutionError, ValueError) as error:
             baseline_error = str(error)
             baseline_report = {
@@ -258,6 +267,11 @@ def build_candidate(
                 "verified": False,
                 "reason": baseline_error,
                 "coordinate_tolerance_nm": OFFICIAL_REGION_TOLERANCE_NM,
+            }
+            navaid_selection_report = {
+                "navaid_selection_verified": False,
+                "reason": baseline_error,
+                "selected_missing": 0,
             }
     report: dict[str, object] = {
         "status": "candidate",
@@ -301,6 +315,7 @@ def build_candidate(
                 "selected_missing": 0,
             }
         ),
+        "navaid_selection": navaid_selection_report,
         "official_region_resolution": region_resolution_report,
         "limitations": [
             "没有合法的 BglComp.exe 时不能生成可加载的区域 BGL。",
@@ -383,11 +398,16 @@ def build_candidate(
         isinstance(report.get("navaid_diff"), dict)
         and report["navaid_diff"].get("navaid_diff_verified")
     )
+    navaid_selection_verified = bool(
+        isinstance(report.get("navaid_selection"), dict)
+        and report["navaid_selection"].get("navaid_selection_verified")
+    )
     index_verified = bool(baseline_report.get("verified"))
     region_resolution_verified = bool(region_resolution_report.get("verified"))
     report["deployable"] = (
         index_verified
         and navaid_diff_verified
+        and navaid_selection_verified
         and region_resolution_verified
         and all(
         (output / name / "bglIndex.bout").is_file()

@@ -105,6 +105,28 @@ def test_load_naip_converts_vor_elevation_meters_and_keeps_raw_navaid_name(tmp_p
     ]
 
 
+def test_load_naip_retains_raw_navaid_selection_attributes(tmp_path: Path) -> None:
+    root = _minimal_naip_root(tmp_path, "沥青")
+    _write_csv(root, "VOR.csv", "\n".join((
+        "SIGNIFICANT_POINT_ID,CODE_ID,TXT_NAME,GEO_LAT_ACCURACY,GEO_LONG_ACCURACY,VAL_FREQ,VAL_MAG_VAR,VAL_ELEV,CODE_IN_AIRWAY,PURPOSE,IS_REP_ATC,ROUTE_RESTRICT,IS_TRANS_POINT,IS_BORDER_POINT,SERVICED_AIRPORT,CODE_FIR",
+        "vor,VOR1,VOR,N230000,E1130000,113.1,-2,0,Y,AE,Y,Y,N,Y,ZGAA,广州情报区",
+    )))
+
+    model = load_naip(root, include_terminal_documents=False)
+
+    navaid = next(item for item in model.navaids if item.ident == "VOR1")
+    assert (
+        navaid.code_in_airway,
+        navaid.purpose,
+        navaid.is_rep_atc,
+        navaid.route_restrict,
+        navaid.is_trans_point,
+        navaid.is_border_point,
+        navaid.serviced_airport,
+        navaid.code_fir,
+    ) == ("Y", "AE", "Y", "Y", "N", "Y", "ZGAA", "广州情报区")
+
+
 def test_load_naip_recovers_blank_route_endpoint_firs_from_matching_424_records(tmp_path: Path) -> None:
     root = _minimal_naip_root(tmp_path, "沥青")
     _write_csv(root, "DESIGNATED_POINT.csv", "\n".join((

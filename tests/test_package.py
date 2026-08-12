@@ -2,7 +2,7 @@ from pathlib import Path
 
 from fenix_default_navdata.baseline import BaselineIndex, BaselineNavaid
 from fenix_default_navdata.bgl import CompilerInfo
-from fenix_default_navdata.model import AirwayLeg, NavModel, SourceRef, Waypoint
+from fenix_default_navdata.model import AirwayLeg, NavModel, Navaid, SourceRef, Waypoint
 from fenix_default_navdata.official_index import OfficialNavaidIndex, OfficialWaypoint
 from fenix_default_navdata.package import AIRPORT_PACKAGE, NAV_PACKAGE, build_candidate
 from fenix_default_navdata.profile import DEFAULT_CYCLE
@@ -213,3 +213,90 @@ def test_candidate_restores_verified_official_regions_before_enroute_projection(
     }
     assert report["projection"]["airway_routes"] == 1
     assert report["projection"]["skipped_airway_legs"] == 0
+
+
+def test_candidate_suppresses_cross_region_official_navaid_duplicate(
+    tmp_path: Path,
+    monkeypatch,
+):
+    raw = tmp_path / "raw"
+    base = tmp_path / "base"
+    jepp = tmp_path / "jepp"
+    output = tmp_path / "candidate"
+    raw.mkdir()
+    base.mkdir()
+    jepp.mkdir()
+    model = NavModel(root=raw)
+    model.navaids.append(Navaid(
+        "vor", "CHF", "VOR", "CHF", 42.188889, 118.810833, 115.5,
+        0.0, 0, "ZB", SourceRef("VOR.csv", 2), code_in_airway="Y",
+    ))
+    vor = BaselineNavaid(
+        kind="VOR",
+        ident="CHF",
+        region="ZY",
+        frequency_khz=115500.0,
+        latitude=42.190000,
+        longitude=118.811676,
+        name="CHF",
+        magnetic_variation=0.0,
+        elevation_ft=0,
+        source="fixture.bgl",
+        row_id=1,
+    )
+    ndb = BaselineNavaid(
+        kind="NDB",
+        ident="SPARE",
+        region="ZB",
+        frequency_khz=35000.0,
+        latitude=1.0,
+        longitude=1.0,
+        name="SPARE",
+        magnetic_variation=0.0,
+        elevation_ft=0,
+        source="fixture.bgl",
+        row_id=2,
+    )
+    official_index = OfficialNavaidIndex(
+        database=tmp_path / "official.sqlite",
+        metadata_path=tmp_path / "official.sqlite.metadata.json",
+        baseline=BaselineIndex(
+            records=(vor, ndb),
+            sources=("fixture.sqlite",),
+            database_counts=(),
+            verified=True,
+        ),
+        waypoints=(OfficialWaypoint(
+            ident="SPARE",
+            region="ZB",
+            latitude=1.0,
+            longitude=1.0,
+            source="fixture.bgl",
+            row_id=3,
+        ),),
+        metadata={"metadata_version": 3, "status": "verified"},
+        reused=True,
+    )
+    monkeypatch.setattr(
+        "fenix_default_navdata.package.load_naip",
+        lambda root, **kwargs: model,
+    )
+    monkeypatch.setattr(
+        "fenix_default_navdata.package.load_verified_official_navaid_index",
+        lambda *args, **kwargs: official_index,
+    )
+
+    report = build_candidate(
+        raw_root=raw,
+        nav_base=base,
+        nav_jepp=jepp,
+        output=output,
+        cycle=DEFAULT_CYCLE,
+        compiler=CompilerInfo(None, "none", "missing"),
+        baseline_db=official_index.database,
+    )
+
+    assert report["navaid_diff"]["selected_missing"] == 1
+    assert report["navaid_selection"]["navaid_selection_verified"] is True
+    assert report["navaid_selection"]["suppressed_physical_duplicates"] == 1
+    assert report["model"]["selected_navaids"] == 0
