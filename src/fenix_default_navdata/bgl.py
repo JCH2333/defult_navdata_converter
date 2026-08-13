@@ -2000,6 +2000,16 @@ def compile_package(
             raise RuntimeError(
                 "FlightSimulator2024.exe 正在运行；Package Tool 构建前请完全关闭模拟器"
             )
+        builder_log = (
+            Path(os.environ.get("APPDATA", ""))
+            / "Microsoft Flight Simulator 2024"
+            / "BuilderLogError.txt"
+        )
+        builder_log_before = (
+            (builder_log.stat().st_mtime_ns, builder_log.stat().st_size)
+            if builder_log.is_file()
+            else None
+        )
         shutil.copytree(project_path.parent, stage_root, dirs_exist_ok=True)
         staged_project = stage_root / project_path.name
         command = [
@@ -2035,12 +2045,15 @@ def compile_package(
         bgls = sorted(staged_package_root.rglob("*.bgl")) if staged_package_root.is_dir() else []
         if missing or not bgls:
             details = "\n".join(filter(None, (result.stdout, result.stderr)))
-            builder_log = (
-                Path(os.environ.get("APPDATA", ""))
-                / "Microsoft Flight Simulator 2024"
-                / "BuilderLogError.txt"
+            builder_log_after = (
+                (builder_log.stat().st_mtime_ns, builder_log.stat().st_size)
+                if builder_log.is_file()
+                else None
             )
-            if builder_log.is_file():
+            if (
+                builder_log_after is not None
+                and builder_log_after != builder_log_before
+            ):
                 details = f"{details}\n{builder_log.read_text(encoding='utf-8', errors='replace')[-4000:]}"
             raise RuntimeError(
                 "Package Tool 未生成完整导航包；"
