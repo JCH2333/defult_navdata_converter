@@ -299,7 +299,8 @@ def test_candidate_suppresses_cross_region_official_navaid_duplicate(
     assert report["navaid_diff"]["selected_missing"] == 1
     assert report["navaid_selection"]["navaid_selection_verified"] is True
     assert report["navaid_selection"]["suppressed_physical_duplicates"] == 1
-    assert report["model"]["selected_navaids"] == 0
+    assert report["navaid_selection"]["official_baseline_preservations"] == 1
+    assert report["model"]["selected_navaids"] == 1
 
 
 def test_candidate_projects_source_backed_ndb_property_correction(
@@ -385,5 +386,93 @@ def test_candidate_projects_source_backed_ndb_property_correction(
 
     assert report["navaid_selection"]["navaid_selection_verified"] is True
     assert report["navaid_selection"]["selected_property_corrections"] == 1
+    assert report["model"]["selected_navaids"] == 1
+    assert report["projection"]["navaids"] == 1
+
+
+def test_candidate_projects_verified_official_baseline_ndb_preservation(
+    tmp_path: Path,
+    monkeypatch,
+):
+    raw = tmp_path / "raw"
+    base = tmp_path / "base"
+    jepp = tmp_path / "jepp"
+    output = tmp_path / "candidate"
+    raw.mkdir()
+    base.mkdir()
+    jepp.mkdir()
+    model = NavModel(root=raw)
+    vor = BaselineNavaid(
+        kind="VOR",
+        ident="SPARE",
+        region="ZB",
+        frequency_khz=113000.0,
+        latitude=1.0,
+        longitude=1.0,
+        name="SPARE",
+        magnetic_variation=0.0,
+        elevation_ft=0,
+        source="fixture.bgl",
+        row_id=1,
+    )
+    ndb = BaselineNavaid(
+        kind="NDB",
+        ident="OLD",
+        region="ZB",
+        frequency_khz=34500.0,
+        latitude=40.0,
+        longitude=116.0,
+        name="OLD",
+        magnetic_variation=0.0,
+        elevation_ft=0,
+        source="fixture.bgl",
+        row_id=2,
+    )
+    official_index = OfficialNavaidIndex(
+        database=tmp_path / "official.sqlite",
+        metadata_path=tmp_path / "official.sqlite.metadata.json",
+        baseline=BaselineIndex(
+            records=(vor, ndb),
+            sources=("fixture.sqlite",),
+            database_counts=(),
+            verified=True,
+        ),
+        waypoints=(OfficialWaypoint(
+            ident="SPARE",
+            region="ZB",
+            latitude=1.0,
+            longitude=1.0,
+            source="fixture.bgl",
+            row_id=3,
+        ),),
+        metadata={"metadata_version": 3, "status": "verified"},
+        reused=True,
+    )
+    monkeypatch.setattr(
+        "fenix_default_navdata.package.load_naip",
+        lambda root, **kwargs: model,
+    )
+    monkeypatch.setattr(
+        "fenix_default_navdata.package.load_verified_official_navaid_index",
+        lambda *args, **kwargs: official_index,
+    )
+
+    report = build_candidate(
+        raw_root=raw,
+        nav_base=base,
+        nav_jepp=jepp,
+        output=output,
+        cycle=DEFAULT_CYCLE,
+        compiler=CompilerInfo(None, "none", "missing"),
+        baseline_db=official_index.database,
+    )
+
+    assert report["navaid_selection"]["navaid_selection_verified"] is True
+    assert report["navaid_selection"]["projection_categories"] == {
+        "raw_424_addition": 0,
+        "raw_424_correction": 0,
+        "official_baseline_preservation": 1,
+        "rejected_ambiguous": 0,
+    }
     assert report["model"]["selected_navaids"] == 1
     assert report["projection"]["navaids"] == 1

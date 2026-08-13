@@ -112,7 +112,11 @@ def test_default_selection_keeps_source_facility_without_physical_official_match
     result = select_default_navaids([raw], baseline)
 
     assert result.navaid_selection_verified is True
-    assert result.selected_navaids == (raw,)
+    assert result.selected_missing_navaids == (raw,)
+    assert result.property_corrections == ()
+    assert result.selected_navaids[0] == raw
+    assert [item.baseline.region for item in result.baseline_preservations] == ["ZY"]
+    assert len(result.selected_navaids) == 2
     assert result.suppressed_physical_duplicates == ()
 
 
@@ -146,6 +150,7 @@ def test_default_selection_projects_source_backed_ndb_property_correction() -> N
     assert result.selected_navaids == (raw,)
     assert result.selected_missing_navaids == ()
     assert len(result.property_corrections) == 1
+    assert result.baseline_preservations == ()
     correction = result.property_corrections[0]
     assert correction.raw == raw
     assert correction.property_delta == ("coordinates",)
@@ -157,6 +162,108 @@ def test_default_selection_projects_source_backed_ndb_property_correction() -> N
     assert report["property_correction_records"][0]["reason"] == (
         "source_backed_ndb_property_delta"
     )
+
+
+def test_default_selection_preserves_unreplaced_official_china_ndb() -> None:
+    baseline_ndb = _baseline(
+        "NDB", "OLD", "ZB", 34500, 40.0, 116.0, 1,
+    )
+
+    result = select_default_navaids([], _index(baseline_ndb))
+
+    assert result.navaid_selection_verified is True
+    assert result.selected_missing_navaids == ()
+    assert result.property_corrections == ()
+    assert len(result.baseline_preservations) == 1
+    preserved = result.baseline_preservations[0]
+    assert preserved.baseline == baseline_ndb
+    assert preserved.projected == Navaid(
+        key="official-baseline-ndb:ZB:OLD:34500.000:40.00000:116.00000",
+        ident="OLD",
+        kind="NDB",
+        name="OLD",
+        latitude=40.0,
+        longitude=116.0,
+        frequency=345.0,
+        magnetic_variation=0.0,
+        elevation_ft=0,
+        country="ZB",
+        source=SourceRef("official-baseline-navaid-index", 1),
+    )
+    assert result.selected_navaids == (preserved.projected,)
+    report = result.to_report()
+    assert report["projection_categories"] == {
+        "raw_424_addition": 0,
+        "raw_424_correction": 0,
+        "official_baseline_preservation": 1,
+        "rejected_ambiguous": 0,
+    }
+    assert report["official_baseline_preservation_records"][0]["reason"] == (
+        "official_baseline_preservation"
+    )
+
+
+def test_default_selection_preserves_other_same_ident_official_ndb_entity() -> None:
+    raw = _raw(
+        "raw", "D", "NDB", latitude=30.0, longitude=120.0,
+        frequency=300, country="ZS", source_file="NDB.csv",
+    )
+    matching = _baseline("NDB", "D", "ZS", 30000, 30.001, 120.0, 1)
+    separate = _baseline("NDB", "D", "ZY", 21600, 42.0, 123.0, 2)
+
+    result = select_default_navaids([raw], _index(matching, separate))
+
+    assert result.navaid_selection_verified is True
+    assert result.selected_navaids[0] == raw
+    assert [item.baseline for item in result.baseline_preservations] == [separate]
+    assert len(result.selected_navaids) == 2
+
+
+def test_default_selection_preserves_official_ndb_on_cross_region_raw_match() -> None:
+    raw = _raw(
+        "raw", "CROSS", "NDB", latitude=36.0, longitude=106.0,
+        frequency=445, country="ZB", source_file="NDB.csv",
+    )
+    baseline = _baseline("NDB", "CROSS", "ZY", 44500, 36.0, 106.0, 1)
+
+    result = select_default_navaids([raw], _index(baseline))
+
+    assert result.navaid_selection_verified is True
+    assert result.selected_missing_navaids == ()
+    assert result.property_corrections == ()
+    assert len(result.suppressed_physical_duplicates) == 1
+    assert [item.baseline for item in result.baseline_preservations] == [baseline]
+    assert result.selected_navaids == (result.baseline_preservations[0].projected,)
+
+
+def test_default_selection_rejects_multiple_raw_ndbs_for_one_official_entity() -> None:
+    first = _raw(
+        "first", "AMB", "NDB", latitude=36.0, longitude=106.0,
+        frequency=445, country="ZB", source_file="NDB.csv",
+    )
+    second = _raw(
+        "second", "AMB", "NDB", latitude=36.0, longitude=106.0,
+        frequency=445, country="ZY", source_file="NDB.csv",
+    )
+    baseline = _baseline("NDB", "AMB", "ZB", 44500, 36.0, 106.0, 1)
+
+    result = select_default_navaids([first, second], _index(baseline))
+
+    assert result.navaid_selection_verified is False
+    assert result.selected_navaids == ()
+    assert len(result.baseline_raw_ambiguities) == 1
+    assert result.to_report()["projection_categories"]["rejected_ambiguous"] == 1
+
+
+def test_default_selection_rejects_nonrepresentable_official_baseline_ndb() -> None:
+    baseline = _baseline("NDB", "NULL", "ZB", 44500, 36.0, 106.0, 1)
+    baseline = replace(baseline, magnetic_variation=None)
+
+    result = select_default_navaids([], _index(baseline))
+
+    assert result.navaid_selection_verified is False
+    assert result.selected_navaids == ()
+    assert len(result.baseline_projection_rejections) == 1
 
 
 def test_default_selection_does_not_project_unchanged_ndb_or_vor_delta() -> None:
@@ -176,9 +283,10 @@ def test_default_selection_does_not_project_unchanged_ndb_or_vor_delta() -> None
     result = select_default_navaids([unchanged_ndb, vor_delta], baseline)
 
     assert result.navaid_selection_verified is True
-    assert result.selected_navaids == ()
+    assert len(result.selected_navaids) == 1
     assert result.selected_missing_navaids == ()
     assert result.property_corrections == ()
+    assert [item.baseline.ident for item in result.baseline_preservations] == ["EQ"]
     report = result.to_report()
     assert report["strict_property_delta"] == 1
     assert report["unselected_property_deltas"] == 1
@@ -197,8 +305,9 @@ def test_default_selection_requires_direct_ndb_csv_provenance_for_correction() -
     result = select_default_navaids([raw], baseline)
 
     assert result.navaid_selection_verified is True
-    assert result.selected_navaids == ()
+    assert len(result.selected_navaids) == 1
     assert result.property_corrections == ()
+    assert [item.baseline.ident for item in result.baseline_preservations] == ["DM"]
     assert result.to_report()["unselected_property_deltas"] == 1
 
 

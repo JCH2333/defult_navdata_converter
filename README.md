@@ -9,6 +9,7 @@
 - 只读解析 424 2608 原始 CSV/PDF，以机场、跑道、ILS、终端程序和主要导航内容建立统一中间模型。
 - 使用 `RTE_SEG.csv` 航路、端点和终端文档作为内容来源。
 - 只读复制官方 `navigraph-nav-base` 与 `navigraph-nav-jepp` 全球基线。
+- 在中国 NDB 覆盖层中明确区分 424 新增、直接 `NDB.csv` 修订与官方基线保留；官方字段仅用于保留原有基线，绝不由参考成品反向补写。
 - 生成符合 SDK `bglcomp.xsd` 的确定性设施 XML。
 - 自动探测 MSFS 2024 SDK `fspackagetool.exe`。
 - 通过纯 ASCII 暂存项目调用 Package Tool，生成 BGL、`bglIndex.bout`、包元数据与 ContentInfo。
