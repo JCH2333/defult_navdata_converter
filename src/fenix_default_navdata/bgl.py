@@ -14,8 +14,8 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+from .iap_coverage import iap_chart_roles, matching_iap_charts
 from .model import Navaid, NavModel, Runway, is_china_icao
-from .pdf_charts import approach_procedure_name_candidates
 from .profile import Cycle
 from .source import romanize_name
 
@@ -1163,48 +1163,11 @@ def _approach_type(label: str) -> str:
 
 
 def _iap_matching_charts(model: NavModel, segment) -> list:
-    return [
-        chart for chart in model.procedure_charts
-        if chart.airport == segment.airport
-        and chart.chart_type == "instrument-approach-index"
-        and segment.runway in chart.runways
-        and segment.label in approach_procedure_name_candidates(
-            chart.chart_name, chart.runways, segment.airport,
-        )
-    ]
+    return matching_iap_charts(model, segment)
 
 
 def _iap_chart_roles(model: NavModel, segment) -> dict[str, set[str]]:
-    """Return only role labels from one source-identifiable approach chart.
-
-    A database-coding section can match several published approach plates on
-    the same runway.  The final main-approach fix disambiguates those plates
-    only when exactly one chart explicitly calls it MAPT.  Otherwise no chart
-    role is projected, rather than borrowing labels from an ambiguous plate.
-    """
-    charts = _iap_matching_charts(model, segment)
-    if len(charts) > 1 and segment.legs and segment.legs[-1].fix_ident:
-        final_fix = segment.legs[-1].fix_ident.upper()
-        map_charts = [
-            chart
-            for chart in charts
-            if any(
-                route_fix.ident.upper() == final_fix
-                and route_fix.role.upper() in {"MAP", "MAPT"}
-                for route_fix in chart.route_fixes
-            )
-        ]
-        if len(map_charts) == 1:
-            charts = map_charts
-    if len(charts) != 1:
-        return {}
-    roles: dict[str, set[str]] = {}
-    for route_fix in charts[0].route_fixes:
-        ident = route_fix.ident.strip().upper()
-        role = route_fix.role.strip().upper()
-        if ident and role:
-            roles.setdefault(ident, set()).add(role)
-    return roles
+    return iap_chart_roles(model, segment)
 
 
 def _with_iap_chart_roles(legs, roles: dict[str, set[str]]):

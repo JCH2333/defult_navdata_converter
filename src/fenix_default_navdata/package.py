@@ -304,6 +304,7 @@ def build_candidate(
             "rejected_records": len(model.rejected_records),
             "rejected_procedures": len(model.rejected_procedures),
         },
+        "iap_coverage": model.iap_coverage,
         "packages": {},
         "byte_equal_reference": False,
         "flight_validation": {

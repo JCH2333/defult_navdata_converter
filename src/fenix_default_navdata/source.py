@@ -10,6 +10,7 @@ from pathlib import Path
 from pypinyin import lazy_pinyin
 import pymupdf
 
+from .iap_coverage import analyze_iap_coverage
 from .model import CN_PREFIXES, Airport, AirwayLeg, Holding, NavModel, Navaid, ProcedureSegment, RejectedProcedure, RejectedRecord, Runway, SourceRef, TerminalWaypoint, Waypoint, is_china_icao
 from .pdf_charts import (
     _is_instrument_approach_index_row,
@@ -862,6 +863,40 @@ def _load_terminal_standard_procedure_charts(model: NavModel, pdf_cache: Path | 
 
 
 def _reject_unparsed_charts(model: NavModel) -> None:
+    model.iap_coverage = analyze_iap_coverage(model)
+    unresolved = model.iap_coverage.get("unresolved_groups", [])
+    if isinstance(unresolved, list) and unresolved:
+        reasons = {
+            "no_unique_primary": "没有唯一的主进近数据库编码段",
+            "empty_primary": "主进近数据库编码段没有腿",
+            "no_matching_chart": "没有匹配的仪表进近图页",
+            "ambiguous_chart": "匹配多个仪表进近图页且无法由 MAP/MAPT 唯一消歧",
+        }
+        for item in unresolved:
+            if not isinstance(item, dict):
+                continue
+            source = item.get("source")
+            if not isinstance(source, dict):
+                source = {}
+            model.rejected_procedures.append(RejectedProcedure(
+                str(item.get("airport") or ""),
+                str(item.get("label") or ""),
+                reasons.get(
+                    str(item.get("status") or ""),
+                    "IAP 来源证据尚未达到唯一投影条件",
+                ),
+                SourceRef(
+                    str(source.get("file") or ""),
+                    source.get("row") if isinstance(source.get("row"), int) else None,
+                    source.get("page") if isinstance(source.get("page"), int) else None,
+                    str(source.get("sha256")) if source.get("sha256") else None,
+                ),
+            ))
+        return
+
+    # Small fixtures may contain only Charts.csv and no database-coded
+    # segments. Preserve their page-level rejection behavior for regression
+    # coverage; full 2608 data uses the group-level audit above.
     terminal = model.root / "Terminal"
     if not terminal.is_dir():
         return
@@ -880,4 +915,9 @@ def _reject_unparsed_charts(model: NavModel) -> None:
                 continue
             if not _is_instrument_approach_index_row(row):
                 continue
-            model.rejected_procedures.append(RejectedProcedure(airport, chart, "终端 PDF 语义提取尚未完成", SourceRef(str(index.relative_to(model.root)), row_number)))
+            model.rejected_procedures.append(RejectedProcedure(
+                airport,
+                chart,
+                "没有对应的数据库编码主进近段",
+                SourceRef(str(index.relative_to(model.root)), row_number),
+            ))

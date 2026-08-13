@@ -311,3 +311,6 @@ class NavModel:
     procedure_charts: list[ProcedureChart] = field(default_factory=list)
     procedure_segments: list[ProcedureSegment] = field(default_factory=list)
     holdings: list[Holding] = field(default_factory=list)
+    # Audit-only summary of source-backed IAP coverage.  Target adapters must
+    # not treat role evidence as proof that every chart leg was decoded.
+    iap_coverage: dict[str, object] = field(default_factory=dict)
