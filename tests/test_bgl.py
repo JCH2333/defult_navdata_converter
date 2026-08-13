@@ -161,6 +161,28 @@ def test_enroute_projection_skips_records_without_source_proven_regions(tmp_path
     assert root.findall("Waypoint") == []
     assert projection.skipped_enroute_waypoints == 1
     assert projection.skipped_airway_legs == 1
+    assert projection.skipped_airway_leg_details == (
+        {
+            "airway": "R1",
+            "sequence": 1,
+            "source": {"file": "RTE_SEG.csv", "row": 2},
+            "reasons": ["missing_end_region"],
+            "start": {
+                "ident": "KNOWN",
+                "type": "DESIGNATED_POINT",
+                "region": "ZB",
+                "latitude": 35.0,
+                "longitude": 105.0,
+            },
+            "end": {
+                "ident": "UNRES",
+                "type": "DESIGNATED_POINT",
+                "region": "",
+                "latitude": 36.0,
+                "longitude": 106.0,
+            },
+        },
+    )
 
 
 def test_airport_projection_emits_source_backed_holding_pattern(tmp_path: Path):

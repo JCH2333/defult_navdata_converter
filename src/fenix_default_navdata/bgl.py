@@ -41,6 +41,7 @@ class XmlProjection:
     airway_routes: int
     skipped_enroute_waypoints: int
     skipped_airway_legs: int
+    skipped_airway_leg_details: tuple[dict[str, object], ...]
     procedure_segments: int
     rejected_records: int
     rejected_procedures: int
@@ -1446,7 +1447,7 @@ def _append_enroute(
     root: ET.Element,
     model: NavModel,
     selected_navaids: tuple[Navaid, ...] | None = None,
-) -> tuple[int, int, int, int, int]:
+) -> tuple[int, int, int, int, int, tuple[dict[str, object], ...]]:
     """Write only enroute records that meet the SDK's required region contract."""
     points = [point for point in model.waypoints if point.country]
     skipped_waypoints = len(model.waypoints) - len(points)
@@ -1461,7 +1462,56 @@ def _append_enroute(
         and leg.start_country
         and leg.end_country
     ]
-    skipped_legs = len(model.airway_legs) - len(resolved_legs)
+    skipped_legs_detail = []
+    for leg in model.airway_legs:
+        if leg in resolved_legs:
+            continue
+        reasons = []
+        if not leg.start_country:
+            reasons.append("missing_start_region")
+        if not leg.end_country:
+            reasons.append("missing_end_region")
+        if (
+            leg.start_latitude is None
+            or leg.start_longitude is None
+        ):
+            reasons.append("missing_start_coordinate")
+        if (
+            leg.end_latitude is None
+            or leg.end_longitude is None
+        ):
+            reasons.append("missing_end_coordinate")
+        skipped_legs_detail.append({
+            "airway": leg.airway,
+            "sequence": leg.sequence,
+            "source": {
+                "file": leg.source.file,
+                "row": leg.source.row,
+            },
+            "reasons": reasons,
+            "start": {
+                "ident": leg.start_ident,
+                "type": leg.start_type,
+                "region": leg.start_country,
+                "latitude": leg.start_latitude,
+                "longitude": leg.start_longitude,
+            },
+            "end": {
+                "ident": leg.end_ident,
+                "type": leg.end_type,
+                "region": leg.end_country,
+                "latitude": leg.end_latitude,
+                "longitude": leg.end_longitude,
+            },
+        })
+    skipped_legs_detail.sort(
+        key=lambda item: (
+            str(item["airway"]),
+            int(item["sequence"]),
+            int((item["source"] or {}).get("row") or 0),
+        )
+    )
+    skipped_legs = len(skipped_legs_detail)
     for leg in resolved_legs:
         if leg.start_latitude is not None and leg.start_longitude is not None:
             points.append(type("_Point", (), {
@@ -1613,6 +1663,7 @@ def _append_enroute(
         len({leg.airway for leg in resolved_legs}),
         skipped_waypoints,
         skipped_legs,
+        tuple(skipped_legs_detail),
     )
 
 
@@ -1823,6 +1874,7 @@ def write_bglcomp_xml(
     airway_routes = 0
     skipped_enroute_waypoints = 0
     skipped_airway_legs = 0
+    skipped_airway_leg_details: tuple[dict[str, object], ...] = ()
     if scope in {"all", "enroute"}:
         (
             enroute_waypoints,
@@ -1830,6 +1882,7 @@ def write_bglcomp_xml(
             airway_routes,
             skipped_enroute_waypoints,
             skipped_airway_legs,
+            skipped_airway_leg_details,
         ) = _append_enroute(root, model, selected_navaids)
 
     ET.indent(root, space="  ")
@@ -1854,6 +1907,7 @@ def write_bglcomp_xml(
         airway_routes=airway_routes,
         skipped_enroute_waypoints=skipped_enroute_waypoints,
         skipped_airway_legs=skipped_airway_legs,
+        skipped_airway_leg_details=skipped_airway_leg_details,
         procedure_segments=projected_procedures,
         rejected_records=len(model.rejected_records),
         rejected_procedures=len(model.rejected_procedures),
