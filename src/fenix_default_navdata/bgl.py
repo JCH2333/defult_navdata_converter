@@ -1174,6 +1174,59 @@ def _iap_matching_charts(model: NavModel, segment) -> list:
     ]
 
 
+def _iap_chart_roles(model: NavModel, segment) -> dict[str, set[str]]:
+    """Return only role labels from one source-identifiable approach chart.
+
+    A database-coding section can match several published approach plates on
+    the same runway.  The final main-approach fix disambiguates those plates
+    only when exactly one chart explicitly calls it MAPT.  Otherwise no chart
+    role is projected, rather than borrowing labels from an ambiguous plate.
+    """
+    charts = _iap_matching_charts(model, segment)
+    if len(charts) > 1 and segment.legs and segment.legs[-1].fix_ident:
+        final_fix = segment.legs[-1].fix_ident.upper()
+        map_charts = [
+            chart
+            for chart in charts
+            if any(
+                route_fix.ident.upper() == final_fix
+                and route_fix.role.upper() in {"MAP", "MAPT"}
+                for route_fix in chart.route_fixes
+            )
+        ]
+        if len(map_charts) == 1:
+            charts = map_charts
+    if len(charts) != 1:
+        return {}
+    roles: dict[str, set[str]] = {}
+    for route_fix in charts[0].route_fixes:
+        ident = route_fix.ident.strip().upper()
+        role = route_fix.role.strip().upper()
+        if ident and role:
+            roles.setdefault(ident, set()).add(role)
+    return roles
+
+
+def _with_iap_chart_roles(legs, roles: dict[str, set[str]]):
+    """Attach only printed IAP role flags to matching source procedure legs."""
+    role_flags = {
+        "IAF": "A",
+        "IF": "I",
+        "FAF": "F",
+        "MAP": "M",
+        "MAPT": "M",
+    }
+    projected = []
+    for leg in legs:
+        markers = str(leg.waypoint_description_code or "").replace(" ", "").upper()
+        for role in sorted(roles.get((leg.fix_ident or "").upper(), set())):
+            marker = role_flags.get(role)
+            if marker and marker not in markers:
+                markers += marker
+        projected.append(replace(leg, waypoint_description_code=markers))
+    return tuple(projected)
+
+
 def _split_iap_at_explicit_runway_map(model: NavModel, segment):
     """Split a combined source section only at an explicit runway MAP."""
     charts = _iap_matching_charts(model, segment)
@@ -1248,6 +1301,20 @@ def _append_approaches(
         split = _split_iap_at_explicit_runway_map(model, primary[0])
         primary_legs = primary[0].legs if split is None else split[0]
         split_missed_legs = () if split is None else split[1]
+        roles = _iap_chart_roles(
+            model,
+            replace(primary[0], legs=tuple(primary_legs)),
+        )
+        primary_legs = _with_iap_chart_roles(primary_legs, roles)
+        split_missed_legs = _with_iap_chart_roles(split_missed_legs, roles)
+        transitions = [
+            replace(segment, legs=_with_iap_chart_roles(segment.legs, roles))
+            for segment in transitions
+        ]
+        missed = [
+            replace(segment, legs=_with_iap_chart_roles(segment.legs, roles))
+            for segment in missed
+        ]
         all_legs = list(primary_legs) + [
             leg for segment in transitions for leg in segment.legs
         ] + list(split_missed_legs) + [

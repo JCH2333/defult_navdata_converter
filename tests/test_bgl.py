@@ -4,6 +4,7 @@ import xml.etree.ElementTree as ET
 
 from fenix_default_navdata.bgl import (
     CompilerInfo,
+    _iap_chart_roles,
     compile_package,
     find_compiler,
     write_bglcomp_xml,
@@ -12,6 +13,7 @@ from fenix_default_navdata.bgl import (
 from fenix_default_navdata.model import (
     Airport,
     AirwayLeg,
+    ChartRouteFix,
     ChartTerminalLeg,
     Holding,
     Ils,
@@ -331,6 +333,114 @@ def test_airport_projection_maps_raw_chinese_procedure_kinds_and_iap_sections(
     missed = approach.find("MissedApproachLegs")
     assert missed is not None
     assert [leg.attrib["fixIdent"] for leg in missed.findall("Leg")] == ["MISSED", "MAHF"]
+
+
+def test_iap_chart_roles_select_unique_map_chart_and_project_role_flags(tmp_path: Path):
+    model = NavModel(Path("source"))
+    source = SourceRef("approach.pdf", 1, 1, "hash")
+    model.airports["a"] = Airport(
+        "a", "ZBCF", "ZBCF", 35.0, 105.0, 1000, 18000, 180, source,
+    )
+    model.runways.append(Runway(
+        "r", "a", "03", 30.0, 10000, 150, "ASP", 1000, source,
+    ))
+    model.terminal_waypoints.extend([
+        TerminalWaypoint("iaf", "ZBCF", "IAF01", 35.10, 105.0, source, "ZB"),
+        TerminalWaypoint("faf", "ZBCF", "FAF01", 35.05, 105.0, source, "ZB"),
+        TerminalWaypoint("map", "ZBCF", "RW03", 35.01, 105.0, source, "ZB"),
+    ])
+    primary = ProcedureSegment(
+        "ZBCF", "R03", "approach", "03", "", (
+            ChartTerminalLeg(
+                "R03", "03", "IF", "IAF01", "fixture", sequence=1,
+                fix_region="ZB", fix_type="TERMINAL_WAYPOINT",
+                fix_latitude=35.10, fix_longitude=105.0,
+            ),
+            ChartTerminalLeg(
+                "R03", "03", "TF", "FAF01", "fixture", sequence=2,
+                fix_region="ZB", fix_type="TERMINAL_WAYPOINT",
+                fix_latitude=35.05, fix_longitude=105.0,
+            ),
+            ChartTerminalLeg(
+                "R03", "03", "TF", "RW03", "fixture", sequence=3,
+                fix_region="ZB", fix_type="TERMINAL_WAYPOINT",
+                fix_latitude=35.01, fix_longitude=105.0,
+            ),
+        ), source,
+    )
+    model.procedure_segments.append(primary)
+    model.procedure_charts.extend([
+        ProcedureChart(
+            "ZBCF", "ZBCF-rnp-a.pdf", 1, "instrument-approach-index",
+            "RNP RWY03", "text", (), ("03",), (), (), (), source,
+            route_fixes=(ChartRouteFix("OTHER", "MAPT"),),
+        ),
+        ProcedureChart(
+            "ZBCF", "ZBCF-rnp-b.pdf", 1, "instrument-approach-index",
+            "RNP RWY03", "text", (), ("03",), (), (), (), source,
+            route_fixes=(
+                ChartRouteFix("IAF01", "IAF"),
+                ChartRouteFix("IAF01", "IF"),
+                ChartRouteFix("FAF01", "FAF"),
+                ChartRouteFix("RW03", "MAPT"),
+            ),
+        ),
+    ])
+
+    assert _iap_chart_roles(model, primary) == {
+        "IAF01": {"IAF", "IF"},
+        "FAF01": {"FAF"},
+        "RW03": {"MAPT"},
+    }
+
+    output = tmp_path / "iap-role-flags.xml"
+    write_bglcomp_xml(model, DEFAULT_CYCLE, output, scope="airports")
+
+    legs = ET.parse(output).getroot().findall("Airport/Approach/ApproachLegs/Leg")
+    assert [leg.attrib["fixIdent"] for leg in legs] == ["IAF01", "FAF01", "RW03"]
+    assert legs[0].attrib["isIAF"] == "TRUE"
+    assert legs[0].attrib["isIF"] == "TRUE"
+    assert legs[1].attrib["isFAF"] == "TRUE"
+    assert legs[2].attrib["isMAP"] == "TRUE"
+
+
+def test_iap_chart_roles_leave_ambiguous_plates_unmarked(tmp_path: Path):
+    model = NavModel(Path("source"))
+    source = SourceRef("approach.pdf", 1, 1, "hash")
+    model.airports["a"] = Airport(
+        "a", "ZBCF", "ZBCF", 35.0, 105.0, 1000, 18000, 180, source,
+    )
+    model.runways.append(Runway(
+        "r", "a", "03", 30.0, 10000, 150, "ASP", 1000, source,
+    ))
+    model.terminal_waypoints.append(
+        TerminalWaypoint("final", "ZBCF", "FINAL", 35.05, 105.0, source, "ZB"),
+    )
+    primary = ProcedureSegment(
+        "ZBCF", "R03", "approach", "03", "", (
+            ChartTerminalLeg(
+                "R03", "03", "TF", "FINAL", "fixture", sequence=1,
+                fix_region="ZB", fix_type="TERMINAL_WAYPOINT",
+                fix_latitude=35.05, fix_longitude=105.0,
+            ),
+        ), source,
+    )
+    model.procedure_segments.append(primary)
+    for filename in ("first.pdf", "second.pdf"):
+        model.procedure_charts.append(ProcedureChart(
+            "ZBCF", filename, 1, "instrument-approach-index", "RNP RWY03",
+            "text", (), ("03",), (), (), (), source,
+            route_fixes=(ChartRouteFix("FINAL", "MAPT"),),
+        ))
+
+    assert _iap_chart_roles(model, primary) == {}
+
+    output = tmp_path / "iap-ambiguous.xml"
+    write_bglcomp_xml(model, DEFAULT_CYCLE, output, scope="airports")
+
+    leg = ET.parse(output).getroot().find("Airport/Approach/ApproachLegs/Leg")
+    assert leg is not None
+    assert "isMAP" not in leg.attrib
 
 
 def test_terminal_coordinate_evidence_fills_missing_leg_identity(tmp_path: Path):
