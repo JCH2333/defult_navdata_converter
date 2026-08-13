@@ -1431,6 +1431,17 @@ def _waypoint_identity(
     )
 
 
+def _airway_waypoint_identity(
+    ident: str,
+    country: str | None,
+    latitude: float,
+    longitude: float,
+) -> tuple[str, str, str]:
+    """Return the NAMED shadow identity required by MSFS airway records."""
+    normalized_ident = _normalized_waypoint_ident(ident, latitude, longitude)
+    return ("NAMED", (country or "").upper()[:2], normalized_ident)
+
+
 def _append_enroute(
     root: ET.Element,
     model: NavModel,
@@ -1483,31 +1494,28 @@ def _append_enroute(
             str(item.key),
         ),
     ):
-        deduped.setdefault(_waypoint_identity(
+        deduped.setdefault(_airway_waypoint_identity(
             str(point.ident),
             str(point.country or ""),
             float(point.latitude),
             float(point.longitude),
-            str(getattr(point, "source_type", "")),
         ), point)
     route_children: dict[
         tuple[str, str, str],
         list[tuple[str, str, str, dict[str, str]]],
     ] = {}
     for leg in sorted(resolved_legs, key=lambda item: (item.airway, item.sequence)):
-        start_key = _waypoint_identity(
+        start_key = _airway_waypoint_identity(
             leg.start_ident,
             leg.start_country,
             leg.start_latitude,
             leg.start_longitude,
-            leg.start_type,
         )
-        end_key = _waypoint_identity(
+        end_key = _airway_waypoint_identity(
             leg.end_ident,
             leg.end_country,
             leg.end_latitude,
             leg.end_longitude,
-            leg.end_type,
         )
         route_children.setdefault(start_key, []).append((
             leg.airway,
@@ -1516,7 +1524,7 @@ def _append_enroute(
             _attrs(
             waypointRegion=end_key[1],
             waypointIdent=end_key[2],
-            waypointType=_route_point_type(leg.end_type),
+            waypointType="NAMED",
             altitudeMinimum=_feet(leg.minimum_altitude_ft or 0),
         )))
         route_children.setdefault(end_key, []).append((
@@ -1526,19 +1534,18 @@ def _append_enroute(
             _attrs(
             waypointRegion=start_key[1],
             waypointIdent=start_key[2],
-            waypointType=_route_point_type(leg.start_type),
+            waypointType="NAMED",
             altitudeMinimum=_feet(leg.minimum_altitude_ft or 0),
         )))
     ordered_points = sorted(deduped.values(), key=lambda item: (
         str(item.ident).upper(), float(item.latitude), float(item.longitude), str(item.key),
     ))
     for point in ordered_points:
-        identity = _waypoint_identity(
+        identity = _airway_waypoint_identity(
             str(point.ident),
             str(point.country or ""),
             float(point.latitude),
             float(point.longitude),
-            str(getattr(point, "source_type", "")),
         )
         point_element = ET.SubElement(root, "Waypoint", _attrs(
             lat=_float(point.latitude),

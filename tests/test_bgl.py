@@ -672,9 +672,21 @@ def test_enroute_projection_normalizes_sdk_identity_and_route_requirements(tmp_p
     }
 
 
-def test_enroute_projection_preserves_route_endpoint_types(tmp_path: Path):
+def test_enroute_projection_uses_named_route_shadows_and_preserves_facilities(
+    tmp_path: Path,
+):
     model = NavModel(Path("source"))
     source = SourceRef("RTE_SEG.csv", 2)
+    model.navaids.extend((
+        Navaid(
+            "vor", "VOR01", "VOR", "VOR one", 30.0, 110.0,
+            113.0, 0.0, 0, "ZH", SourceRef("VOR.csv", 3),
+        ),
+        Navaid(
+            "ndb", "NDB01", "NDB", "NDB one", 31.0, 111.0,
+            350.0, 0.0, 0, "ZH", SourceRef("NDB.csv", 4),
+        ),
+    ))
     model.airway_legs.append(AirwayLeg(
         "A1", 1, "VOR01", "NDB01", source,
         start_latitude=30.0, start_longitude=110.0,
@@ -691,10 +703,12 @@ def test_enroute_projection_preserves_route_endpoint_types(tmp_path: Path):
     end = root.find("Waypoint[@waypointIdent='NDB01']")
     assert start is not None
     assert end is not None
-    assert start.attrib["waypointType"] == "VOR"
-    assert end.attrib["waypointType"] == "NDB"
-    assert start.find("Route/Next").attrib["waypointType"] == "NDB"
-    assert end.find("Route/Previous").attrib["waypointType"] == "VOR"
+    assert start.attrib["waypointType"] == "NAMED"
+    assert end.attrib["waypointType"] == "NAMED"
+    assert start.find("Route/Next").attrib["waypointType"] == "NAMED"
+    assert end.find("Route/Previous").attrib["waypointType"] == "NAMED"
+    assert root.find("Vor[@ident='VOR01']") is not None
+    assert root.find("Ndb[@ident='NDB01']") is not None
 
 
 def test_leg_projection_uses_type_specific_semantic_fields(tmp_path: Path):
