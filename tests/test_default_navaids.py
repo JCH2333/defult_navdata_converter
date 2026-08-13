@@ -197,6 +197,8 @@ def test_default_selection_preserves_unreplaced_official_china_ndb() -> None:
         "raw_424_correction": 0,
         "official_baseline_preservation": 1,
         "rejected_ambiguous": 0,
+        "official_baseline_precedence": 0,
+        "rejected_sdk_identity_conflict": 0,
     }
     assert report["official_baseline_preservation_records"][0]["reason"] == (
         "official_baseline_preservation"
@@ -264,6 +266,52 @@ def test_default_selection_rejects_nonrepresentable_official_baseline_ndb() -> N
     assert result.navaid_selection_verified is False
     assert result.selected_navaids == ()
     assert len(result.baseline_projection_rejections) == 1
+
+
+def test_default_selection_uses_verified_official_precedence_for_2608_gj_conflict() -> None:
+    raw = _raw(
+        "gj-raw", "GJ", "NDB", latitude=28.0738888889, longitude=112.2113888889,
+        frequency=245, country="ZG", source_file="NDB.csv",
+    )
+    baseline = _baseline(
+        "NDB", "GJ", "ZG", 24500, 28.0833358765, 112.2166748047, 1,
+    )
+
+    result = select_default_navaids([raw], _index(baseline))
+
+    assert result.navaid_selection_verified is True
+    assert result.selected_missing_navaids == ()
+    assert len(result.baseline_preservations) == 1
+    assert result.selected_navaids == (
+        result.baseline_preservations[0].projected,
+    )
+    assert len(result.sdk_identity_conflicts) == 1
+    assert result.sdk_identity_conflicts[0].resolution == (
+        "official_baseline_precedence"
+    )
+    report = result.to_report()
+    assert report["resolved_sdk_identity_conflicts"] == 1
+    assert report["unresolved_sdk_identity_conflicts"] == 0
+
+
+def test_default_selection_rejects_unlisted_sdk_identity_conflict() -> None:
+    raw = _raw(
+        "unknown-raw", "XX", "NDB", latitude=30.0, longitude=110.0,
+        frequency=245, country="ZG", source_file="NDB.csv",
+    )
+    baseline = _baseline(
+        "NDB", "XX", "ZG", 24500, 31.0, 111.0, 1,
+    )
+
+    result = select_default_navaids([raw], _index(baseline))
+
+    assert result.navaid_selection_verified is False
+    assert result.selected_navaids == ()
+    assert len(result.sdk_identity_conflicts) == 1
+    assert result.sdk_identity_conflicts[0].resolution == "unresolved"
+    assert result.to_report()["projection_categories"][
+        "rejected_sdk_identity_conflict"
+    ] == 1
 
 
 def test_default_selection_does_not_project_unchanged_ndb_or_vor_delta() -> None:

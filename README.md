@@ -10,6 +10,7 @@
 - 使用 `RTE_SEG.csv` 航路、端点和终端文档作为内容来源。
 - 只读复制官方 `navigraph-nav-base` 与 `navigraph-nav-jepp` 全球基线。
 - 在中国 NDB 覆盖层中明确区分 424 新增、直接 `NDB.csv` 修订与官方基线保留；官方字段仅用于保留原有基线，绝不由参考成品反向补写。
+- 对 2608R1 已验证的 `GJ/ZG/245 kHz` SDK 身份冲突保留官方实体；未登记的同类冲突会阻止候选输出，避免生成 Package Tool 无法加载的重复导航台。
 - 生成符合 SDK `bglcomp.xsd` 的确定性设施 XML。
 - 自动探测 MSFS 2024 SDK `fspackagetool.exe`。
 - 通过纯 ASCII 暂存项目调用 Package Tool，生成 BGL、`bglIndex.bout`、包元数据与 ContentInfo。

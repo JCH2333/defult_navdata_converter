@@ -58,6 +58,34 @@ class BaselineNavaidProjectionRejection:
 
 
 @dataclass(frozen=True)
+class SdkNavaidIdentityConflict:
+    """A raw and official facility share an SDK identity but are far apart."""
+
+    raw: Navaid
+    baseline: BaselineNavaid
+    distance_nm: float
+    resolution: str
+
+
+# 2608R1 has one source-backed identity collision that the reference overlay
+# resolves by retaining the official baseline entity.  Keep the exception
+# exact and cycle-specific; an unlisted collision remains a hard validation
+# failure instead of silently dropping a raw facility.
+_KNOWN_OFFICIAL_PRECEDENCE_CONFLICTS = frozenset({
+    (
+        "NDB",
+        "GJ",
+        "ZG",
+        24500.0,
+        28.073889,
+        112.211389,
+        28.083336,
+        112.216675,
+    ),
+})
+
+
+@dataclass(frozen=True)
 class DefaultNavaidSelection:
     """Default-overlay navaid selection with an audit trail for every outcome.
 
@@ -84,6 +112,7 @@ class DefaultNavaidSelection:
     physical_ambiguities: tuple[PhysicalNavaidAmbiguity, ...]
     baseline_raw_ambiguities: tuple[BaselineNavaidRawAmbiguity, ...]
     baseline_projection_rejections: tuple[BaselineNavaidProjectionRejection, ...]
+    sdk_identity_conflicts: tuple[SdkNavaidIdentityConflict, ...]
     coordinate_tolerance_nm: float
 
     @property
@@ -93,6 +122,10 @@ class DefaultNavaidSelection:
             and not self.physical_ambiguities
             and not self.baseline_raw_ambiguities
             and not self.baseline_projection_rejections
+            and all(
+                item.resolution == "official_baseline_precedence"
+                for item in self.sdk_identity_conflicts
+            )
         )
 
     def to_report(self) -> dict[str, object]:
@@ -158,6 +191,15 @@ class DefaultNavaidSelection:
             "physical_ambiguities": len(self.physical_ambiguities),
             "baseline_raw_ambiguities": len(self.baseline_raw_ambiguities),
             "baseline_projection_rejections": len(self.baseline_projection_rejections),
+            "sdk_identity_conflicts": len(self.sdk_identity_conflicts),
+            "resolved_sdk_identity_conflicts": sum(
+                item.resolution == "official_baseline_precedence"
+                for item in self.sdk_identity_conflicts
+            ),
+            "unresolved_sdk_identity_conflicts": sum(
+                item.resolution == "unresolved"
+                for item in self.sdk_identity_conflicts
+            ),
             "strict_ambiguities": len(self.strict_diff.ambiguous),
             "coordinate_tolerance_nm": self.coordinate_tolerance_nm,
             "projection_categories": {
@@ -167,6 +209,14 @@ class DefaultNavaidSelection:
                 "rejected_ambiguous": (
                     len(self.physical_ambiguities)
                     + len(self.baseline_raw_ambiguities)
+                ),
+                "official_baseline_precedence": sum(
+                    item.resolution == "official_baseline_precedence"
+                    for item in self.sdk_identity_conflicts
+                ),
+                "rejected_sdk_identity_conflict": sum(
+                    item.resolution == "unresolved"
+                    for item in self.sdk_identity_conflicts
                 ),
             },
             "selected_by_kind": {
@@ -264,6 +314,15 @@ class DefaultNavaidSelection:
                 }
                 for item in self.baseline_projection_rejections[:100]
             ],
+            "sdk_identity_conflict_records": [
+                {
+                    "raw": raw_payload(item.raw),
+                    "baseline": baseline_payload(item.baseline),
+                    "distance_nm": item.distance_nm,
+                    "resolution": item.resolution,
+                }
+                for item in self.sdk_identity_conflicts[:100]
+            ],
         }
 
 
@@ -289,6 +348,87 @@ def _raw_physical_identity(item: Navaid) -> tuple[object, ...]:
         round(item.latitude, 5),
         round(item.longitude, 5),
     )
+
+
+def _sdk_identity(item: Navaid) -> tuple[object, ...]:
+    """Return the facility identity enforced by the SDK's duplicate check."""
+    return (
+        item.kind.upper(),
+        item.ident.strip().upper(),
+        item.country.strip().upper()[:2],
+        round(_source_frequency_khz(item), 3),
+    )
+
+
+def _baseline_sdk_identity(item: BaselineNavaid) -> tuple[object, ...]:
+    return (
+        item.kind.upper(),
+        item.ident.strip().upper(),
+        item.region.strip().upper()[:2],
+        round(item.frequency_khz, 3),
+    )
+
+
+def _known_identity_conflict(
+    raw: Navaid,
+    baseline: BaselineNavaid,
+) -> bool:
+    return (
+        raw.source.file.strip().casefold() == "ndb.csv"
+        and (
+            _sdk_identity(raw)
+            + (
+                round(raw.latitude, 6),
+                round(raw.longitude, 6),
+                round(baseline.latitude, 6),
+                round(baseline.longitude, 6),
+            )
+        ) in _KNOWN_OFFICIAL_PRECEDENCE_CONFLICTS
+    )
+
+
+def _sdk_identity_conflicts(
+    raw: Iterable[Navaid],
+    baseline: BaselineIndex,
+    *,
+    coordinate_tolerance_nm: float,
+) -> tuple[SdkNavaidIdentityConflict, ...]:
+    """Find raw/official rows the SDK cannot represent simultaneously."""
+    result: list[SdkNavaidIdentityConflict] = []
+    seen: set[tuple[object, ...]] = set()
+    for raw_item in sorted(tuple(raw), key=_sort_raw):
+        raw_identity = _sdk_identity(raw_item)
+        for baseline_item in baseline.records:
+            if raw_identity != _baseline_sdk_identity(baseline_item):
+                continue
+            distance = _distance_nm(raw_item, baseline_item)
+            if distance <= coordinate_tolerance_nm:
+                continue
+            identity = (
+                raw_item.key,
+                baseline_item.identity,
+            )
+            if identity in seen:
+                continue
+            seen.add(identity)
+            result.append(SdkNavaidIdentityConflict(
+                raw=raw_item,
+                baseline=baseline_item,
+                distance_nm=distance,
+                resolution=(
+                    "official_baseline_precedence"
+                    if _known_identity_conflict(raw_item, baseline_item)
+                    else "unresolved"
+                ),
+            ))
+    return tuple(sorted(
+        result,
+        key=lambda item: (
+            _sort_raw(item.raw),
+            item.baseline.sort_key,
+            item.resolution,
+        ),
+    ))
 
 
 def _physical_candidates(
@@ -401,11 +541,22 @@ def select_default_navaids(
             physical_ambiguities=(),
             baseline_raw_ambiguities=(),
             baseline_projection_rejections=(),
+            sdk_identity_conflicts=(),
             coordinate_tolerance_nm=coordinate_tolerance_nm,
         )
 
     selected_missing: list[Navaid] = []
     suppressed: list[PhysicalNavaidMatch] = []
+    sdk_identity_conflicts = _sdk_identity_conflicts(
+        strict_diff.raw,
+        baseline,
+        coordinate_tolerance_nm=coordinate_tolerance_nm,
+    )
+    unresolved_sdk_conflicts = tuple(
+        item
+        for item in sdk_identity_conflicts
+        if item.resolution == "unresolved"
+    )
     physical_ambiguities: dict[tuple[object, ...], PhysicalNavaidAmbiguity] = {}
     raw_ndbs: dict[tuple[object, ...], Navaid] = {}
     for raw_item in sorted(
@@ -450,6 +601,12 @@ def select_default_navaids(
         )
 
     for raw_item in strict_diff.selected_navaids:
+        if any(
+            item.raw.key == raw_item.key
+            and item.resolution == "official_baseline_precedence"
+            for item in sdk_identity_conflicts
+        ):
+            continue
         candidates = candidates_for(raw_item)
         if len(candidates) == 1:
             suppressed.append(candidates[0])
@@ -529,6 +686,10 @@ def select_default_navaids(
         selected_missing = []
         property_corrections = []
         baseline_preservations = []
+    if unresolved_sdk_conflicts:
+        selected_missing = []
+        property_corrections = []
+        baseline_preservations = []
     selected = tuple(sorted(
         (
             *selected_missing,
@@ -562,5 +723,6 @@ def select_default_navaids(
             baseline_projection_rejections,
             key=lambda item: item.baseline.sort_key,
         )),
+        sdk_identity_conflicts=sdk_identity_conflicts,
         coordinate_tolerance_nm=coordinate_tolerance_nm,
     )
