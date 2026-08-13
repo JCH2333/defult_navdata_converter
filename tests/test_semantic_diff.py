@@ -57,9 +57,21 @@ def _default_value(field: str) -> object:
     return values[field]
 
 
-def _write_database(path: Path, rows: dict[str, list[dict[str, object]]]) -> Path:
+def _write_database(
+    path: Path,
+    rows: dict[str, list[dict[str, object]]],
+    *,
+    bgl_file_rows: int = 1,
+) -> Path:
     connection = sqlite3.connect(path)
     try:
+        connection.execute(
+            "CREATE TABLE bgl_file (bgl_file_id INTEGER PRIMARY KEY, filepath TEXT NOT NULL)"
+        )
+        connection.executemany(
+            "INSERT INTO bgl_file(bgl_file_id, filepath) VALUES (?, ?)",
+            ((index, f"source-{index}.bgl") for index in range(1, bgl_file_rows + 1)),
+        )
         for spec in TABLE_SPECS:
             columns = ", ".join(f'"{field}" BLOB' for field in spec.semantic_fields)
             connection.execute(f'CREATE TABLE "{spec.table}" ({columns})')
@@ -146,7 +158,10 @@ def test_semantic_diff_samples_are_stable_and_limited(tmp_path: Path):
         tmp_path / "candidate.sqlite",
         {"vor": [{"ident": "ZED"}, {"ident": "ALFA"}, {"ident": "BRAVO"}]},
     )
-    reference = _write_database(tmp_path / "reference.sqlite", {"vor": []})
+    reference = _write_database(
+        tmp_path / "reference.sqlite",
+        {"vor": [], "ndb": [{"ident": "REFERENCE-SEED"}]},
+    )
 
     report = semantic_diff(candidate, reference, tables=("vor",), sample_limit=2)
 
@@ -167,7 +182,10 @@ def test_semantic_diff_sorts_nullable_logical_keys_deterministically(tmp_path: P
             ],
         },
     )
-    reference = _write_database(tmp_path / "reference.sqlite", {"vor": []})
+    reference = _write_database(
+        tmp_path / "reference.sqlite",
+        {"vor": [], "ndb": [{"ident": "REFERENCE-SEED"}]},
+    )
 
     report = semantic_diff(candidate, reference, tables=("vor",), sample_limit=10)
 
@@ -207,11 +225,42 @@ def test_semantic_diff_reports_ambiguous_logical_keys_without_pairing_rows(tmp_p
 def test_semantic_diff_requires_the_selected_reader_table_contract(tmp_path: Path):
     candidate = tmp_path / "candidate.sqlite"
     reference = tmp_path / "reference.sqlite"
-    sqlite3.connect(candidate).close()
-    sqlite3.connect(reference).close()
+    _write_database(candidate, {"ndb": [{"ident": "CANDIDATE-SEED"}]})
+    _write_database(reference, {"ndb": [{"ident": "REFERENCE-SEED"}]})
+    for path in (candidate, reference):
+        connection = sqlite3.connect(path)
+        connection.execute('DROP TABLE "vor"')
+        connection.commit()
+        connection.close()
 
     with pytest.raises(SemanticDiffError, match="vor"):
         semantic_diff(candidate, reference, tables=("vor",))
+
+
+def test_semantic_diff_rejects_empty_bgl_file_output(tmp_path: Path):
+    candidate = _write_database(
+        tmp_path / "candidate.sqlite",
+        {"vor": [{"ident": "CANDIDATE"}]},
+        bgl_file_rows=0,
+    )
+    reference = _write_database(
+        tmp_path / "reference.sqlite",
+        {"vor": [{"ident": "REFERENCE"}]},
+    )
+
+    with pytest.raises(SemanticDiffError, match="bgl_file.*为空"):
+        semantic_diff(candidate, reference, tables=("vor",))
+
+
+def test_semantic_diff_rejects_reader_output_without_any_target_records(tmp_path: Path):
+    candidate = _write_database(tmp_path / "candidate.sqlite", {})
+    reference = _write_database(
+        tmp_path / "reference.sqlite",
+        {"vor": [{"ident": "REFERENCE"}]},
+    )
+
+    with pytest.raises(SemanticDiffError, match="目标设施表均为空"):
+        semantic_diff(candidate, reference)
 
 
 def test_cli_writes_semantic_diff_report(tmp_path: Path, capsys):
@@ -233,4 +282,6 @@ def test_cli_writes_semantic_diff_report(tmp_path: Path, capsys):
     saved = json.loads(output.read_text(encoding="utf-8"))
     assert saved["read_only"] is True
     assert saved["output"] == str(output.resolve())
+    assert saved["reader_output"]["candidate"]["bgl_file_rows"] == 1
+    assert saved["reader_output"]["reference"]["target_rows"]["ndb"] == 1
     assert json.loads(capsys.readouterr().out)["summary"]["candidate_only_logical_keys"] == 1

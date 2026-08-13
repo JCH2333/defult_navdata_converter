@@ -185,6 +185,61 @@ def _table_columns(
         ) from error
 
 
+def _reader_output_summary(
+    connection: sqlite3.Connection,
+    path: Path,
+    label: str,
+) -> dict[str, object]:
+    """确认 SQLite 确实是有读取结果的 Navdatareader 输出。
+
+    Navdatareader 在扫描失败时可能仍会留下完整、可查询的 SQLite。仅依赖
+    ``integrity_check`` 会把这种空结果误当成有效语义差分输入，因此这里额外
+    要求存在非空的 BGL 来源表，并至少有一类目标设施记录。
+    """
+    try:
+        tables = {
+            str(row[0]).lower()
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+    except sqlite3.DatabaseError as error:
+        raise SemanticDiffError(
+            f"无法读取{label} SQLite 的表目录: {path}: {error}"
+        ) from error
+
+    if "bgl_file" not in tables:
+        raise SemanticDiffError(f"{label} SQLite 缺少 Navdatareader bgl_file 表: {path}")
+
+    try:
+        bgl_file_rows = int(
+            connection.execute('SELECT COUNT(*) FROM "bgl_file"').fetchone()[0]
+        )
+        target_rows = {
+            spec.table: (
+                int(connection.execute(f'SELECT COUNT(*) FROM "{spec.table}"').fetchone()[0])
+                if spec.table in tables
+                else 0
+            )
+            for spec in TABLE_SPECS
+        }
+    except sqlite3.DatabaseError as error:
+        raise SemanticDiffError(
+            f"无法读取{label} SQLite 的 Navdatareader 输出统计: {path}: {error}"
+        ) from error
+
+    if bgl_file_rows == 0:
+        raise SemanticDiffError(f"{label} SQLite 的 bgl_file 表为空，读取器没有输出 BGL 来源: {path}")
+    if not any(target_rows.values()):
+        raise SemanticDiffError(
+            f"{label} SQLite 的目标设施表均为空，读取器没有输出有效设施: {path}"
+        )
+    return {
+        "bgl_file_rows": bgl_file_rows,
+        "target_rows": target_rows,
+    }
+
+
 def _normalize(
     value: object,
     field: str,
@@ -405,8 +460,14 @@ def semantic_diff(
     reference_path = reference_db.expanduser().resolve()
     candidate_connection = _open_readonly(candidate_path, "候选")
     try:
+        candidate_reader_output = _reader_output_summary(
+            candidate_connection, candidate_path, "候选"
+        )
         reference_connection = _open_readonly(reference_path, "参考")
         try:
+            reference_reader_output = _reader_output_summary(
+                reference_connection, reference_path, "参考"
+            )
             reports = {
                 spec.table: _table_report(
                     spec,
@@ -449,6 +510,10 @@ def semantic_diff(
         "read_only": True,
         "reference_values_redacted": True,
         "sample_limit": sample_limit,
+        "reader_output": {
+            "candidate": candidate_reader_output,
+            "reference": reference_reader_output,
+        },
         "tables": reports,
         "summary": summary,
         "has_differences": has_differences,
