@@ -162,6 +162,31 @@ def test_load_naip_recovers_blank_route_endpoint_firs_from_matching_424_records(
     assert next(point.country for point in model.waypoints if point.ident == "NOFIR") == ""
 
 
+def test_load_naip_uses_strict_serviced_airport_prefix_for_blank_waypoint_fir(
+    tmp_path: Path,
+) -> None:
+    root = _minimal_naip_root(tmp_path, "娌ラ潚")
+    _write_csv(root, "DESIGNATED_POINT.csv", "\n".join((
+        "SIGNIFICANT_POINT_ID,CODE_ID,TXT_NAME,GEO_LAT_ACCURACY,GEO_LONG_ACCURACY,SERVICED_AIRPORT,CODE_FIR",
+        "valid,P216,VALID,N350000,E1050000,ZUHY,",
+        "short,SHORT,SHORT,N360000,E1060000,ZU,",
+        "foreign,FOREIGN,FOREIGN,N370000,E1070000,EDDF,",
+        "explicit,EXPLICIT,EXPLICIT,N380000,E1080000,ZGAA,\u5317\u4eac\u60c5\u62a5\u533a",
+    )))
+
+    model = load_naip(root, include_terminal_documents=False)
+
+    assert {
+        point.ident: point.country
+        for point in model.waypoints
+    } == {
+        "P216": "ZU",
+        "SHORT": "",
+        "FOREIGN": "",
+        "EXPLICIT": "ZB",
+    }
+
+
 def test_load_naip_separates_source_pbn_from_target_route_type_and_links_airway_tables(
     tmp_path: Path,
 ) -> None:

@@ -297,7 +297,13 @@ def navaid_country(serviced_airport: str, fir: str) -> str:
         raise ValueError(f"unmapped navaid FIR: {fir!r}") from error
 
 
-def waypoint_country(fir: str, latitude: float | None = None, longitude: float | None = None, ident: str = "") -> str:
+def waypoint_country(
+    fir: str,
+    latitude: float | None = None,
+    longitude: float | None = None,
+    ident: str = "",
+    serviced_airport: str = "",
+) -> str:
     """Map a structured designated-point FIR to an MSFS region key."""
     if "\u9999\u6e2f" in (fir or ""):
         return "VH"
@@ -305,6 +311,12 @@ def waypoint_country(fir: str, latitude: float | None = None, longitude: float |
         return navaid_country("", fir)
     if ident in _EMPTY_FIR_COUNTRY_OVERRIDES:
         return _EMPTY_FIR_COUNTRY_OVERRIDES[ident]
+    normalized_airport = (serviced_airport or "").strip().upper()
+    if (
+        re.fullmatch(r"Z[A-Z]{3}", normalized_airport)
+        and is_china_icao(normalized_airport)
+    ):
+        return normalized_airport[:2]
     raise ValueError(f"empty waypoint FIR: {ident or '<unknown>'}")
 
 
@@ -491,14 +503,29 @@ def load_naip(
             latitude = parse_dms(row.get("GEO_LAT_ACCURACY") or "")
             longitude = parse_dms(row.get("GEO_LONG_ACCURACY") or "")
             ident = row.get("CODE_ID") or ""
+            serviced_airport = (row.get("SERVICED_AIRPORT") or "").strip()
+            has_strict_serviced_airport = bool(
+                re.fullmatch(r"Z[A-Z]{3}", serviced_airport.upper())
+                and is_china_icao(serviced_airport)
+            )
             country = (
-                waypoint_country(row.get("CODE_FIR") or "", latitude, longitude, ident)
-                if (row.get("CODE_FIR") or "").strip() or ident.upper() in _EMPTY_FIR_COUNTRY_OVERRIDES
+                waypoint_country(
+                    row.get("CODE_FIR") or "",
+                    latitude,
+                    longitude,
+                    ident,
+                    serviced_airport,
+                )
+                if (
+                    (row.get("CODE_FIR") or "").strip()
+                    or ident.upper() in _EMPTY_FIR_COUNTRY_OVERRIDES
+                    or has_strict_serviced_airport
+                )
                 else ""
             )
             model.waypoints.append(Waypoint(row["SIGNIFICANT_POINT_ID"], ident, row.get("TXT_NAME") or "",
                 latitude, longitude, SourceRef("DESIGNATED_POINT.csv", row_number), country))
-            if (row.get("CODE_FIR") or "").strip() or ident.upper() in _EMPTY_FIR_COUNTRY_OVERRIDES:
+            if country:
                 _register_airway_endpoint_country(
                     airway_endpoint_countries,
                     "DESIGNATED_POINT",
