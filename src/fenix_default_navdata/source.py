@@ -4,6 +4,7 @@ import csv
 import hashlib
 import math
 import re
+from collections import Counter
 from dataclasses import replace
 from pathlib import Path
 
@@ -78,6 +79,57 @@ def _rows(path: Path):
     else:  # pragma: no cover - both supported encodings failed
         raise UnicodeDecodeError("naip", raw, 0, len(raw), "不支持的 CSV 编码")
     yield from csv.DictReader(text.splitlines())
+
+
+def _optional_index(root: Path, filename: str, key: str) -> dict[str, dict[str, str]]:
+    """Index an optional 424 table without making older fixtures invalid."""
+    path = root / filename
+    if not path.is_file():
+        return {}
+    index: dict[str, dict[str, str]] = {}
+    for row in _rows(path):
+        value = (row.get(key) or "").strip()
+        if value:
+            # The published 2608 tables use unique IDs.  Keep the first row
+            # if a hand-built fixture violates that contract, preserving
+            # deterministic behavior without silently replacing metadata.
+            index.setdefault(value, row)
+    return index
+
+
+def summarize_airway_source_metadata(model: NavModel) -> dict[str, object]:
+    """Summarize source semantics carried by normalized airway legs."""
+    code_types = Counter(
+        leg.source_code_type or "<blank>" for leg in model.airway_legs
+    )
+    segment_rnp = Counter(
+        leg.source_segment_rnp_designator or "<blank>"
+        for leg in model.airway_legs
+    )
+    location_types = Counter(
+        leg.source_enroute_location_type or "<blank>"
+        for leg in model.airway_legs
+    )
+    target_hints = Counter(
+        leg.route_type or "<unresolved>" for leg in model.airway_legs
+    )
+    return {
+        "total": len(model.airway_legs),
+        "source_code_type": dict(sorted(code_types.items())),
+        "source_segment_rnp_designator": dict(sorted(segment_rnp.items())),
+        "source_enroute_location_type": dict(sorted(location_types.items())),
+        "target_route_type_hint": dict(sorted(target_hints.items())),
+        "links": {
+            "segment_found": sum(leg.source_segment_found for leg in model.airway_legs),
+            "segment_missing": sum(not leg.source_segment_found for leg in model.airway_legs),
+            "en_route_rte_found": sum(
+                leg.source_en_route_rte_found for leg in model.airway_legs
+            ),
+            "en_route_rte_missing": sum(
+                not leg.source_en_route_rte_found for leg in model.airway_legs
+            ),
+        },
+    }
 
 
 def _number(value: str, default: int = 0) -> int:
@@ -352,6 +404,8 @@ def load_naip(
     pdf_cache = _validate_pdf_cache(root, pdf_cache)
     model = NavModel(root=root)
     airway_endpoint_countries: dict[tuple[str, str, float, float], set[str]] = {}
+    segment_rows = _optional_index(root, "SEGMENT.csv", "SEGMENT_ID")
+    en_route_rows = _optional_index(root, "EN_ROUTE_RTE.csv", "EN_ROUTE_RTE_ID")
     for row_number, row in enumerate(_rows(root / "AD_HP.csv"), start=2):
         icao = (row.get("CODE_ID") or "").strip().upper()
         if not is_china_icao(icao):
@@ -482,13 +536,42 @@ def load_naip(
                 )
             except ValueError:
                 end_country = ""
+            source_segment_id = (row.get("SEGMENT_ID") or "").strip()
+            source_en_route_rte_id = (row.get("EN_ROUTE_RTE_ID") or "").strip()
+            segment = segment_rows.get(source_segment_id)
+            en_route = en_route_rows.get(source_en_route_rte_id)
             model.airway_legs.append(AirwayLeg(
                 row.get("TXT_DESIG") or "", _number(row.get("VAL_SORT") or "0"),
                 start_ident, end_ident, SourceRef("RTE_SEG.csv", row_number), row.get("CODE_DIR") or "",
                 start_latitude, start_longitude, end_latitude, end_longitude, start_country, end_country,
-                route_type=row.get("CODE_TYPE") or "",
+                # RTE_SEG.CODE_TYPE is PBN/source semantics, not the SDK
+                # VICTOR/JET/BOTH vocabulary.  Leave the target hint empty
+                # until an adapter has a verified mapping rule.
+                route_type="",
                 start_type=row.get("CODE_TYPE_START") or "",
                 end_type=row.get("CODE_TYPE_END") or "",
+                source_code_type=(row.get("CODE_TYPE") or "").strip(),
+                source_segment_rnp_designator=(
+                    (segment.get("TXT_DESIG_RNP") or "").strip()
+                    if segment is not None else ""
+                ),
+                source_enroute_location_type=(
+                    (en_route.get("TXT_LOC_TYPE") or "").strip()
+                    if en_route is not None else ""
+                ),
+                source_segment_minimum_crossing_altitude=(
+                    (segment.get("VAL_MTCA") or "").strip()
+                    if segment is not None else ""
+                ),
+                source_route_minimum_crossing_altitude=(
+                    (en_route.get("VAL_MTCA") or "").strip()
+                    if en_route is not None else ""
+                ),
+                source_rte_seg_id=(row.get("RTE_SEG_ID") or "").strip(),
+                source_segment_id=source_segment_id,
+                source_en_route_rte_id=source_en_route_rte_id,
+                source_segment_found=segment is not None,
+                source_en_route_rte_found=en_route is not None,
             ))
         except ValueError:
             model.rejected_records.append(RejectedRecord(

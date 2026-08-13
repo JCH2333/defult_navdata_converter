@@ -143,6 +143,19 @@ class AirwayLeg:
     start_type: str = ""
     end_type: str = ""
     minimum_altitude_ft: int | None = None
+    # ``route_type`` is a target-adapter hint.  It must not be populated from
+    # the source PBN value in RTE_SEG.CODE_TYPE because the two vocabularies
+    # have different meanings.
+    source_code_type: str = ""
+    source_segment_rnp_designator: str = ""
+    source_enroute_location_type: str = ""
+    source_segment_minimum_crossing_altitude: str = ""
+    source_route_minimum_crossing_altitude: str = ""
+    source_rte_seg_id: str = ""
+    source_segment_id: str = ""
+    source_en_route_rte_id: str = ""
+    source_segment_found: bool = False
+    source_en_route_rte_found: bool = False
 
 
 @dataclass(frozen=True)

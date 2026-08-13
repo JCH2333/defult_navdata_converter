@@ -28,7 +28,7 @@ from .region_resolution import (
     RegionResolutionError,
     restore_regions_from_official_index,
 )
-from .source import load_naip
+from .source import load_naip, summarize_airway_source_metadata
 
 
 BASE_PACKAGE = "navigraph-nav-base"
@@ -304,6 +304,7 @@ def build_candidate(
             "rejected_records": len(model.rejected_records),
             "rejected_procedures": len(model.rejected_procedures),
         },
+        "airway_source": summarize_airway_source_metadata(model),
         "iap_coverage": model.iap_coverage,
         "packages": {},
         "byte_equal_reference": False,

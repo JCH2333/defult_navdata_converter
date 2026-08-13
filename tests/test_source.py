@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from fenix_default_navdata.source import _surface, load_naip
+from fenix_default_navdata.source import _surface, load_naip, summarize_airway_source_metadata
 
 
 def _write_csv(root: Path, name: str, text: str) -> None:
@@ -160,3 +160,49 @@ def test_load_naip_recovers_blank_route_endpoint_firs_from_matching_424_records(
         ("ZB", ""),
     ]
     assert next(point.country for point in model.waypoints if point.ident == "NOFIR") == ""
+
+
+def test_load_naip_separates_source_pbn_from_target_route_type_and_links_airway_tables(
+    tmp_path: Path,
+) -> None:
+    root = _minimal_naip_root(tmp_path, "沥青")
+    _write_csv(root, "RTE_SEG.csv", "\n".join((
+        "RTE_SEG_ID,EN_ROUTE_RTE_ID,SEGMENT_ID,TXT_DESIG,VAL_SORT,CODE_POINT_START,CODE_POINT_END,GEO_LAT_START_ACCURACY,GEO_LONG_START_ACCURACY,GEO_LAT_END_ACCURACY,GEO_LONG_END_ACCURACY,CODE_FIR_START,CODE_FIR_END,CODE_DIR,CODE_TYPE,CODE_TYPE_START,CODE_TYPE_END",
+        "rte-seg-1,route-1,segment-1,R1,1,DP01,DP02,N350000,E1050000,N360000,E1060000,,,B,RNAV2,DESIGNATED_POINT,DESIGNATED_POINT",
+        "rte-seg-2,route-1,missing-segment,R1,2,DP02,DP03,N360000,E1060000,N370000,E1070000,,,B,RNP4,DESIGNATED_POINT,DESIGNATED_POINT",
+    )))
+    _write_csv(root, "SEGMENT.csv", "\n".join((
+        "SEGMENT_ID,TXT_DESIG_RNP,VAL_MTCA",
+        "segment-1,P4,2300",
+    )))
+    _write_csv(root, "EN_ROUTE_RTE.csv", "\n".join((
+        "EN_ROUTE_RTE_ID,TXT_LOC_TYPE,VAL_MTCA",
+        "route-1,国际区域导航航路,2600",
+    )))
+
+    model = load_naip(root, include_terminal_documents=False)
+
+    first, second = model.airway_legs
+    assert first.route_type == ""
+    assert first.source_code_type == "RNAV2"
+    assert first.source_segment_rnp_designator == "P4"
+    assert first.source_enroute_location_type == "国际区域导航航路"
+    assert first.source_segment_minimum_crossing_altitude == "2300"
+    assert first.source_route_minimum_crossing_altitude == "2600"
+    assert first.source_rte_seg_id == "rte-seg-1"
+    assert first.source_segment_id == "segment-1"
+    assert first.source_en_route_rte_id == "route-1"
+    assert first.source_segment_found is True
+    assert first.source_en_route_rte_found is True
+    assert second.source_segment_found is False
+    assert second.source_en_route_rte_found is True
+
+    summary = summarize_airway_source_metadata(model)
+    assert summary["source_code_type"] == {"RNAV2": 1, "RNP4": 1}
+    assert summary["target_route_type_hint"] == {"<unresolved>": 2}
+    assert summary["links"] == {
+        "segment_found": 1,
+        "segment_missing": 1,
+        "en_route_rte_found": 2,
+        "en_route_rte_missing": 0,
+    }
