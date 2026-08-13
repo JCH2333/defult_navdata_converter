@@ -153,6 +153,20 @@ PDF 缓存载荷带有提取器版本。修改可影响证据解释的规则时�
 
 实机验证完成前只允许测试版，不创建正式 Release。
 
+### Community 覆盖门禁
+
+`build` 生成的候选固定为 `test_build=true`，即使官方索引、导航台选择、区域恢复和
+两个覆盖包的本地结构都已通过，也只能用于隔离分析，不能通过任何命令行或 GUI 开关
+覆盖 Community。验证器分别报告以下状态：
+
+1. `local_contract_verified`：官方索引、导航台选择、区域恢复和双覆盖包结构通过。
+2. `byte_equal_reference`：两个中国覆盖包均与只读参考成品逐文件 SHA-256 一致。
+3. `flight_validation_verified`：ZBCF、ZUNZ、ZUUU 的机场输入、跑道、SID/STAR/IAP，及退出飞行、退出模拟器均已完成并登记。
+
+只有 `status=release`、`test_build=false` 且以上三项均通过时，验证器才会给出
+`deployable=true`。部署器不再提供 `--allow-test-build` 或 GUI 旁路；缺少其中任何一项
+都会在创建备份前拒绝覆盖 Community。
+
 ## 当前限制
 
 - 当前候选已经可以生成两个具有 BGL、`bglIndex.bout`、`layout.json`、

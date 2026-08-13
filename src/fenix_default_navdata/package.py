@@ -277,6 +277,7 @@ def build_candidate(
         "status": "candidate",
         "deployable": False,
         "test_build": True,
+        "local_contract_verified": False,
         "airac": cycle.number,
         "revision": cycle.revision,
         "compiler": {"path": str(compiler.path) if compiler.path else None, "kind": compiler.kind, "reason": compiler.reason},
@@ -305,6 +306,10 @@ def build_candidate(
         },
         "packages": {},
         "byte_equal_reference": False,
+        "flight_validation": {
+            "verified": False,
+            "reason": "尚未完成 ZBCF、ZUNZ、ZUUU 的实机验证及退出稳定性验证",
+        },
         "navaid_diff": (
             navaid_diff.to_report()
             if navaid_diff is not None
@@ -404,7 +409,7 @@ def build_candidate(
     )
     index_verified = bool(baseline_report.get("verified"))
     region_resolution_verified = bool(region_resolution_report.get("verified"))
-    report["deployable"] = (
+    report["local_contract_verified"] = (
         index_verified
         and navaid_diff_verified
         and navaid_selection_verified
@@ -415,5 +420,8 @@ def build_candidate(
         for name in (NAV_PACKAGE, AIRPORT_PACKAGE)
         )
     )
+    # 每次 build 都是测试构建。是否可部署只能由后续的参考字节比对和实机
+    # 验证共同决定，不能因为本地包结构完整就放开 Community 覆盖。
+    report["deployable"] = False
     _write_json(output / "conversion-report.json", report)
     return report

@@ -40,7 +40,6 @@ class App:
         self.output = tk.StringVar(value=str(Path.cwd() / "output" / "candidate-2608-default"))
         self.target = tk.StringVar()
         self.status = tk.StringVar(value="等待检测")
-        self.allow_test = tk.BooleanVar(value=False)
         self.events: queue.Queue[tuple[str, object, object | None]] = queue.Queue()
         self.busy = False
         self._build()
@@ -55,7 +54,7 @@ class App:
         tk.Label(header, text="2608 来源解析 · 官方全球基线 · 中国覆盖层 · 可恢复部署", bg=BG, fg=MUTED, font=("Microsoft YaHei UI", 10)).pack(anchor=tk.W, pady=(4, 0))
         banner = tk.Frame(self.root, bg="#2c2416", highlightthickness=1, highlightbackground="#67512a", padx=14, pady=9)
         banner.pack(fill=tk.X, padx=26)
-        tk.Label(banner, text="测试版安全门：没有匹配 BGL 编译器或完整验证时，候选不会被视为正式成品。", bg="#2c2416", fg=WARNING, font=("Microsoft YaHei UI", 9, "bold")).pack(anchor=tk.W)
+        tk.Label(banner, text="发布安全门：只有参考成品字节一致且已完成实机验证的正式候选才能覆盖 Community。", bg="#2c2416", fg=WARNING, font=("Microsoft YaHei UI", 9, "bold")).pack(anchor=tk.W)
         paths = tk.Frame(self.root, bg=PANEL, highlightthickness=1, highlightbackground="#263544", padx=16, pady=14)
         paths.pack(fill=tk.X, padx=26, pady=14)
         rows = [
@@ -91,7 +90,6 @@ class App:
             ("备份并覆盖", self._deploy),
         ):
             tk.Button(actions, text=text, command=command, bg="#203447", fg=TEXT, activebackground="#2a5060", activeforeground=ACCENT, relief=tk.FLAT, padx=14, pady=7).pack(side=tk.LEFT, padx=(0, 8))
-        tk.Checkbutton(actions, text="允许测试版覆盖", variable=self.allow_test, bg=BG, fg=WARNING, selectcolor=PANEL, activebackground=BG, activeforeground=WARNING).pack(side=tk.RIGHT)
         ttk.Label(self.root, textvariable=self.status).pack(anchor=tk.W, padx=26, pady=(6, 4))
         log_frame = tk.Frame(self.root, bg=PANEL, highlightthickness=1, highlightbackground="#263544", padx=10, pady=8)
         log_frame.pack(fill=tk.BOTH, expand=True, padx=26, pady=(0, 22))
@@ -205,10 +203,10 @@ class App:
     def _deploy(self) -> None:
         candidate = Path(self.output.get())
         target = Path(self.target.get())
-        if not self.allow_test.get() and messagebox.askyesno("安全确认", "当前未允许测试版覆盖，仍要继续？") is False:
+        if messagebox.askyesno("安全确认", "仅正式候选可以覆盖 Community。现在执行完整发布门禁检查吗？") is False:
             return
         self.status.set("正在备份并覆盖")
-        self._run(lambda: deploy(candidate, target, allow_test_build=self.allow_test.get()))
+        self._run(lambda: deploy(candidate, target))
 
     def _check_update(self) -> None:
         def work():

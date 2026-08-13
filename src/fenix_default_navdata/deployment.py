@@ -44,17 +44,21 @@ def backup_community(target: Path, backup_root: Path | None = None) -> Path:
     return backup
 
 
-def deploy(candidate: Path, target: Path, *, allow_test_build: bool = False, backup_root: Path | None = None) -> Path:
+def deploy(candidate: Path, target: Path, *, backup_root: Path | None = None) -> Path:
     if simulator_running():
         raise RuntimeError("FlightSimulator2024.exe 正在运行，无法覆盖默认导航数据")
     candidate, target = candidate.resolve(), target.resolve()
     validation = validate_candidate(candidate)
     if not validation["valid"]:
         raise RuntimeError("候选缺少 BGL、bglIndex.bout 或包元数据，拒绝覆盖")
-    if validation.get("test_build") and not allow_test_build:
-        raise RuntimeError("test build requires explicit --allow-test-build")
-    if not validation["deployable"] and not allow_test_build:
-        raise RuntimeError("候选不是可部署成品；必须显式使用 --allow-test-build")
+    if validation.get("test_build"):
+        raise RuntimeError("候选仍标记为测试版；测试构建不得覆盖 Community")
+    if not validation.get("byte_equal_reference"):
+        raise RuntimeError("候选尚未与参考成品完成字节级一致验证，拒绝覆盖 Community")
+    if not validation.get("flight_validation_verified"):
+        raise RuntimeError("候选尚未登记 ZBCF、ZUNZ、ZUUU 与退出稳定性的实机验证，拒绝覆盖 Community")
+    if not validation["deployable"]:
+        raise RuntimeError("候选未通过完整发布门禁，拒绝覆盖 Community")
     if not target.is_dir():
         raise FileNotFoundError(f"Community 目录不存在: {target}")
     backup = backup_community(target, backup_root)

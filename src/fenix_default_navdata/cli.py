@@ -78,7 +78,6 @@ def build_parser() -> argparse.ArgumentParser:
     deploy_parser = sub.add_parser("deploy", help="备份并覆盖 Community")
     deploy_parser.add_argument("--candidate", required=True)
     deploy_parser.add_argument("--target", help="Community 目录")
-    deploy_parser.add_argument("--allow-test-build", action="store_true")
     restore_parser = sub.add_parser("restore", help="恢复备份")
     restore_parser.add_argument("--backup", required=True)
     restore_parser.add_argument("--target", help="Community 目录")
@@ -147,7 +146,7 @@ def main(argv: list[str] | None = None) -> int:
         target = Path(args.target) if args.target else detected.community_root
         if not target:
             raise SystemExit("未找到 Community 目录")
-        backup = deploy(Path(args.candidate), target, allow_test_build=args.allow_test_build)
+        backup = deploy(Path(args.candidate), target)
         print(json.dumps({"backup": str(backup), "target": str(target)}, ensure_ascii=False, indent=2))
         return 0
     if args.command == "restore":

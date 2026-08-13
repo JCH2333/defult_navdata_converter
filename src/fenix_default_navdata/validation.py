@@ -7,6 +7,11 @@ from pathlib import Path
 from .package import AIRPORT_PACKAGE, BASE_PACKAGE, JEPP_PACKAGE, NAV_PACKAGE, sha256
 
 
+_REQUIRED_AIRPORTS = ("ZBCF", "ZUNZ", "ZUUU")
+_REQUIRED_AIRPORT_CHECKS = ("airport_input", "runways", "procedures")
+_REQUIRED_EXIT_CHECKS = ("exit_flight", "exit_simulator")
+
+
 def _file_map(root: Path) -> dict[str, tuple[int, str]]:
     return {
         path.relative_to(root).as_posix().lower(): (path.stat().st_size, sha256(path))
@@ -27,6 +32,45 @@ def compare_trees(candidate: Path, reference: Path) -> dict[str, object]:
         "changed_files": changed[:100],
         "missing_files": [name for name in names if name not in left][:100],
         "extra_files": [name for name in names if name not in right][:100],
+    }
+
+
+def _configured_reference(report: dict[str, object]) -> Path | None:
+    value = report.get("reference")
+    if not isinstance(value, str) or not value.strip():
+        return None
+    return Path(value).expanduser()
+
+
+def _flight_validation_status(report: dict[str, object]) -> dict[str, object]:
+    evidence = report.get("flight_validation")
+    if not isinstance(evidence, dict):
+        return {
+            "verified": False,
+            "missing_checks": ["flight_validation"],
+        }
+    missing: list[str] = []
+    airports = evidence.get("airports")
+    if not isinstance(airports, dict):
+        missing.append("airports")
+        airports = {}
+    for airport in _REQUIRED_AIRPORTS:
+        checks = airports.get(airport)
+        if not isinstance(checks, dict):
+            missing.extend(f"{airport}.{check}" for check in _REQUIRED_AIRPORT_CHECKS)
+            continue
+        missing.extend(
+            f"{airport}.{check}"
+            for check in _REQUIRED_AIRPORT_CHECKS
+            if checks.get(check) is not True
+        )
+    missing.extend(
+        check for check in _REQUIRED_EXIT_CHECKS
+        if evidence.get(check) is not True
+    )
+    return {
+        "verified": not missing,
+        "missing_checks": missing,
     }
 
 
@@ -75,37 +119,52 @@ def validate_candidate(candidate: Path, reference: Path | None = None) -> dict[s
         isinstance(official_region_resolution, dict)
         and official_region_resolution.get("verified")
     )
+    local_contract_verified = (
+        package_contract
+        and navaid_diff_verified
+        and navaid_selection_verified
+        and navaid_index_verified
+        and official_region_resolution_verified
+    )
+    flight_validation = _flight_validation_status(report)
+    selected_reference = reference or _configured_reference(report)
     result = {
         "valid": not missing and package_contract,
-        "deployable": (
-            bool(report.get("deployable"))
-            and package_contract
-            and navaid_diff_verified
-            and navaid_selection_verified
-            and navaid_index_verified
-            and official_region_resolution_verified
-        ),
+        "deployable": False,
         "official_baseline_present": not missing,
         "navaid_diff_verified": navaid_diff_verified,
         "navaid_selection_verified": navaid_selection_verified,
         "navaid_index_verified": navaid_index_verified,
         "official_region_resolution_verified": official_region_resolution_verified,
+        "local_contract_verified": local_contract_verified,
         "package_contract": package_contract,
         "bgl_count": len(bgls),
         "report_status": report.get("status"),
         "test_build": bool(report.get("test_build")),
         "compiler": report.get("compiler"),
+        "flight_validation": flight_validation,
+        "flight_validation_verified": bool(flight_validation["verified"]),
         "reference": None,
+        "byte_equal_reference": False,
     }
-    if reference:
+    if selected_reference is not None and selected_reference.is_dir():
         result["reference"] = {
-            NAV_PACKAGE: compare_trees(candidate / NAV_PACKAGE, reference / NAV_PACKAGE)
-            if (candidate / NAV_PACKAGE).is_dir() and (reference / NAV_PACKAGE).is_dir() else None,
-            AIRPORT_PACKAGE: compare_trees(candidate / AIRPORT_PACKAGE, reference / AIRPORT_PACKAGE)
-            if (candidate / AIRPORT_PACKAGE).is_dir() and (reference / AIRPORT_PACKAGE).is_dir() else None,
+            NAV_PACKAGE: compare_trees(candidate / NAV_PACKAGE, selected_reference / NAV_PACKAGE)
+            if (candidate / NAV_PACKAGE).is_dir() and (selected_reference / NAV_PACKAGE).is_dir() else None,
+            AIRPORT_PACKAGE: compare_trees(candidate / AIRPORT_PACKAGE, selected_reference / AIRPORT_PACKAGE)
+            if (candidate / AIRPORT_PACKAGE).is_dir() and (selected_reference / AIRPORT_PACKAGE).is_dir() else None,
         }
         result["byte_equal_reference"] = all(
             item is not None and item["byte_equal"]
             for item in result["reference"].values()
         )
+    elif selected_reference is not None:
+        result["reference"] = {"error": f"参考目录不存在: {selected_reference}"}
+    result["deployable"] = (
+        local_contract_verified
+        and result["byte_equal_reference"]
+        and result["flight_validation_verified"]
+        and not result["test_build"]
+        and result["report_status"] == "release"
+    )
     return result
