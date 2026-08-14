@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import io
+import json
 import math
 import os
 import re
@@ -29,6 +30,26 @@ class CompilerInfo:
     path: Path | None
     kind: str
     reason: str
+
+
+@dataclass(frozen=True)
+class PackageToolProcessTrace:
+    """Package Tool 异步启动 MSFS 构建进程时的最小可审计轨迹。"""
+
+    simulator_started: bool
+    simulator_completed: bool
+    launched_pids: tuple[int, ...]
+    observations: tuple[dict[str, object], ...]
+    elapsed_seconds: float
+
+    def report(self) -> dict[str, object]:
+        return {
+            "simulator_started": self.simulator_started,
+            "simulator_completed": self.simulator_completed,
+            "launched_pids": list(self.launched_pids),
+            "observations": list(self.observations),
+            "elapsed_seconds": round(self.elapsed_seconds, 3),
+        }
 
 
 @dataclass(frozen=True)
@@ -142,21 +163,56 @@ def _wait_for_package_tool_process(
     *,
     start_timeout: int = 45,
     build_timeout: int = 3600,
-) -> bool:
-    start_deadline = time.monotonic() + start_timeout
+) -> PackageToolProcessTrace:
+    """等待 Package Tool 异步启动的 MSFS 构建进程并记录状态变化。
+
+    fspackagetool.exe 可能先返回，再由 Steam 启动存活不足半秒的
+    FlightSimulator2024.exe。0.5 秒轮询会漏掉该进程，导致包装器清理
+    暂存项目，进而让 SDK 在已经被删除的路径中继续读取文件。
+    """
+
+    started_at = time.monotonic()
+    start_deadline = started_at + start_timeout
     launched: set[int] = set()
+    observations: list[dict[str, object]] = []
+    last_pids: set[int] | None = None
+
+    def observe() -> set[int]:
+        nonlocal last_pids
+        current = _simulator_pids()
+        if current != last_pids:
+            observations.append({
+                "elapsed_seconds": round(time.monotonic() - started_at, 3),
+                "pids": sorted(current),
+            })
+            last_pids = current
+        return current
+
     while time.monotonic() < start_deadline:
-        launched = _simulator_pids() - previous_pids
+        current = observe()
+        launched.update(current - previous_pids)
         if launched:
             break
-        time.sleep(0.5)
+        time.sleep(0.05)
     if not launched:
-        return False
+        return PackageToolProcessTrace(
+            simulator_started=False,
+            simulator_completed=False,
+            launched_pids=(),
+            observations=tuple(observations),
+            elapsed_seconds=time.monotonic() - started_at,
+        )
     build_deadline = time.monotonic() + build_timeout
     while time.monotonic() < build_deadline:
-        if not (_simulator_pids() & launched):
-            return True
-        time.sleep(1)
+        if not (observe() & launched):
+            return PackageToolProcessTrace(
+                simulator_started=True,
+                simulator_completed=True,
+                launched_pids=tuple(sorted(launched)),
+                observations=tuple(observations),
+                elapsed_seconds=time.monotonic() - started_at,
+            )
+        time.sleep(0.05)
     raise TimeoutError(f"MSFS Package Tool 构建超过 {build_timeout} 秒")
 
 
@@ -1976,6 +2032,87 @@ def write_package_project(
     return project_path
 
 
+_BUILDER_LOG_NAME = "BuilderLogError.txt"
+_MAX_BUILDER_LOG_DELTA_BYTES = 4 * 1024 * 1024
+
+
+def _builder_log_path() -> Path:
+    return (
+        Path(os.environ.get("APPDATA", ""))
+        / "Microsoft Flight Simulator 2024"
+        / _BUILDER_LOG_NAME
+    )
+
+
+def _builder_log_size(path: Path) -> int:
+    return path.stat().st_size if path.is_file() else 0
+
+
+def _snapshot_builder_log_delta(
+    source: Path,
+    previous_size: int,
+    destination: Path,
+) -> dict[str, object]:
+    """保留本次调用新增的 BuilderLogError 尾部，避免读取数百 MB 历史日志。"""
+
+    current_size = _builder_log_size(source)
+    source_offset = previous_size if current_size >= previous_size else 0
+    available = current_size - source_offset
+    copied = min(available, _MAX_BUILDER_LOG_DELTA_BYTES)
+    read_offset = current_size - copied
+    if copied:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with source.open("rb") as handle:
+            handle.seek(read_offset)
+            destination.write_bytes(handle.read(copied))
+    return {
+        "source": str(source),
+        "previous_size": previous_size,
+        "current_size": current_size,
+        "new_bytes": available,
+        "copied_bytes": copied,
+        "truncated": available > copied,
+        "snapshot": str(destination) if copied else "",
+    }
+
+
+def _write_package_tool_diagnostics(
+    stage_root: Path,
+    *,
+    package_name: str,
+    command: list[str],
+    attempts: list[dict[str, object]],
+) -> Path:
+    diagnostic_path = stage_root / "package-tool-diagnostics.json"
+    diagnostic_path.write_text(
+        json.dumps(
+            {
+                "package_name": package_name,
+                "stage_root": str(stage_root),
+                "command": command,
+                "attempts": attempts,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ) + "\n",
+        encoding="utf-8",
+    )
+    return diagnostic_path
+
+
+def _package_outputs_complete(package_root: Path) -> bool:
+    required = (
+        package_root / "manifest.json",
+        package_root / "layout.json",
+        package_root / "bglIndex.bout",
+    )
+    return (
+        all(path.is_file() for path in required)
+        and package_root.is_dir()
+        and any(package_root.rglob("*.bgl"))
+    )
+
+
 def compile_package(
     project_path: Path,
     compiler: CompilerInfo,
@@ -1987,25 +2124,29 @@ def compile_package(
         raise CompilerUnavailable(compiler.reason)
     if compiler.kind != "PackageTool":
         raise CompilerUnavailable(f"编译器 {compiler.path} 不是 MSFS Package Tool")
-    stage_parent = Path(os.environ.get("LOCALAPPDATA", tempfile.gettempdir())) / "fenix_default_navdata"
+    stage_parent = (
+        Path(os.environ.get("LOCALAPPDATA", tempfile.gettempdir()))
+        / "default_navdata_converter"
+        / "sdk-builds"
+    )
     stage_parent.mkdir(parents=True, exist_ok=True)
-    stage_root = Path(tempfile.mkdtemp(prefix="sdk-build-", dir=stage_parent))
+    safe_package_name = re.sub(r"[^A-Za-z0-9._-]+", "-", package_name)
+    stage_root = Path(tempfile.mkdtemp(
+        prefix=f"sdk-build-{safe_package_name}-",
+        dir=stage_parent,
+    ))
+    if not str(stage_root).isascii():
+        raise RuntimeError(
+            "Package Tool 暂存路径必须为纯 ASCII；请将 LOCALAPPDATA 指向 ASCII 路径"
+        )
+    succeeded = False
     try:
         simulator_pids = _simulator_pids()
         if simulator_pids:
             raise RuntimeError(
                 "FlightSimulator2024.exe 正在运行；Package Tool 构建前请完全关闭模拟器"
             )
-        builder_log = (
-            Path(os.environ.get("APPDATA", ""))
-            / "Microsoft Flight Simulator 2024"
-            / "BuilderLogError.txt"
-        )
-        builder_log_before = (
-            (builder_log.stat().st_mtime_ns, builder_log.stat().st_size)
-            if builder_log.is_file()
-            else None
-        )
+        builder_log = _builder_log_path()
         shutil.copytree(project_path.parent, stage_root, dirs_exist_ok=True)
         staged_project = stage_root / project_path.name
         command = [
@@ -2016,8 +2157,13 @@ def compile_package(
             "-rebuild",
             "-forcesteam",
         ]
-        def run_builder() -> subprocess.CompletedProcess[str]:
-            return subprocess.run(
+        def run_builder(attempt_number: int) -> tuple[
+            subprocess.CompletedProcess[str],
+            PackageToolProcessTrace,
+            dict[str, object],
+        ]:
+            builder_log_before = _builder_log_size(builder_log)
+            result = subprocess.run(
                 command,
                 cwd=str(stage_root),
                 capture_output=True,
@@ -2027,33 +2173,48 @@ def compile_package(
                 check=False,
                 timeout=timeout_seconds,
             )
+            staged_package_root = stage_root / "Packages" / package_name
+            if result.returncode != 0 or not _package_outputs_complete(staged_package_root):
+                trace = _wait_for_package_tool_process(
+                    simulator_pids,
+                    build_timeout=timeout_seconds,
+                )
+            else:
+                trace = PackageToolProcessTrace(
+                    simulator_started=False,
+                    simulator_completed=False,
+                    launched_pids=(),
+                    observations=(),
+                    elapsed_seconds=0.0,
+                )
+            log_delta = _snapshot_builder_log_delta(
+                builder_log,
+                builder_log_before,
+                stage_root / f"attempt-{attempt_number:02d}-{_BUILDER_LOG_NAME}",
+            )
+            return result, trace, log_delta
 
-        result = run_builder()
+        result, trace, log_delta = run_builder(1)
         attempts = [{
             "returncode": result.returncode,
             "stdout": result.stdout,
             "stderr": result.stderr,
-            "simulator_started": False,
+            "simulator_started": trace.simulator_started,
+            "simulator_completed": trace.simulator_completed,
+            "process_trace": trace.report(),
+            "builder_log": log_delta,
         }]
-        if result.returncode != 0:
-            simulator_started = _wait_for_package_tool_process(
-                simulator_pids,
-                build_timeout=timeout_seconds,
-            )
-            attempts[-1]["simulator_started"] = simulator_started
-            if not simulator_started:
-                result = run_builder()
-                attempts.append({
-                    "returncode": result.returncode,
-                    "stdout": result.stdout,
-                    "stderr": result.stderr,
-                    "simulator_started": False,
-                })
-                if result.returncode != 0:
-                    attempts[-1]["simulator_started"] = _wait_for_package_tool_process(
-                        simulator_pids,
-                        build_timeout=timeout_seconds,
-                    )
+        if result.returncode != 0 and not trace.simulator_started:
+            result, trace, log_delta = run_builder(2)
+            attempts.append({
+                "returncode": result.returncode,
+                "stdout": result.stdout,
+                "stderr": result.stderr,
+                "simulator_started": trace.simulator_started,
+                "simulator_completed": trace.simulator_completed,
+                "process_trace": trace.report(),
+                "builder_log": log_delta,
+            })
         staged_package_root = stage_root / "Packages" / package_name
         required = (
             staged_package_root / "manifest.json",
@@ -2064,20 +2225,23 @@ def compile_package(
         bgls = sorted(staged_package_root.rglob("*.bgl")) if staged_package_root.is_dir() else []
         if missing or not bgls:
             details = "\n".join(filter(None, (result.stdout, result.stderr)))
-            builder_log_after = (
-                (builder_log.stat().st_mtime_ns, builder_log.stat().st_size)
-                if builder_log.is_file()
-                else None
+            latest_log = str(attempts[-1]["builder_log"].get("snapshot", ""))
+            if latest_log:
+                details = (
+                    f"{details}\n"
+                    f"{Path(latest_log).read_text(encoding='utf-8', errors='replace')[-4000:]}"
+                )
+            diagnostic_path = _write_package_tool_diagnostics(
+                stage_root,
+                package_name=package_name,
+                command=command,
+                attempts=attempts,
             )
-            if (
-                builder_log_after is not None
-                and builder_log_after != builder_log_before
-            ):
-                details = f"{details}\n{builder_log.read_text(encoding='utf-8', errors='replace')[-4000:]}"
             raise RuntimeError(
                 "Package Tool 未生成完整导航包；"
                 f"包装器退出代码={result.returncode}，缺少={missing}，"
                 f"BGL={len(bgls)}，尝试={[(attempt['returncode'], attempt['simulator_started']) for attempt in attempts]}，"
+                f"诊断目录={stage_root}，诊断文件={diagnostic_path}，"
                 f"输出={details[-4000:]}"
             )
         package_root = project_path.parent / "_compiled" / package_name
@@ -2085,7 +2249,7 @@ def compile_package(
             shutil.rmtree(package_root)
         shutil.copytree(staged_package_root, package_root)
         copied_bgls = sorted(package_root.rglob("*.bgl"))
-        return {
+        report = {
             "compiler": str(compiler.path),
             "kind": compiler.kind,
             "command": command,
@@ -2095,8 +2259,11 @@ def compile_package(
             "package_root": str(package_root),
             "bgls": [str(path) for path in copied_bgls],
         }
+        succeeded = True
+        return report
     finally:
-        shutil.rmtree(stage_root, ignore_errors=True)
+        if succeeded:
+            shutil.rmtree(stage_root, ignore_errors=True)
 
 
 def compile_bgl(xml_path: Path, compiler: CompilerInfo, output_bgl: Path) -> dict[str, object]:

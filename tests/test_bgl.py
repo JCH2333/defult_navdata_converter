@@ -4,6 +4,7 @@ import xml.etree.ElementTree as ET
 
 from fenix_default_navdata.bgl import (
     CompilerInfo,
+    PackageToolProcessTrace,
     _iap_chart_roles,
     compile_package,
     find_compiler,
@@ -1002,7 +1003,13 @@ def test_package_tool_retries_one_startup_failure_without_simulator_process(tmp_
     monkeypatch.setattr("fenix_default_navdata.bgl._simulator_pids", lambda: set())
     monkeypatch.setattr(
         "fenix_default_navdata.bgl._wait_for_package_tool_process",
-        lambda previous_pids, **kwargs: False,
+        lambda previous_pids, **kwargs: PackageToolProcessTrace(
+            simulator_started=False,
+            simulator_completed=False,
+            launched_pids=(),
+            observations=(),
+            elapsed_seconds=0.0,
+        ),
     )
     report = compile_package(
         project,
@@ -1013,3 +1020,64 @@ def test_package_tool_retries_one_startup_failure_without_simulator_process(tmp_
     assert len(calls) == 2
     assert [attempt["returncode"] for attempt in report["attempts"]] == [1, 0]
     assert [attempt["simulator_started"] for attempt in report["attempts"]] == [False, False]
+
+
+def test_package_tool_keeps_failed_ascii_stage_with_short_async_process_trace(
+    tmp_path: Path,
+    monkeypatch,
+):
+    source = tmp_path / "source.xml"
+    source.write_text("<FSData version=\"9.0\"/>", encoding="utf-8")
+    project = write_package_project(
+        tmp_path / "project",
+        package_name="test-navdata",
+        title="Test NavData",
+        output_dir=r"scenery\test-navdata",
+        source_xmls=(source,),
+        package_order_hint="CUSTOM_NAVDATA_PATCH",
+    )
+    app_data = tmp_path / "appdata"
+    builder_log = app_data / "Microsoft Flight Simulator 2024" / "BuilderLogError.txt"
+    builder_log.parent.mkdir(parents=True)
+    builder_log.write_text("before\n", encoding="utf-8")
+    monkeypatch.setenv("APPDATA", str(app_data))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "localappdata"))
+    calls: list[list[str]] = []
+
+    def fake_run(command, **kwargs):
+        calls.append(command)
+        builder_log.write_text("before\nafter\n", encoding="utf-8")
+        return subprocess.CompletedProcess(command, 1, "", "")
+
+    pid_samples = iter((set(), set(), {4242}, set()))
+
+    def fake_pids():
+        return next(pid_samples, set())
+
+    monkeypatch.setattr("fenix_default_navdata.bgl.subprocess.run", fake_run)
+    monkeypatch.setattr("fenix_default_navdata.bgl._simulator_pids", fake_pids)
+    try:
+        compile_package(
+            project,
+            CompilerInfo(Path("fspackagetool.exe"), "PackageTool", "test"),
+            package_name="test-navdata",
+        )
+    except RuntimeError as error:
+        message = str(error)
+    else:
+        raise AssertionError("缺失 SDK 产物时必须失败")
+
+    stage_parent = (
+        tmp_path
+        / "localappdata"
+        / "default_navdata_converter"
+        / "sdk-builds"
+    )
+    stages = list(stage_parent.iterdir())
+    assert len(calls) == 1
+    assert len(stages) == 1
+    assert "诊断目录=" in message
+    assert (stages[0] / "package-tool-diagnostics.json").is_file()
+    assert (stages[0] / "attempt-01-BuilderLogError.txt").read_text(
+        encoding="utf-8"
+    ) == "after\n"
