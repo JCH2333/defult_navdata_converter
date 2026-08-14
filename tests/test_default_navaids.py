@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import json
 
 from fenix_default_navdata.baseline import BaselineIndex, BaselineNavaid
 from fenix_default_navdata.default_navaids import select_default_navaids
@@ -88,15 +89,9 @@ def test_default_selection_suppresses_cross_region_physical_duplicate() -> None:
     assert (match.raw.ident, match.baseline.region) == ("CHF", "ZY")
     report = result.to_report()
     assert report["suppressed_physical_duplicates"] == 1
-    assert report["suppressed_records"][0]["raw"]["source_attributes"] == {
-        "code_in_airway": "Y",
-        "purpose": "AE",
-        "is_rep_atc": "Y",
-        "route_restrict": "",
-        "is_trans_point": "",
-        "is_border_point": "",
-        "serviced_airport": "",
-        "code_fir": "",
+    assert report["suppressed_records"][0]["raw"] == {
+        "identity": {"kind": "VOR", "ident": "CHF", "region": "ZB"},
+        "source": {"file": "fixture.csv", "row": 2, "page": None},
     }
 
 
@@ -125,10 +120,9 @@ def test_default_selection_keeps_verified_snf_cross_region_vor_addition() -> Non
     assert report["projection_categories"][
         "verified_cross_region_raw_addition"
     ] == 1
-    assert report["verified_cross_region_addition_records"][0]["raw"]["source"] == {
-        "file": "VOR.csv",
-        "row": 2,
-        "page": None,
+    assert report["verified_cross_region_addition_records"][0]["raw"] == {
+        "identity": {"kind": "VOR", "ident": "SNF", "region": "ZU"},
+        "source": {"file": "VOR.csv", "row": 2, "page": None},
     }
 
 
@@ -390,6 +384,28 @@ def test_default_selection_requires_direct_ndb_csv_provenance_for_correction() -
     assert result.property_corrections == ()
     assert [item.baseline.ident for item in result.baseline_preservations] == ["DM"]
     assert result.to_report()["unselected_property_deltas"] == 1
+
+
+def test_navaid_reports_redact_raw_and_official_values() -> None:
+    raw = _raw(
+        "raw", "DM", "NDB", latitude=29.256111, longitude=91.764167,
+        frequency=435, country="ZU", source_file="NDB.csv",
+    )
+    baseline = _index(_baseline(
+        "NDB", "DM", "ZU", 43500, 29.255000, 91.765000, 1,
+    ))
+
+    selection = select_default_navaids([raw], baseline)
+    reports = (selection.strict_diff.to_report(), selection.to_report())
+    serialized = json.dumps(reports, sort_keys=True)
+
+    assert "frequency" not in serialized
+    assert "latitude" not in serialized
+    assert "longitude" not in serialized
+    assert "row_id" not in serialized
+    assert selection.to_report()["property_correction_records"][0][
+        "distance_relation"
+    ] == "within_tolerance"
 
 
 def test_default_selection_blocks_on_multiple_physical_official_identities() -> None:

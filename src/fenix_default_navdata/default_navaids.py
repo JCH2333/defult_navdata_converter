@@ -159,37 +159,29 @@ class DefaultNavaidSelection:
 
         def raw_payload(item: Navaid) -> dict[str, object]:
             return {
-                "key": item.key,
-                "kind": item.kind,
-                "ident": item.ident,
-                "region": item.country[:2],
-                "frequency": item.frequency,
-                "latitude": item.latitude,
-                "longitude": item.longitude,
-                "source": source_payload(item),
-                "source_attributes": {
-                    "code_in_airway": item.code_in_airway,
-                    "purpose": item.purpose,
-                    "is_rep_atc": item.is_rep_atc,
-                    "route_restrict": item.route_restrict,
-                    "is_trans_point": item.is_trans_point,
-                    "is_border_point": item.is_border_point,
-                    "serviced_airport": item.serviced_airport,
-                    "code_fir": item.code_fir,
+                "identity": {
+                    "kind": item.kind,
+                    "ident": item.ident,
+                    "region": item.country[:2],
                 },
+                "source": source_payload(item),
             }
 
         def baseline_payload(item: BaselineNavaid) -> dict[str, object]:
             return {
-                "kind": item.kind,
-                "ident": item.ident,
-                "region": item.region,
-                "frequency_khz": item.frequency_khz,
-                "latitude": item.latitude,
-                "longitude": item.longitude,
-                "source": item.source,
-                "row_id": item.row_id,
+                "identity": {
+                    "kind": item.kind,
+                    "ident": item.ident,
+                    "region": item.region,
+                },
             }
+
+        def distance_relation(distance_nm: float) -> str:
+            if distance_nm <= 0.01:
+                return "coincident"
+            if distance_nm <= self.coordinate_tolerance_nm:
+                return "within_tolerance"
+            return "outside_tolerance"
 
         return {
             "navaid_selection_verified": self.navaid_selection_verified,
@@ -286,7 +278,7 @@ class DefaultNavaidSelection:
                     "reason": "source_backed_ndb_property_delta",
                     "raw": raw_payload(item.raw),
                     "baseline": baseline_payload(item.baseline),
-                    "distance_nm": item.distance_nm,
+                    "distance_relation": distance_relation(item.distance_nm),
                     "fields": list(item.property_delta),
                 }
                 for item in self.property_corrections[:100]
@@ -304,7 +296,7 @@ class DefaultNavaidSelection:
                     "reason": "official_physical_duplicate_with_different_region",
                     "raw": raw_payload(item.raw),
                     "baseline": baseline_payload(item.baseline),
-                    "distance_nm": item.distance_nm,
+                    "distance_relation": distance_relation(item.distance_nm),
                 }
                 for item in self.suppressed_physical_duplicates[:100]
             ],
@@ -313,7 +305,7 @@ class DefaultNavaidSelection:
                     "reason": "verified_cross_region_raw_addition",
                     "raw": raw_payload(item.raw),
                     "baseline": baseline_payload(item.baseline),
-                    "distance_nm": item.distance_nm,
+                    "distance_relation": distance_relation(item.distance_nm),
                 }
                 for item in self.verified_cross_region_additions[:100]
             ],
@@ -323,7 +315,7 @@ class DefaultNavaidSelection:
                     "candidates": [
                         {
                             "baseline": baseline_payload(candidate.baseline),
-                            "distance_nm": candidate.distance_nm,
+                            "distance_relation": distance_relation(candidate.distance_nm),
                         }
                         for candidate in item.candidates
                     ],
@@ -336,7 +328,7 @@ class DefaultNavaidSelection:
                     "raw_candidates": [
                         {
                             "raw": raw_payload(candidate.raw),
-                            "distance_nm": candidate.distance_nm,
+                            "distance_relation": distance_relation(candidate.distance_nm),
                         }
                         for candidate in item.candidates
                     ],
@@ -354,7 +346,7 @@ class DefaultNavaidSelection:
                 {
                     "raw": raw_payload(item.raw),
                     "baseline": baseline_payload(item.baseline),
-                    "distance_nm": item.distance_nm,
+                    "distance_relation": distance_relation(item.distance_nm),
                     "resolution": item.resolution,
                 }
                 for item in self.sdk_identity_conflicts[:100]

@@ -152,26 +152,33 @@ class NavaidDiff:
     def to_report(self) -> dict[str, object]:
         def raw_payload(item: Navaid) -> dict[str, object]:
             return {
-                "key": item.key,
-                "kind": item.kind,
-                "ident": item.ident,
-                "region": item.country[:2],
-                "frequency": item.frequency,
-                "latitude": item.latitude,
-                "longitude": item.longitude,
+                "identity": {
+                    "kind": item.kind,
+                    "ident": item.ident,
+                    "region": item.country[:2],
+                },
+                "source": {
+                    "file": item.source.file,
+                    "row": item.source.row,
+                    "page": item.source.page,
+                },
             }
 
         def baseline_payload(item: BaselineNavaid) -> dict[str, object]:
             return {
-                "kind": item.kind,
-                "ident": item.ident,
-                "region": item.region,
-                "frequency_khz": item.frequency_khz,
-                "latitude": item.latitude,
-                "longitude": item.longitude,
-                "source": item.source,
-                "row_id": item.row_id,
+                "identity": {
+                    "kind": item.kind,
+                    "ident": item.ident,
+                    "region": item.region,
+                },
             }
+
+        def distance_relation(distance_nm: float) -> str:
+            if distance_nm <= 0.01:
+                return "coincident"
+            if distance_nm <= self.coordinate_tolerance_nm:
+                return "within_tolerance"
+            return "outside_tolerance"
 
         return {
             "navaid_diff_verified": self.verified,
@@ -200,7 +207,7 @@ class NavaidDiff:
                 {
                     "raw": raw_payload(item.raw),
                     "baseline": baseline_payload(item.baseline),
-                    "distance_nm": item.distance_nm,
+                    "distance_relation": distance_relation(item.distance_nm),
                     "fields": list(item.property_delta),
                 }
                 for item in self.property_deltas[:100]
