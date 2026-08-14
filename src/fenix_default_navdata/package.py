@@ -295,9 +295,6 @@ def build_candidate(
             "runways": len(model.runways),
             "navaids": len(model.navaids),
             "ad219_vor_evidence": len(model.ad219_vors),
-            "ad219_vor_dme_elevation_enriched": sum(
-                navaid.dme_source is not None for navaid in model.navaids
-            ),
             "selected_navaids": len(selected_navaids),
             "waypoints": len(model.waypoints),
             "source_fir_region_resolution": model.source_fir_region_resolution,
@@ -312,12 +309,10 @@ def build_candidate(
         "airway_source": summarize_airway_source_metadata(model),
         "terminal_navaid_evidence": {
             "ad219_vor_dme_records": len(model.ad219_vors),
-            "ad219_vor_dme_projected": sum(
-                navaid.dme_source is not None for navaid in selected_navaids
-            ),
+            "ad219_vor_dme_projected": 0,
             "ad219_vor_dme_reason": (
                 "AD 2.19 VOR/DME 表没有可验证的设施磁差；"
-                "AD_HP 机场磁差与直接 VOR.csv 记录不一致，不能代填"
+                "r52 语义差分证明其 DME 高程不能映射为默认 BGL 的 Vor/Dme.alt"
             ),
         },
         "iap_coverage": model.iap_coverage,

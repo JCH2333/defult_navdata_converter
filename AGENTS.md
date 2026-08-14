@@ -37,8 +37,8 @@
 - 补充来源审计（默认通用数据、2608R1，证据：2026-08-14 对 `FLIGHT_AIRLINE_POINT.csv` 的全量索引及完整 `load_naip(..., include_terminal_documents=True)` 重建）：航路点表包含名称、标识、频道/频率、起止点磁差和 UUID，但没有可投影导航台所需的类型、坐标和区域；它可对 267 条已有直接 VOR 的唯一标识/频率磁差交叉匹配做到 267 条完全一致、0 条冲突，却不能独立构成设施投影。当前 14 个参考缺失 VOR 均没有该表中可用的唯一磁差记录，不能借此补齐。终端程序腿对少数同标识仅保留裸固定点文本，未同时提供类型、区域和坐标。两类资料均不得独立新增或重区域化 VOR/NDB。
 - AD 2.19 VOR/DME 证据边界（默认通用数据、2608R1，证据：2026-08-14 对直接 `VOR.csv` 与同服务机场 `AD_HP.csv.VAL_MAG_VAR` 的全量交叉校验，以及 275 机场真实 `load_naip(..., include_terminal_documents=True)` 加载）：346 条可按服务机场关联的 VOR 中仅 3 条磁差相同、343 条不同；因此机场磁差不能代替设施磁差。真实加载从 AD 2.19 取得 386 条 VOR/DME 证据，其中 53 个唯一物理身份不在当前模型的直接 VOR 记录中。表头中的 `VAR` 不表示每行均给出磁差；CZW 的 `013°MAG/2000m` 和 HOK 的 `337°MAG/122982m` 等字段是天线相对位置，不得误作磁差或高程。AD 2.19 表中直接读取到的 VOR/DME 频率、坐标和明确打印的 DME 高程必须以页码和 SHA-256 保存为审计证据，但在取得当期 424 对设施磁差的独立证明前，不得写入 `model.navaids`、导航台选择或 BGL。自动化保护：`test_ad219_vor_evidence_keeps_direct_facts_without_a_magnetic_variation`、`test_ad219_vor_evidence_does_not_treat_position_distance_as_elevation`、`test_ad219_vor_evidence_is_not_promoted_to_a_navaid`。
 - WMM 推导禁止项（默认通用数据、2608R1，证据：2026-08-14 以全部 362 条直接 `VOR.csv.VAL_MAG_VAR` 对本机 `pygeomag` WMM-2020/WMM-2025 扫描）：最佳组合为 WMM-2020、2024 年，仍只有 37 条在 `0.01°` 内，中位绝对误差 `0.0497°`、90 分位 `0.1739°`、最大 `2.1818°`。WMM-2025 在 2026-08-06 时中位绝对误差约 `0.1191°`。两者都不能复现 424 设施磁差，不得用于补写 AD 2.19 缺失 VOR。
-## AD 2.19 VOR/DME 高程补充（2608R1）
+## AD 2.19 VOR/DME 高程投影结论（2608R1）
 
-- AD 2.19 只可补充已有当期 `VOR.csv` 直接 VOR 的 `Vor/Dme.alt`，不得新增、重区域化或修改 VOR 坐标、磁差、频率、名称或身份。
-- 前提必须同时满足：大写标识和频率唯一匹配、坐标大圆距离不超过 `0.01 NM`、PDF 明确打印唯一 DME 高程、来源页码和 SHA-256 已保留。
-- 歧义、坐标偏离或缺失高程必须跳过。自动化回归：`test_load_naip_enriches_only_colocated_unique_ad219_vor_dme_elevation`、`test_load_naip_does_not_enrich_vor_dme_elevation_from_offset_ad219_evidence`、`test_enroute_projection_uses_source_backed_dme_elevation_without_changing_vor_altitude`。
+- AD 2.19 继续保留为带页码和 SHA-256 的独立审计证据；不得新增、重区域化或修改任何 VOR 本体字段，也不得写入 `Vor/Dme.alt`。
+- 证据：2026-08-14 的 r52 真实 SDK 构建和受控 Navdatareader 差分中，投影 108 条已匹配 VOR 的 PDF DME 高程后，VOR 严格一致行从 40 降至 36、字段差异从 75 增至 79、含 `dme_altitude` 的差异样本从 27 增至 44。故该高程不是默认 BGL `Vor/Dme.alt` 的可证明来源。
+- 回归：`test_load_naip_keeps_ad219_vor_evidence_separate_from_direct_vor`、`test_ad219_vor_evidence_is_not_promoted_to_a_navaid`。

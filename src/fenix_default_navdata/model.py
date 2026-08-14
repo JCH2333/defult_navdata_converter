@@ -72,10 +72,6 @@ class Navaid:
     is_border_point: str = ""
     serviced_airport: str = ""
     code_fir: str = ""
-    # AD 2.19 may safely prove a colocated DME antenna elevation without
-    # changing the 424 VOR identity, coordinates, magnetic variation, or region.
-    dme_elevation_ft: int | None = None
-    dme_source: SourceRef | None = None
 
 
 @dataclass(frozen=True)

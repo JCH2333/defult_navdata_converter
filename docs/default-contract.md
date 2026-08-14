@@ -254,6 +254,6 @@ IAP 覆盖报告由 `iap_coverage.version=3` 标记。所有角色投影必须�
 - 程序标题分类仍有少量复杂双栏版式和无分隔程序名需要继续以 424 PDF 原文处理。
 - 在 `byte_equal_reference=true` 且完成实机验证前，任何候选都不得覆盖
   `F:\games\community\Community`，不得创建正式 Release。
-## AD 2.19 VOR/DME 高程补充
+## AD 2.19 VOR/DME 高程投影结论
 
-AD 2.19 没有可验证的设施磁差，不能新增、重区域化或修改任何 VOR 本体记录。仅当已有当期 `VOR.csv` 直接 VOR 与 AD 2.19 证据按大写标识和频率唯一匹配、坐标大圆距离不超过 `0.01 NM`，且 PDF 明确打印唯一 DME 高程并保存页码与 SHA-256 来源时，适配器才可写入 `Vor/Dme.alt`。VOR 的坐标、磁差、区域、频率、名称和身份必须保持 424 原值；歧义、坐标偏离和缺失高程均不得补充。
+AD 2.19 的 VOR/DME 表继续保存为带页码和 SHA-256 的审计证据，但不得新增、重区域化或修改任何 VOR 本体字段，也不得写入默认 BGL 的 `Vor/Dme.alt`。2026-08-14 的 r52 真实 SDK 构建与受控 Navdatareader 差分表明，投影 108 条已匹配 VOR 的 PDF DME 高程后，VOR 严格一致行从 40 降至 36、字段差异从 75 增至 79、含 `dme_altitude` 的差异样本从 27 增至 44。因此该高程不是默认 BGL `Vor/Dme.alt` 的可证明来源。

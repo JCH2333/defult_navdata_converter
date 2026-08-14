@@ -107,28 +107,6 @@ def test_enroute_projection_can_emit_only_verified_selected_navaids(tmp_path: Pa
     assert projection.navaids == 1
 
 
-def test_enroute_projection_uses_source_backed_dme_elevation_without_changing_vor_altitude(
-    tmp_path: Path,
-):
-    model = NavModel(Path("source"))
-    source = SourceRef("VOR.csv", 2)
-    navaid = Navaid(
-        "vor", "DMX", "VOR", "DME TEST", 35.0, 105.0, 113.1, 0.0, 100, "ZB",
-        source,
-        dme_elevation_ft=125,
-        dme_source=SourceRef("Terminal/ZBCF/airport.pdf", 14, 14, "hash"),
-    )
-    model.navaids.append(navaid)
-
-    output = tmp_path / "dme-elevation.xml"
-    write_bglcomp_xml(model, DEFAULT_CYCLE, output, scope="enroute")
-
-    vor = ET.parse(output).getroot().find("Vor")
-    assert vor is not None
-    assert vor.attrib["alt"] == "100F"
-    assert vor.find("Dme").attrib["alt"] == "125F"
-
-
 def test_enroute_projection_uses_verified_default_navaid_name_exceptions(tmp_path: Path):
     model = NavModel(Path("source"))
     source = SourceRef("VOR.csv", 2)

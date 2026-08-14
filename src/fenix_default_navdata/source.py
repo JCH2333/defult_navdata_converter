@@ -906,7 +906,6 @@ def load_naip(
     if include_terminal_documents:
         _load_terminal_coordinate_pages(model, pdf_cache)
         _load_terminal_landing_aids(model)
-        _enrich_vor_dme_elevations(model)
         _load_terminal_database_charts(model, pdf_cache)
         _load_terminal_standard_procedure_charts(model, pdf_cache)
         _build_database_procedure_segments(model)
@@ -942,63 +941,6 @@ def _load_terminal_landing_aids(model: NavModel) -> None:
                     vor.source.page, vor.source.sha256,
                 ),
             ))
-
-
-def _coordinate_distance_nm(
-    first_latitude: float,
-    first_longitude: float,
-    second_latitude: float,
-    second_longitude: float,
-) -> float:
-    """Return the great-circle separation used for source identity checks."""
-    first_latitude_radians = math.radians(first_latitude)
-    second_latitude_radians = math.radians(second_latitude)
-    latitude_delta = second_latitude_radians - first_latitude_radians
-    longitude_delta = math.radians(second_longitude - first_longitude)
-    haversine = (
-        math.sin(latitude_delta / 2) ** 2
-        + math.cos(first_latitude_radians)
-        * math.cos(second_latitude_radians)
-        * math.sin(longitude_delta / 2) ** 2
-    )
-    return 3440.065 * 2 * math.asin(min(1.0, math.sqrt(haversine)))
-
-
-def _enrich_vor_dme_elevations(model: NavModel) -> None:
-    """Attach only uniquely proven AD 2.19 DME elevations to direct 424 VORs."""
-    evidence_by_identity: dict[tuple[str, float], list] = {}
-    for evidence in model.ad219_vors:
-        identity = (evidence.ident.strip().upper(), round(evidence.frequency_mhz, 3))
-        evidence_by_identity.setdefault(identity, []).append(evidence)
-
-    enriched: list[Navaid] = []
-    for navaid in model.navaids:
-        if navaid.kind != "VOR":
-            enriched.append(navaid)
-            continue
-        identity = (navaid.ident.strip().upper(), round(navaid.frequency, 3))
-        matches = evidence_by_identity.get(identity, [])
-        if len(matches) != 1:
-            enriched.append(navaid)
-            continue
-        evidence = matches[0]
-        if (
-            evidence.dme_elevation_meters is None
-            or _coordinate_distance_nm(
-                navaid.latitude,
-                navaid.longitude,
-                evidence.latitude,
-                evidence.longitude,
-            ) > 0.01
-        ):
-            enriched.append(navaid)
-            continue
-        enriched.append(replace(
-            navaid,
-            dme_elevation_ft=_feet(str(evidence.dme_elevation_meters)),
-            dme_source=evidence.source,
-        ))
-    model.navaids[:] = enriched
 
 
 def _load_terminal_coordinate_pages(model: NavModel, pdf_cache: Path | None = None) -> None:

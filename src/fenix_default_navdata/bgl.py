@@ -1693,11 +1693,7 @@ def _append_enroute(
             ET.SubElement(vor, "Dme", _attrs(
                 lat=_float(navaid.latitude),
                 lon=_float(navaid.longitude),
-                alt=_feet(
-                    navaid.dme_elevation_ft
-                    if navaid.dme_elevation_ft is not None
-                    else navaid.elevation_ft
-                ),
+                alt=_feet(navaid.elevation_ft),
                 range=_nautical_miles(125),
             ))
         elif navaid.kind == "NDB":
