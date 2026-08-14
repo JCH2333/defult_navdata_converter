@@ -117,6 +117,10 @@ def test_waypoint_country_keeps_primary_source_fir_for_multi_fir_point() -> None
     assert waypoint_country("武汉情报区，上海情报区") == "ZH"
 
 
+def test_waypoint_country_prefers_valid_serviced_airport_over_fir() -> None:
+    assert waypoint_country("北京情报区", ident="FIX", serviced_airport="ZGAA") == "ZG"
+
+
 def test_load_naip_derives_runway_end_coordinates_from_airport_reference(tmp_path: Path) -> None:
     model = load_naip(
         _minimal_naip_root(tmp_path, "\u6c34\u6ce5\u6df7\u51dd\u571f"),
@@ -275,7 +279,7 @@ def test_load_naip_uses_strict_serviced_airport_prefix_for_blank_waypoint_fir(
         "P216": "ZU",
         "SHORT": "",
         "FOREIGN": "",
-        "EXPLICIT": "ZB",
+        "EXPLICIT": "ZG",
     }
 
 

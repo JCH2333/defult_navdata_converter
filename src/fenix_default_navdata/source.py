@@ -373,23 +373,22 @@ def waypoint_country(
     ident: str = "",
     serviced_airport: str = "",
 ) -> str:
-    """Map a structured designated-point FIR to an MSFS region key."""
-    if "\u9999\u6e2f" in (fir or ""):
-        return "VH"
-    if fir:
-        # A designated point has no serviced-airport side.  For a published
-        # multi-FIR list, retain its first source-listed FIR as the primary
-        # ownership marker instead of applying the navaid boundary rule.
-        primary_fir = re.split(r"[，,]", fir, maxsplit=1)[0].strip()
-        return navaid_country("", primary_fir)
-    if ident in _EMPTY_FIR_COUNTRY_OVERRIDES:
-        return _EMPTY_FIR_COUNTRY_OVERRIDES[ident]
+    """Map a structured designated point to an MSFS region key."""
     normalized_airport = (serviced_airport or "").strip().upper()
     if (
         re.fullmatch(r"Z[A-Z]{3}", normalized_airport)
         and is_china_icao(normalized_airport)
     ):
+        # A source-declared servicing airport is more specific than its FIR.
         return normalized_airport[:2]
+    if "\u9999\u6e2f" in (fir or ""):
+        return "VH"
+    if fir:
+        # Without an airport-side marker, keep the first source-listed FIR.
+        primary_fir = re.split(r"[，,]", fir, maxsplit=1)[0].strip()
+        return navaid_country("", primary_fir)
+    if ident in _EMPTY_FIR_COUNTRY_OVERRIDES:
+        return _EMPTY_FIR_COUNTRY_OVERRIDES[ident]
     raise ValueError(f"empty waypoint FIR: {ident or '<unknown>'}")
 
 

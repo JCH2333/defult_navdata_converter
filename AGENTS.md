@@ -17,6 +17,7 @@
 - `fspackagetool.exe` 可能因 Steam 进程附着竞态先返回非零代码，但后台 `FlightSimulator2024.exe` 仍在构建；必须等待新进程退出，以实际包产物判定成功后再清理暂存目录。
 - Package Tool 启动恢复（2608R1，证据：2026-08-14 的 r35/r37 项目输入逐文件 SHA-256 一致；r37 两次调用均退出代码 1、没有新模拟器进程、没有新 Builder 日志或产物）：仅当首次非零退出、完整启动等待期内未发现新的 `FlightSimulator2024.exe` 时，允许以同一纯 ASCII 暂存项目重试一次。发现新进程时仍只能等待其退出并以完整包产物判定；第二次失败不得继续重试。自动化测试：`test_package_tool_retries_one_startup_failure_without_simulator_process`。
 - 内容来源为当期 424 `2608` 原始 CSV/PDF，负责机场、跑道、ILS、终端航点、SID/STAR/IAP、航路和等待航线；官方包只负责全球基线和加载契约。
+- 指定点区域优先级（2608R1，证据：`DESIGNATED_POINT.csv`、r54 只读来源审计与 `tests/test_source.py`，2026-08-14）：严格匹配 `Z[A-Z]{3}` 的中国 `SERVICED_AIRPORT` 是指定点最具体的源侧归属，必须优先于 `CODE_FIR`；无有效服务机场时才使用首个源列 FIR、既有空 FIR 覆盖或 FIR 多边形恢复。对 r54 的 335 个“指定点区域不同”来源项，12 个具有严格有效服务机场，其中 9 个与只读参考逻辑区域一致、3 个与原区域一致，未发现第三方区域反例。该规则只选择 424 源区域键，不读取或回填参考字段。自动化测试：`test_waypoint_country_prefers_valid_serviced_airport_over_fir`、`test_load_naip_uses_strict_serviced_airport_prefix_for_blank_waypoint_fir`。
 - 官方索引用于区域码恢复前，必须同时验证 VOR、NDB 与 WAYPOINT 三类读取器记录可反向映射到当前 `nav-base`/`nav-jepp` 的中性镜像 BGL；侧车必须记录三类行数与来源统计。缺少 `waypoint.file_id/ident/region/laty/lonx`、来源越界或侧车版本不匹配时，索引不得复用。
 - 默认通用数据适配器可仅为 424 中空白的航路端点/指定点恢复区域码：端点类型、标识必须相同，坐标距离不得超过 `0.01 NM`，且命中的官方区域必须唯一。VOR/NDB/指定点不得跨表匹配；歧义、无匹配、无坐标或不支持的端点类型必须保持为空并计入转换报告。对应回归：`test_region_resolution.py`。
 - Fenix 解析模块仅保留为历史适配器回归材料，不得从 Fenix `nd.db3` 生成默认通用数据候选。
