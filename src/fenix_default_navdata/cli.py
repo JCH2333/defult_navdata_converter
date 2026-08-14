@@ -7,6 +7,7 @@ from pathlib import Path
 from .convert import convert
 from .deployment import deploy, restore
 from .official_index import build_official_navaid_index
+from .package_reader import read_package
 from .paths import detect_paths
 from .profile import DEFAULT_CYCLE
 from .semantic_diff import SUPPORTED_TABLES, semantic_diff, write_semantic_diff
@@ -85,6 +86,27 @@ def build_parser() -> argparse.ArgumentParser:
         help="完整、只读且已脱敏的 semantic-diff JSON",
     )
     source_gap.add_argument("--output", help="可选的本地来源缺口审计 JSON 输出路径")
+    package_reader = sub.add_parser(
+        "read-package",
+        help="在纯 ASCII 暂存区镜像完整覆盖包并生成 Navdatareader SQLite",
+    )
+    package_reader.add_argument("--package", required=True, help="候选或参考 Community 包目录")
+    package_reader.add_argument("--output", required=True, help="读取器 SQLite 输出路径")
+    package_reader.add_argument("--reader", help="本机 Navdatareader.exe 路径")
+    package_reader.add_argument("--cache-root", help="纯 ASCII 本地读取器暂存目录")
+    package_reader.add_argument(
+        "--filenames",
+        nargs="+",
+        default=["*.bgl"],
+        help="要读取的 BGL 文件名模式，默认 *.bgl",
+    )
+    package_reader.add_argument(
+        "--objects",
+        nargs="+",
+        default=[],
+        help="可选的 Navdatareader BGL 对象过滤，例如 VOR NDB WAYPOINT AIRWAY",
+    )
+    package_reader.add_argument("--timeout", type=int, default=3600, help="读取器超时秒数")
     validate = sub.add_parser("validate", help="验证候选")
     validate.add_argument("--candidate", required=True)
     validate.add_argument("--reference")
@@ -163,6 +185,18 @@ def main(argv: list[str] | None = None) -> int:
             report["output"] = str(output)
             write_source_gap_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "read-package":
+        result = read_package(
+            Path(args.package),
+            Path(args.output),
+            reader=_path(args.reader),
+            cache_root=_path(args.cache_root),
+            filename_patterns=args.filenames,
+            object_filter=args.objects,
+            timeout_seconds=args.timeout,
+        )
+        print(json.dumps(result.to_report(), ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "validate":
         report = validate_candidate(Path(args.candidate), _path(args.reference))
