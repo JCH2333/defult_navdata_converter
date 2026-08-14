@@ -20,6 +20,8 @@ _PROCEDURE_KIND_MAP = {
     "missed": "missed",
 }
 IAP_KINDS = frozenset({"approach_transition", "approach", "missed"})
+_CHART_ROLE_EVIDENCE = frozenset({"IAF", "IF", "FAF", "MAP", "MAPT"})
+_CHART_TERMINAL_ROLE_EVIDENCE = frozenset({"FAF", "MAP", "MAPT"})
 _UNRESOLVED_STATUSES = frozenset({
     "no_unique_primary",
     "empty_primary",
@@ -52,31 +54,79 @@ def matching_iap_charts(model: NavModel, segment: Any) -> list:
     ]
 
 
-def iap_chart_roles(model: NavModel, segment: Any) -> dict[str, set[str]]:
-    """Return roles only when one printed approach plate is identifiable."""
-    charts = matching_iap_charts(model, segment)
-    if len(charts) > 1 and segment.legs and segment.legs[-1].fix_ident:
-        final_fix = segment.legs[-1].fix_ident.upper()
-        map_charts = [
-            chart
-            for chart in charts
-            if any(
-                route_fix.ident.upper() == final_fix
-                and route_fix.role.upper() in {"MAP", "MAPT"}
-                for route_fix in chart.route_fixes
-            )
-        ]
-        if len(map_charts) == 1:
-            charts = map_charts
-    if len(charts) != 1:
-        return {}
+def _chart_roles(chart: Any) -> dict[str, set[str]]:
     roles: dict[str, set[str]] = {}
-    for route_fix in charts[0].route_fixes:
+    for route_fix in chart.route_fixes:
         ident = route_fix.ident.strip().upper()
         role = route_fix.role.strip().upper()
         if ident and role:
             roles.setdefault(ident, set()).add(role)
     return roles
+
+
+def _matching_chart_role_evidence(chart: Any, leg_idents: set[str]) -> set[tuple[str, str]]:
+    return {
+        (route_fix.ident.strip().upper(), route_fix.role.strip().upper())
+        for route_fix in chart.route_fixes
+        if route_fix.ident.strip().upper() in leg_idents
+        and route_fix.role.strip().upper() in _CHART_ROLE_EVIDENCE
+    }
+
+
+def _select_iap_chart(charts: list[Any], segment: Any) -> tuple[Any | None, str | None]:
+    """Select one plate only when source legs prove a unique association."""
+    if len(charts) == 1:
+        return charts[0], "unique_chart"
+    if len(charts) < 2 or not segment.legs:
+        return None, None
+
+    final_fix = segment.legs[-1].fix_ident.strip().upper() if segment.legs[-1].fix_ident else ""
+    if final_fix:
+        map_charts = [
+            chart
+            for chart in charts
+            if any(
+                route_fix.ident.strip().upper() == final_fix
+                and route_fix.role.strip().upper() in {"MAP", "MAPT"}
+                for route_fix in chart.route_fixes
+            )
+        ]
+        if len(map_charts) == 1:
+            return map_charts[0], "final_mapt"
+
+    leg_idents = {
+        leg.fix_ident.strip().upper()
+        for leg in segment.legs
+        if leg.fix_ident and leg.fix_ident.strip()
+    }
+    evidence = {
+        id(chart): _matching_chart_role_evidence(chart, leg_idents)
+        for chart in charts
+    }
+    supporting = [
+        chart
+        for chart in charts
+        if len({ident for ident, _ in evidence[id(chart)]}) >= 2
+        and any(role in _CHART_TERMINAL_ROLE_EVIDENCE for _, role in evidence[id(chart)])
+    ]
+    if (
+        len(supporting) == 1
+        and all(
+            not evidence[id(chart)]
+            for chart in charts
+            if chart is not supporting[0]
+        )
+    ):
+        return supporting[0], "multi_role"
+    return None, None
+
+
+def iap_chart_roles(model: NavModel, segment: Any) -> dict[str, set[str]]:
+    """Return roles only when one printed approach plate is identifiable."""
+    chart, _ = _select_iap_chart(matching_iap_charts(model, segment), segment)
+    if chart is None:
+        return {}
+    return _chart_roles(chart)
 
 
 def _source_report(source: Any) -> dict[str, object]:
@@ -139,32 +189,22 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
                 (chart.airport, chart.filename, chart.page)
                 for chart in matching
             )
-            roles = iap_chart_roles(model, primary[0])
+            selected_chart, selection = _select_iap_chart(matching, primary[0])
+            roles = _chart_roles(selected_chart) if selected_chart is not None else {}
             if roles:
                 role_groups += 1
                 status = (
                     "roles_unique_chart"
-                    if len(matching) == 1
-                    else "roles_final_mapt_disambiguated"
-                )
-                selected_chart = next(
-                    (
-                        chart for chart in matching
-                        if all(
-                            any(
-                                route_fix.ident.strip().upper() == ident
-                                and route_fix.role.strip().upper() in role_set
-                                for route_fix in chart.route_fixes
-                            )
-                            for ident, role_set in roles.items()
-                        )
-                    ),
-                    None,
-                )
-                if selected_chart is not None:
-                    selected_role_pages.add(
-                        (selected_chart.airport, selected_chart.filename, selected_chart.page)
+                    if selection == "unique_chart"
+                    else (
+                        "roles_final_mapt_disambiguated"
+                        if selection == "final_mapt"
+                        else "roles_multi_role_disambiguated"
                     )
+                )
+                selected_role_pages.add(
+                    (selected_chart.airport, selected_chart.filename, selected_chart.page)
+                )
                 for role_set in roles.values():
                     role_counts.update(role_set)
             elif not matching:
@@ -190,7 +230,7 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
     role_evidence_pages = sum(bool(chart.route_fixes) for chart in charts)
     missed_evidence_pages = sum(bool(chart.has_missed_approach) for chart in charts)
     return {
-        "version": 1,
+        "version": 2,
         "chart_pages": {
             "total": len(charts),
             "with_route_role_evidence": role_evidence_pages,
