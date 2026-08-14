@@ -334,14 +334,36 @@ def _load_airport_pdf_names(model: NavModel) -> None:
 
 
 def navaid_country(serviced_airport: str, fir: str) -> str:
+    """Map a 424 navaid to a default-data region without guessing boundaries.
+
+    A single published FIR is the geographical region evidence.  The serviced
+    airport can belong to a different ICAO prefix near an FIR boundary, so it
+    is only a fallback when that FIR is absent.  A multi-FIR entry is itself
+    boundary evidence; retain the explicit serviced-airport side when present.
+    """
+
     airport_prefix = (serviced_airport or "").strip().upper()[:2]
+    fir_names = tuple(
+        part.strip()
+        for part in re.split(r"[，,]", fir or "")
+        if part.strip()
+    )
+    if len(fir_names) == 1:
+        try:
+            return _FIR_COUNTRIES[fir_names[0]]
+        except KeyError as error:
+            raise ValueError(f"unmapped navaid FIR: {fir!r}") from error
     if airport_prefix in CN_PREFIXES:
         return airport_prefix
-    fir_name = (fir or "").split("\uff0c", maxsplit=1)[0].strip()
-    try:
-        return _FIR_COUNTRIES[fir_name]
-    except KeyError as error:
-        raise ValueError(f"unmapped navaid FIR: {fir!r}") from error
+    if fir_names:
+        try:
+            countries = {_FIR_COUNTRIES[name] for name in fir_names}
+        except KeyError as error:
+            raise ValueError(f"unmapped navaid FIR: {fir!r}") from error
+        if len(countries) == 1:
+            return next(iter(countries))
+        raise ValueError(f"ambiguous navaid FIR without serviced airport: {fir!r}")
+    raise ValueError("empty navaid FIR and serviced airport")
 
 
 def waypoint_country(
