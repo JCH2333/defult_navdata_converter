@@ -287,16 +287,14 @@ def _load_airport_pdf_names(model: NavModel) -> None:
 
 
 def navaid_country(serviced_airport: str, fir: str) -> str:
-    fir_name = (fir or "").split("\uff0c", maxsplit=1)[0].strip()
-    if fir_name:
-        try:
-            return _FIR_COUNTRIES[fir_name]
-        except KeyError as error:
-            raise ValueError(f"unmapped navaid FIR: {fir!r}") from error
     airport_prefix = (serviced_airport or "").strip().upper()[:2]
     if airport_prefix in CN_PREFIXES:
         return airport_prefix
-    raise ValueError(f"unmapped navaid FIR: {fir!r}")
+    fir_name = (fir or "").split("\uff0c", maxsplit=1)[0].strip()
+    try:
+        return _FIR_COUNTRIES[fir_name]
+    except KeyError as error:
+        raise ValueError(f"unmapped navaid FIR: {fir!r}") from error
 
 
 def waypoint_country(
