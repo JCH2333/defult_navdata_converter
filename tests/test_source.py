@@ -2,7 +2,12 @@ from pathlib import Path
 
 import pytest
 
-from fenix_default_navdata.source import _surface, load_naip, summarize_airway_source_metadata
+from fenix_default_navdata.source import (
+    _surface,
+    load_naip,
+    navaid_country,
+    summarize_airway_source_metadata,
+)
 
 
 def _write_csv(root: Path, name: str, text: str) -> None:
@@ -52,6 +57,10 @@ def _minimal_naip_root(tmp_path: Path, composition: str, *, include_second_airpo
 ))
 def test_surface_retains_first_expressible_source_component(composition: str, expected: str) -> None:
     assert _surface(composition) == expected
+
+
+def test_navaid_country_prefers_serviced_airport_when_fir_conflicts() -> None:
+    assert navaid_country("ZBES", "沈阳情报区") == "ZB"
 
 
 def test_load_naip_derives_runway_end_coordinates_from_airport_reference(tmp_path: Path) -> None:
