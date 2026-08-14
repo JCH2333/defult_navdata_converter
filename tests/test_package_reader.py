@@ -2,11 +2,16 @@ from __future__ import annotations
 
 import sqlite3
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
-from fenix_default_navdata.package_reader import PackageReaderError, read_package
+from fenix_default_navdata.package_reader import (
+    PackageReaderError,
+    _run_reader,
+    read_package,
+)
 
 
 def _write_package(root: Path) -> Path:
@@ -121,3 +126,24 @@ def test_rejects_reader_output_without_registered_bgl_source(
         )
 
     assert not output.exists()
+
+
+def test_reader_log_limit_stops_an_unbounded_external_reader(tmp_path: Path) -> None:
+    script = tmp_path / "unbounded_reader.py"
+    script.write_text(
+        "\n".join((
+            "from pathlib import Path",
+            "import time",
+            "Path('abarthel-navdatareader.log').write_bytes(b'x' * 2048)",
+            "time.sleep(30)",
+        )),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(PackageReaderError, match="日志超过"):
+        _run_reader(
+            [sys.executable, str(script)],
+            cwd=tmp_path,
+            timeout_seconds=10,
+            max_log_bytes=1024,
+        )

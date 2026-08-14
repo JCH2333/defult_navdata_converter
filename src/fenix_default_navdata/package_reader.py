@@ -7,6 +7,7 @@ import shutil
 import sqlite3
 import subprocess
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -28,6 +29,9 @@ _READER_TARGET_TABLES = (
     "ils",
     "holding",
 )
+DEFAULT_READER_TIMEOUT_SECONDS = 120
+DEFAULT_READER_LOG_LIMIT_BYTES = 16 * 1024 * 1024
+_READER_POLL_SECONDS = 0.05
 
 
 class PackageReaderError(RuntimeError):
@@ -191,16 +195,61 @@ def _run_reader(
     *,
     cwd: Path,
     timeout_seconds: int,
+    max_log_bytes: int = DEFAULT_READER_LOG_LIMIT_BYTES,
 ) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        command,
-        cwd=cwd,
-        check=False,
-        capture_output=True,
-        text=True,
+    """运行外部读取器，并在其异常刷日志时主动收敛诊断。"""
+
+    stdout_path = cwd / "reader.stdout.log"
+    stderr_path = cwd / "reader.stderr.log"
+    reader_logs = (
+        cwd / "abarthel-navdatareader.log",
+        cwd / "abarthel-navdatareader-err.log",
+        stdout_path,
+        stderr_path,
+    )
+    started_at = time.monotonic()
+    with stdout_path.open("w", encoding="utf-8", errors="replace") as stdout, stderr_path.open(
+        "w",
         encoding="utf-8",
         errors="replace",
-        timeout=timeout_seconds,
+    ) as stderr:
+        process = subprocess.Popen(
+            command,
+            cwd=cwd,
+            stdout=stdout,
+            stderr=stderr,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        try:
+            while process.poll() is None:
+                log_bytes = sum(
+                    path.stat().st_size
+                    for path in reader_logs
+                    if path.is_file()
+                )
+                if log_bytes > max_log_bytes:
+                    process.kill()
+                    process.wait()
+                    raise PackageReaderError(
+                        "Navdatareader 日志超过 "
+                        f"{max_log_bytes // (1024 * 1024)} MiB，已停止本次诊断"
+                    )
+                if time.monotonic() - started_at >= timeout_seconds:
+                    process.kill()
+                    process.wait()
+                    raise subprocess.TimeoutExpired(command, timeout_seconds)
+                time.sleep(_READER_POLL_SECONDS)
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait()
+    return subprocess.CompletedProcess(
+        command,
+        process.returncode,
+        stdout_path.read_text(encoding="utf-8", errors="replace"),
+        stderr_path.read_text(encoding="utf-8", errors="replace"),
     )
 
 
@@ -270,7 +319,7 @@ def read_package(
     cache_root: Path | None = None,
     filename_patterns: Iterable[str] = ("*.bgl",),
     object_filter: Iterable[str] = (),
-    timeout_seconds: int = 3600,
+    timeout_seconds: int = DEFAULT_READER_TIMEOUT_SECONDS,
 ) -> PackageReaderResult:
     """镜像完整 Community 包并生成可用于只读差分的 Navdatareader SQLite。"""
 

@@ -56,6 +56,8 @@ python -m fenix_default_navdata.gui
 
 也可以双击 `run_gui.bat`。
 
+`read-package` 默认最多运行 120 秒，并在外部读取器日志超过 16 MiB 时停止本次诊断，避免异常 BGL 读取消耗无限磁盘空间。
+
 显式指定 SDK Package Tool：
 
 ```powershell

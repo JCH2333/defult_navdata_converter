@@ -7,7 +7,7 @@ from pathlib import Path
 from .convert import convert
 from .deployment import deploy, restore
 from .official_index import build_official_navaid_index
-from .package_reader import read_package
+from .package_reader import DEFAULT_READER_TIMEOUT_SECONDS, read_package
 from .paths import detect_paths
 from .profile import DEFAULT_CYCLE
 from .semantic_diff import SUPPORTED_TABLES, semantic_diff, write_semantic_diff
@@ -106,7 +106,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=[],
         help="可选的 Navdatareader BGL 对象过滤，例如 VOR NDB WAYPOINT AIRWAY",
     )
-    package_reader.add_argument("--timeout", type=int, default=3600, help="读取器超时秒数")
+    package_reader.add_argument(
+        "--timeout",
+        type=int,
+        default=DEFAULT_READER_TIMEOUT_SECONDS,
+        help=f"读取器超时秒数（默认 {DEFAULT_READER_TIMEOUT_SECONDS}）",
+    )
     validate = sub.add_parser("validate", help="验证候选")
     validate.add_argument("--candidate", required=True)
     validate.add_argument("--reference")
