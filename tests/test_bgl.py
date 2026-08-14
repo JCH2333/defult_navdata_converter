@@ -973,3 +973,47 @@ def test_package_tool_stages_project_in_ascii_path(tmp_path: Path, monkeypatch):
     assert package_root.is_dir()
     assert (package_root / "bglIndex.bout").read_bytes() == b"x"
     assert list(package_root.rglob("*.bgl"))
+
+
+def test_package_tool_retries_one_startup_failure_without_simulator_process(tmp_path: Path, monkeypatch):
+    source = tmp_path / "source.xml"
+    source.write_text("<FSData version=\"9.0\"/>", encoding="utf-8")
+    project = write_package_project(
+        tmp_path / "project",
+        package_name="test-navdata",
+        title="Test NavData",
+        output_dir=r"scenery\test-navdata",
+        source_xmls=(source,),
+        package_order_hint="CUSTOM_NAVDATA_PATCH",
+    )
+    calls: list[list[str]] = []
+
+    def fake_run(command, **kwargs):
+        calls.append(command)
+        if len(calls) == 1:
+            return subprocess.CompletedProcess(command, 1, "", "")
+        staged_project = Path(command[1])
+        package = staged_project.parent / "Packages" / "test-navdata"
+        package.mkdir(parents=True)
+        for name in ("manifest.json", "layout.json", "bglIndex.bout"):
+            (package / name).write_bytes(b"x")
+        bgl = package / "scenery" / "test-navdata" / "source.bgl"
+        bgl.parent.mkdir(parents=True)
+        bgl.write_bytes(b"bgl")
+        return subprocess.CompletedProcess(command, 0, "ok", "")
+
+    monkeypatch.setattr("fenix_default_navdata.bgl.subprocess.run", fake_run)
+    monkeypatch.setattr("fenix_default_navdata.bgl._simulator_pids", lambda: set())
+    monkeypatch.setattr(
+        "fenix_default_navdata.bgl._wait_for_package_tool_process",
+        lambda previous_pids, **kwargs: False,
+    )
+    report = compile_package(
+        project,
+        CompilerInfo(Path("fspackagetool.exe"), "PackageTool", "test"),
+        package_name="test-navdata",
+    )
+
+    assert len(calls) == 2
+    assert [attempt["returncode"] for attempt in report["attempts"]] == [1, 0]
+    assert [attempt["simulator_started"] for attempt in report["attempts"]] == [False, False]

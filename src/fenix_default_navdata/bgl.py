@@ -2020,21 +2020,44 @@ def compile_package(
             "-rebuild",
             "-forcesteam",
         ]
-        result = subprocess.run(
-            command,
-            cwd=str(stage_root),
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            check=False,
-            timeout=timeout_seconds,
-        )
+        def run_builder() -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                command,
+                cwd=str(stage_root),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                check=False,
+                timeout=timeout_seconds,
+            )
+
+        result = run_builder()
+        attempts = [{
+            "returncode": result.returncode,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "simulator_started": False,
+        }]
         if result.returncode != 0:
-            _wait_for_package_tool_process(
+            simulator_started = _wait_for_package_tool_process(
                 simulator_pids,
                 build_timeout=timeout_seconds,
             )
+            attempts[-1]["simulator_started"] = simulator_started
+            if not simulator_started:
+                result = run_builder()
+                attempts.append({
+                    "returncode": result.returncode,
+                    "stdout": result.stdout,
+                    "stderr": result.stderr,
+                    "simulator_started": False,
+                })
+                if result.returncode != 0:
+                    attempts[-1]["simulator_started"] = _wait_for_package_tool_process(
+                        simulator_pids,
+                        build_timeout=timeout_seconds,
+                    )
         staged_package_root = stage_root / "Packages" / package_name
         required = (
             staged_package_root / "manifest.json",
@@ -2058,7 +2081,8 @@ def compile_package(
             raise RuntimeError(
                 "Package Tool 未生成完整导航包；"
                 f"包装器退出代码={result.returncode}，缺少={missing}，"
-                f"BGL={len(bgls)}，输出={details[-4000:]}"
+                f"BGL={len(bgls)}，尝试={[(attempt['returncode'], attempt['simulator_started']) for attempt in attempts]}，"
+                f"输出={details[-4000:]}"
             )
         package_root = project_path.parent / "_compiled" / package_name
         if package_root.exists():
@@ -2071,6 +2095,7 @@ def compile_package(
             "command": command,
             "stdout": result.stdout,
             "stderr": result.stderr,
+            "attempts": attempts,
             "package_root": str(package_root),
             "bgls": [str(path) for path in copied_bgls],
         }
