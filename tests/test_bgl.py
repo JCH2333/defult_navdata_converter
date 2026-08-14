@@ -182,6 +182,38 @@ def test_enroute_projection_skips_records_without_source_proven_regions(tmp_path
     )
 
 
+def test_enroute_projection_adds_only_shared_terminal_waypoints(tmp_path: Path):
+    model = NavModel(Path("source"))
+    source = SourceRef("Terminal/ZBAA/coordinate-page.pdf", page=1)
+    model.waypoints.append(Waypoint(
+        "existing", "EXISTING", "EXISTING", 35.0, 105.0, source, "ZB",
+    ))
+    model.terminal_waypoints.extend((
+        TerminalWaypoint("shared-one", "ZBAA", "SHARED", 35.1, 105.1, source, "ZB"),
+        TerminalWaypoint("shared-two", "ZBAD", "SHARED", 35.1, 105.1, source, "ZB"),
+        TerminalWaypoint("local", "ZBAA", "LOCAL", 35.2, 105.2, source, "ZB"),
+        TerminalWaypoint("ambiguous-one", "ZBAA", "AMBIG", 35.3, 105.3, source, "ZB"),
+        TerminalWaypoint("ambiguous-two", "ZBAD", "AMBIG", 35.3, 105.3, source, "ZB"),
+        TerminalWaypoint("ambiguous-three", "ZBCF", "AMBIG", 35.4, 105.4, source, "ZB"),
+        TerminalWaypoint("ambiguous-four", "ZBSJ", "AMBIG", 35.4, 105.4, source, "ZB"),
+        TerminalWaypoint("existing-one", "ZBAA", "EXISTING", 35.5, 105.5, source, "ZB"),
+        TerminalWaypoint("existing-two", "ZBAD", "EXISTING", 35.5, 105.5, source, "ZB"),
+    ))
+
+    output = tmp_path / "shared-terminal-enroute.xml"
+    projection = write_bglcomp_xml(model, DEFAULT_CYCLE, output, scope="enroute")
+
+    root = ET.parse(output).getroot()
+    points = {
+        point.attrib["waypointIdent"]: point
+        for point in root.findall("Waypoint")
+    }
+    assert set(points) == {"EXISTING", "SHARED"}
+    assert points["EXISTING"].attrib["lat"] == "35"
+    assert projection.waypoints == 2
+    assert projection.shared_terminal_enroute_waypoints == 1
+
+
 def test_airport_projection_emits_source_backed_holding_pattern(tmp_path: Path):
     model = NavModel(Path("source"))
     source = SourceRef("ZBAA-0C-15.pdf", page=1)

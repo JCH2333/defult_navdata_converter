@@ -58,6 +58,7 @@ class XmlProjection:
     airports: int
     runways: int
     waypoints: int
+    shared_terminal_enroute_waypoints: int
     navaids: int
     airway_routes: int
     skipped_enroute_waypoints: int
@@ -1499,11 +1500,59 @@ def _airway_waypoint_identity(
     return ("NAMED", (country or "").upper()[:2], normalized_ident)
 
 
+def _shared_terminal_enroute_points(
+    model: NavModel,
+    existing_identities: set[tuple[str, str, str]],
+) -> list[object]:
+    """Return only source-proven terminal points safe to share enroute.
+
+    Coordinate pages remain airport-local unless the same SDK identity at the
+    same source coordinate is published by at least two airports.  Any
+    identity with multiple source coordinates stays unresolved, and existing
+    enroute identities always retain their original content.
+    """
+    identities, representatives = _terminal_waypoint_identities(
+        model.terminal_waypoints
+    )
+    grouped: dict[tuple[str, str, str], list[object]] = {}
+    for key, terminal_ident in identities.items():
+        point = representatives[key]
+        identity = _airway_waypoint_identity(
+            terminal_ident,
+            point.country or point.airport[:2],
+            point.latitude,
+            point.longitude,
+        )
+        grouped.setdefault(identity, []).append(point)
+
+    shared = []
+    for identity, candidates in sorted(grouped.items()):
+        coordinates = {
+            (round(point.latitude, 6), round(point.longitude, 6))
+            for point in candidates
+        }
+        if len(coordinates) != 1 or identity in existing_identities:
+            continue
+        if len({point.airport for point in candidates}) < 2:
+            continue
+        point = min(candidates, key=lambda item: (item.airport, item.key))
+        shared.append(type("_Point", (), {
+            "ident": identity[2],
+            "country": identity[1],
+            "latitude": point.latitude,
+            "longitude": point.longitude,
+            "name": point.ident,
+            "key": f"shared-terminal:{identity[1]}:{identity[2]}",
+            "source_type": "TERMINAL_WAYPOINT",
+        })())
+    return shared
+
+
 def _append_enroute(
     root: ET.Element,
     model: NavModel,
     selected_navaids: tuple[Navaid, ...] | None = None,
-) -> tuple[int, int, int, int, int, tuple[dict[str, object], ...]]:
+) -> tuple[int, int, int, int, int, int, tuple[dict[str, object], ...]]:
     """Write only enroute records that meet the SDK's required region contract."""
     points = [point for point in model.waypoints if point.country]
     skipped_waypoints = len(model.waypoints) - len(points)
@@ -1585,6 +1634,20 @@ def _append_enroute(
                 "key": f"airway-end:{leg.airway}:{leg.sequence}",
                 "source_type": leg.end_type,
             })())
+    existing_identities = {
+        _airway_waypoint_identity(
+            str(point.ident),
+            str(point.country or ""),
+            float(point.latitude),
+            float(point.longitude),
+        )
+        for point in points
+    }
+    shared_terminal_points = _shared_terminal_enroute_points(
+        model,
+        existing_identities,
+    )
+    points.extend(shared_terminal_points)
     deduped: dict[tuple[str, str, str], object] = {}
     for point in sorted(
         points,
@@ -1711,6 +1774,7 @@ def _append_enroute(
             ))
     return (
         len(ordered_points),
+        len(shared_terminal_points),
         len(navaids),
         len({leg.airway for leg in resolved_legs}),
         skipped_waypoints,
@@ -1922,6 +1986,7 @@ def write_bglcomp_xml(
             ))
 
     enroute_waypoints = 0
+    shared_terminal_enroute_waypoints = 0
     enroute_navaids = 0
     airway_routes = 0
     skipped_enroute_waypoints = 0
@@ -1930,6 +1995,7 @@ def write_bglcomp_xml(
     if scope in {"all", "enroute"}:
         (
             enroute_waypoints,
+            shared_terminal_enroute_waypoints,
             enroute_navaids,
             airway_routes,
             skipped_enroute_waypoints,
@@ -1955,6 +2021,7 @@ def write_bglcomp_xml(
             + terminal_waypoint_count
             + root_terminal_waypoint_count
         ),
+        shared_terminal_enroute_waypoints=shared_terminal_enroute_waypoints,
         navaids=enroute_navaids,
         airway_routes=airway_routes,
         skipped_enroute_waypoints=skipped_enroute_waypoints,
