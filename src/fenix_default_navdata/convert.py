@@ -18,6 +18,7 @@ def convert(
     reference: Path | None = None,
     compiler: Path | None = None,
     pdf_cache: Path | None = None,
+    general_doc_cache: Path | None = None,
     baseline_db: Path | None = None,
     baseline_tolerance_nm: float = 0.25,
 ) -> dict[str, object]:
@@ -31,6 +32,7 @@ def convert(
         compiler=find_compiler(compiler),
         reference=reference.resolve() if reference else None,
         pdf_cache=pdf_cache,
+        general_doc_cache=general_doc_cache,
         baseline_db=baseline_db.resolve() if baseline_db else None,
         baseline_tolerance_nm=baseline_tolerance_nm,
     )

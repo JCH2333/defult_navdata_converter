@@ -43,6 +43,10 @@ def build_parser() -> argparse.ArgumentParser:
     build.add_argument("--bglcomp", help="合法 BglComp.exe 路径")
     build.add_argument("--pdf-cache", help="可复用的 PDF 解析缓存目录")
     build.add_argument(
+        "--general-doc-cache",
+        help="航路 GeneralDoc 的 OCR 缓存目录；必须含已校验 SHA-256 的完整清单",
+    )
+    build.add_argument(
         "--baseline-db",
         help="已验证的官方 VOR/NDB 设施索引 SQLite；未提供时只能生成不可部署的诊断候选",
     )
@@ -142,6 +146,7 @@ def main(argv: list[str] | None = None) -> int:
             reference=reference,
             compiler=_path(args.bglcomp),
             pdf_cache=_path(args.pdf_cache),
+            general_doc_cache=_path(args.general_doc_cache),
             baseline_db=_path(args.baseline_db),
             baseline_tolerance_nm=args.baseline_tolerance_nm,
         )

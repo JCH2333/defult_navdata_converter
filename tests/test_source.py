@@ -1,4 +1,6 @@
 from pathlib import Path
+import hashlib
+import json
 
 import pytest
 
@@ -10,6 +12,7 @@ from fenix_default_navdata.source import (
     summarize_airway_source_metadata,
     waypoint_country,
 )
+from fenix_default_navdata.general_docs import ENROUTE_KEY_POINT_DOCUMENT
 from fenix_default_navdata.model import Ad219Vor, NavModel, SourceRef
 
 
@@ -347,6 +350,69 @@ def test_load_naip_recovers_blank_waypoint_fir_only_when_source_geometry_is_unam
             "blank_after": 3,
         },
     }
+
+
+def test_load_naip_adds_only_unambiguous_general_document_waypoints(
+    tmp_path: Path,
+) -> None:
+    root = _minimal_naip_root(tmp_path, "ASP")
+    _write_csv(root, "AIRSPACE.csv", "\n".join((
+        "AIRSPACE_ID,CODE_TYPE,CODE_ID",
+        "beijing,FIR,ZBPE",
+    )))
+    _write_csv(root, "AIRSPACE_BORDER_VERTEX.csv", "\n".join((
+        "VERTEX_ID,AIRSPACE_ID,NO_SEQ,GEO_LAT,GEO_LONG",
+        "1,beijing,1,N340000,E1040000",
+        "2,beijing,2,N340000,E1060000",
+        "3,beijing,3,N360000,E1060000",
+        "4,beijing,4,N360000,E1040000",
+    )))
+    source_pdf = root / ENROUTE_KEY_POINT_DOCUMENT
+    source_pdf.parent.mkdir(parents=True)
+    source_pdf.write_bytes(b"general-document")
+    cache = tmp_path / "general-doc-cache" / "enr-4.4"
+    cache.mkdir(parents=True)
+    (cache / "manifest.json").write_text(json.dumps({
+        "schema_version": 1,
+        "source_file": ENROUTE_KEY_POINT_DOCUMENT,
+        "source_sha256": hashlib.sha256(source_pdf.read_bytes()).hexdigest(),
+        "page_count": 1,
+    }), encoding="utf-8")
+    (cache / "page-0001.json").write_text(json.dumps({
+        "ok": True,
+        "data": {
+            "documents": [{
+                "markdown": (
+                    "SAFEN35\u00b000\u203200\u2033E104\u00b015\u203200\u2033"
+                    "OUTN38\u00b000\u203200\u2033E108\u00b000\u203200\u2033"
+                ),
+            }],
+        },
+    }), encoding="utf-8")
+
+    model = load_naip(
+        root,
+        general_doc_cache=cache.parent,
+        include_terminal_documents=False,
+    )
+
+    assert [
+        (point.ident, point.country, point.source.file, point.source.page)
+        for point in model.waypoints
+    ] == [
+        ("SAFE", "ZB", ENROUTE_KEY_POINT_DOCUMENT, 1),
+    ]
+    assert model.general_document_evidence["waypoints"] == {
+        "accepted": 1,
+        "already_present": 0,
+        "identity_conflict": 0,
+        "region_ambiguous": 0,
+        "region_near_boundary": 0,
+        "region_outside": 1,
+    }
+    assert [(item.key, item.reason) for item in model.rejected_records] == [
+        ("OUT", "general document region outside"),
+    ]
 
 
 def test_load_naip_separates_source_pbn_from_target_route_type_and_links_airway_tables(

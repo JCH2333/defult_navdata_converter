@@ -12,6 +12,7 @@ from pypinyin import lazy_pinyin
 import pymupdf
 
 from .iap_coverage import analyze_iap_coverage
+from .general_docs import load_enroute_key_point_evidence
 from .model import CN_PREFIXES, Airport, AirwayLeg, Holding, NavModel, Navaid, ProcedureSegment, RejectedProcedure, RejectedRecord, Runway, SourceRef, TerminalWaypoint, Waypoint, is_china_icao
 from .pdf_charts import (
     _is_instrument_approach_index_row,
@@ -680,15 +681,116 @@ def _validate_pdf_cache(root: Path, pdf_cache: Path | None) -> Path | None:
     return resolved_cache
 
 
+def _load_general_document_waypoints(
+    model: NavModel,
+    cache_root: Path | None,
+    fir_polygons: tuple[_FirPolygon, ...],
+    airway_endpoint_countries: dict[tuple[str, str, float, float], set[str]],
+) -> None:
+    """Add only OCR points whose region and logical identity are unambiguous."""
+    if cache_root is None:
+        model.general_document_evidence = {
+            "available": False,
+            "reason": "general document OCR cache was not provided",
+        }
+        return
+
+    evidence, report = load_enroute_key_point_evidence(model.root, cache_root)
+    counts: Counter[str] = Counter()
+    by_identity: dict[tuple[str, str], list[Waypoint]] = {}
+    for point in model.waypoints:
+        if point.country:
+            by_identity.setdefault(
+                (point.country.upper(), point.ident.upper()),
+                [],
+            ).append(point)
+
+    for sequence, item in enumerate(evidence, start=1):
+        region = _match_source_fir_region(
+            fir_polygons,
+            item.latitude,
+            item.longitude,
+        )
+        if region.status != "recovered":
+            counts[f"region_{region.status}"] += 1
+            model.rejected_records.append(RejectedRecord(
+                "general-document-waypoint",
+                item.ident,
+                f"general document region {region.status}",
+                item.source,
+            ))
+            continue
+        country = region.country
+        identity = (country, item.ident.upper())
+        existing = by_identity.get(identity, [])
+        if existing:
+            matches = [
+                point
+                for point in existing
+                if _angular_distance(
+                    point.latitude,
+                    point.longitude,
+                    item.latitude,
+                    item.longitude,
+                ) * _EARTH_RADIUS_NM <= 0.01
+            ]
+            if matches:
+                counts["already_present"] += 1
+                continue
+            counts["identity_conflict"] += 1
+            model.rejected_records.append(RejectedRecord(
+                "general-document-waypoint",
+                item.ident,
+                "general document identity conflicts with source waypoint",
+                item.source,
+            ))
+            continue
+
+        point = Waypoint(
+            f"general-doc:{item.source.sha256[:16]}:{item.source.page}:{sequence}:{item.ident}",
+            item.ident,
+            item.ident,
+            item.latitude,
+            item.longitude,
+            item.source,
+            country,
+        )
+        model.waypoints.append(point)
+        by_identity.setdefault(identity, []).append(point)
+        _register_airway_endpoint_country(
+            airway_endpoint_countries,
+            "DESIGNATED_POINT",
+            point.ident,
+            point.latitude,
+            point.longitude,
+            point.country,
+        )
+        counts["accepted"] += 1
+
+    model.general_document_evidence = {
+        **report,
+        "waypoints": {
+            "accepted": counts["accepted"],
+            "already_present": counts["already_present"],
+            "identity_conflict": counts["identity_conflict"],
+            "region_ambiguous": counts["region_ambiguous"],
+            "region_near_boundary": counts["region_near_boundary"],
+            "region_outside": counts["region_outside"],
+        },
+    }
+
+
 def load_naip(
     root: Path,
     pdf_cache: Path | None = None,
     *,
+    general_doc_cache: Path | None = None,
     include_terminal_documents: bool = True,
 ) -> NavModel:
     """Load only structured data; PDFs are inspected separately and never guessed."""
     root = root.resolve()
     pdf_cache = _validate_pdf_cache(root, pdf_cache)
+    general_doc_cache = _validate_pdf_cache(root, general_doc_cache)
     model = NavModel(root=root)
     airway_endpoint_countries: dict[tuple[str, str, float, float], set[str]] = {}
     segment_rows = _optional_index(root, "SEGMENT.csv", "SEGMENT_ID")
@@ -826,6 +928,12 @@ def load_naip(
                 kind="designated-point", key=row.get("CODE_ID") or row.get("SIGNIFICANT_POINT_ID") or "",
                 reason="invalid coordinate or unmapped country", source=SourceRef("DESIGNATED_POINT.csv", row_number),
             ))
+    _load_general_document_waypoints(
+        model,
+        general_doc_cache,
+        fir_polygons,
+        airway_endpoint_countries,
+    )
     model.source_fir_region_resolution = SourceFirRegionResolution(
         polygons_loaded=len(fir_polygons),
         vertices_loaded=fir_vertices_loaded,

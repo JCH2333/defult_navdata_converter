@@ -36,6 +36,7 @@ class App:
         self.base = tk.StringVar()
         self.jepp = tk.StringVar()
         self.baseline = tk.StringVar()
+        self.general_doc_cache = tk.StringVar()
         self.reference = tk.StringVar()
         self.output = tk.StringVar(value=str(Path.cwd() / "output" / "candidate-2608-default"))
         self.target = tk.StringVar()
@@ -62,6 +63,7 @@ class App:
             ("官方 nav-base", self.base, "dir"),
             ("官方 nav-jepp", self.jepp, "dir"),
             ("官方设施索引", self.baseline, "file"),
+            ("航路 OCR 缓存", self.general_doc_cache, "dir"),
             ("参考成品（只读）", self.reference, "dir"),
             ("隔离候选输出", self.output, "dir"),
             ("Community 目标", self.target, "dir"),
@@ -191,6 +193,11 @@ class App:
             baseline_db=(
                 Path(self.baseline.get())
                 if Path(self.baseline.get()).is_file()
+                else None
+            ),
+            general_doc_cache=(
+                Path(self.general_doc_cache.get())
+                if Path(self.general_doc_cache.get()).is_dir()
                 else None
             ),
         ))

@@ -189,6 +189,7 @@ def build_candidate(
     compiler: CompilerInfo,
     reference: Path | None = None,
     pdf_cache: Path | None = None,
+    general_doc_cache: Path | None = None,
     baseline_db: Path | None = None,
     baseline_tolerance_nm: float = 0.25,
 ) -> dict[str, object]:
@@ -210,6 +211,7 @@ def build_candidate(
     model = load_naip(
         raw_root,
         pdf_cache=pdf_cache,
+        general_doc_cache=general_doc_cache,
         include_terminal_documents=True,
     )
     navaid_diff: NavaidDiff | None = None
@@ -283,6 +285,7 @@ def build_candidate(
         "compiler": {"path": str(compiler.path) if compiler.path else None, "kind": compiler.kind, "reason": compiler.reason},
         "source": {"raw_424": str(raw_root)},
         "pdf_cache": str(pdf_cache),
+        "general_doc_cache": str(general_doc_cache) if general_doc_cache else None,
         "official_baseline": {
             "base": str(nav_base),
             "jepp": str(nav_jepp),
@@ -298,6 +301,7 @@ def build_candidate(
             "selected_navaids": len(selected_navaids),
             "waypoints": len(model.waypoints),
             "source_fir_region_resolution": model.source_fir_region_resolution,
+            "general_document_evidence": model.general_document_evidence,
             "airway_legs": len(model.airway_legs),
             "procedure_segments": len(model.procedure_segments),
             "ilses": len(model.ilses),
