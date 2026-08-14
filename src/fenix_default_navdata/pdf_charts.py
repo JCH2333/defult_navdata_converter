@@ -115,7 +115,7 @@ _AIP_VOR_DME = re.compile(
     r"(?P<frequency>\d{3}\.\d{1,3})\s*MHz"
     r"(?:\s*CH\s*\d+[XY]?)?"
     r".{0,320}?(?P<coordinate>N\s*\d{6}(?:\.\d+)?\s*E\s*\d{7}(?:\.\d+)?)"
-    r"(?:.{0,160}?(?P<elevation>\d+(?:\.\d+)?)\s*m\b)?",
+    r"(?P<tail>.{0,240}?)(?=\b(?:VOR\s*/\s*DME|NDB|LOC|GP|LM|LO)\b|\Z)",
     re.IGNORECASE | re.DOTALL,
 )
 
@@ -210,7 +210,16 @@ def extract_ad219_vors(text: str, airport: str, source: SourceRef) -> tuple[Ad21
     seen: set[tuple[str, float, float, float, float | None]] = set()
     for match in _AIP_VOR_DME.finditer(text):
         latitude, longitude = _parse_aip_dms_coordinate(match["coordinate"])
-        elevation = float(match["elevation"]) if match["elevation"] else None
+        elevations = list(re.finditer(
+            r"(?P<elevation>\d+(?:\.\d+)?)\s*m\b",
+            match["tail"],
+            re.IGNORECASE,
+        ))
+        # The coordinate cell can contain a location distance such as
+        # ``013 MAG/2000m`` before the DME-elevation column.  Retain the
+        # right-most meter value only when both fields are present; an isolated
+        # meter value is a location distance and does not prove an elevation.
+        elevation = float(elevations[-1]["elevation"]) if len(elevations) >= 2 else None
         identity = (
             match["ident"].upper(),
             float(match["frequency"]),

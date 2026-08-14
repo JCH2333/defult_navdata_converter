@@ -11,7 +11,9 @@ def test_ad219_vor_evidence_keeps_direct_facts_without_a_magnetic_variation() ->
     evidence = extract_ad219_vors(
         """
         VOR/DME CZW 111.2 MHz CH49X
-        N361635.6 E1130750.8 942m
+        N361635.6 E1130750.8
+        距19跑道入口 013 MAG/2000m 942 m
+        NDB SQ 398 kHz
         """,
         "ZBCZ",
         SourceRef("Terminal/ZBCZ/airport.pdf", 14, 14, "hash"),
@@ -36,6 +38,21 @@ def test_ad219_vor_evidence_keeps_direct_facts_without_a_magnetic_variation() ->
         942.0,
         SourceRef("Terminal/ZBCZ/airport.pdf", 14, 14, "hash"),
     )
+
+
+def test_ad219_vor_evidence_does_not_treat_position_distance_as_elevation() -> None:
+    evidence = extract_ad219_vors(
+        """
+        VOR/DME HOK 116.0 MHz CH107X
+        N311925.5 E1142545.0
+        距 ARP 337 MAG/122982m
+        NDB SQ 398 kHz
+        """,
+        "ZHEC",
+        SourceRef("Terminal/ZHEC/airport.pdf", 19, 19, "hash"),
+    )
+
+    assert evidence[0].dme_elevation_meters is None
 
 
 def test_positioned_coordinate_pages_allow_baseline_drift_without_cross_column_pairing():
