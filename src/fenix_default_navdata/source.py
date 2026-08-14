@@ -16,7 +16,7 @@ from .model import CN_PREFIXES, Airport, AirwayLeg, Holding, NavModel, Navaid, P
 from .pdf_charts import (
     _is_instrument_approach_index_row,
     _is_standard_procedure_index_row,
-    extract_airport_ad219_ils,
+    extract_airport_ad219_landing_aids,
     extract_airport_approach_charts,
     extract_airport_coordinate_pages,
     extract_airport_database_charts,
@@ -620,18 +620,28 @@ def load_naip(
 
 
 def _load_terminal_landing_aids(model: NavModel) -> None:
-    """Retain AD 2.19 landing-aid evidence before any Fenix field projection."""
+    """Retain AD 2.19 landing-aid evidence before target projection."""
     terminal = model.root / "Terminal"
     if not terminal.is_dir():
         return
     for airport_directory in sorted(path for path in terminal.iterdir() if path.is_dir()):
-        for ils in extract_airport_ad219_ils(airport_directory):
+        ilses, vors = extract_airport_ad219_landing_aids(airport_directory)
+        for ils in ilses:
             source_path = Path(ils.source.file)
             model.ilses.append(replace(
                 ils,
                 source=SourceRef(
                     source_path.relative_to(model.root).as_posix(), ils.source.row,
                     ils.source.page, ils.source.sha256,
+                ),
+            ))
+        for vor in vors:
+            source_path = Path(vor.source.file)
+            model.ad219_vors.append(replace(
+                vor,
+                source=SourceRef(
+                    source_path.relative_to(model.root).as_posix(), vor.source.row,
+                    vor.source.page, vor.source.sha256,
                 ),
             ))
 

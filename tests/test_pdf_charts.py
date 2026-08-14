@@ -1,8 +1,41 @@
 from fenix_default_navdata.pdf_charts import (
+    extract_ad219_vors,
     extract_positioned_coordinate_page_points,
     extract_terminal_holding_evidence,
     extract_terminal_leg_evidence,
 )
+from fenix_default_navdata.model import SourceRef
+
+
+def test_ad219_vor_evidence_keeps_direct_facts_without_a_magnetic_variation() -> None:
+    evidence = extract_ad219_vors(
+        """
+        VOR/DME CZW 111.2 MHz CH49X
+        N361635.6 E1130750.8 942m
+        """,
+        "ZBCZ",
+        SourceRef("Terminal/ZBCZ/airport.pdf", 14, 14, "hash"),
+    )
+
+    assert len(evidence) == 1
+    vor = evidence[0]
+    assert (
+        vor.airport,
+        vor.ident,
+        vor.frequency_mhz,
+        round(vor.latitude, 6),
+        round(vor.longitude, 6),
+        vor.dme_elevation_meters,
+        vor.source,
+    ) == (
+        "ZBCZ",
+        "CZW",
+        111.2,
+        36.276556,
+        113.130778,
+        942.0,
+        SourceRef("Terminal/ZBCZ/airport.pdf", 14, 14, "hash"),
+    )
 
 
 def test_positioned_coordinate_pages_allow_baseline_drift_without_cross_column_pairing():

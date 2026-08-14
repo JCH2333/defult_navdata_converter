@@ -97,6 +97,23 @@ class Ils:
 
 
 @dataclass(frozen=True)
+class Ad219Vor:
+    """A VOR/DME fact explicitly printed in an airport AD 2.19 table.
+
+    This evidence intentionally has no magnetic variation.  It must remain
+    separate from ``Navaid`` until the current 424 source proves that field.
+    """
+
+    airport: str
+    ident: str
+    frequency_mhz: float
+    latitude: float
+    longitude: float
+    dme_elevation_meters: float | None
+    source: SourceRef
+
+
+@dataclass(frozen=True)
 class Waypoint:
     key: str
     ident: str
@@ -316,6 +333,7 @@ class NavModel:
     runways: list[Runway] = field(default_factory=list)
     navaids: list[Navaid] = field(default_factory=list)
     ilses: list[Ils] = field(default_factory=list)
+    ad219_vors: list[Ad219Vor] = field(default_factory=list)
     waypoints: list[Waypoint] = field(default_factory=list)
     terminal_waypoints: list[TerminalWaypoint] = field(default_factory=list)
     airway_legs: list[AirwayLeg] = field(default_factory=list)

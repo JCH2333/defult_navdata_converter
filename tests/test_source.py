@@ -3,11 +3,13 @@ from pathlib import Path
 import pytest
 
 from fenix_default_navdata.source import (
+    _load_terminal_landing_aids,
     _surface,
     load_naip,
     navaid_country,
     summarize_airway_source_metadata,
 )
+from fenix_default_navdata.model import Ad219Vor, NavModel, SourceRef
 
 
 def _write_csv(root: Path, name: str, text: str) -> None:
@@ -78,6 +80,35 @@ def test_load_naip_derives_runway_end_coordinates_from_airport_reference(tmp_pat
     assert runway_03.longitude < 105.0 < runway_21.longitude
     assert (runway_03.latitude + runway_21.latitude) / 2 == pytest.approx(35.0, abs=0.00001)
     assert (runway_03.longitude + runway_21.longitude) / 2 == pytest.approx(105.0, abs=0.00001)
+
+
+def test_ad219_vor_evidence_is_not_promoted_to_a_navaid(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path / "raw"
+    airport_directory = root / "Terminal" / "ZBCF"
+    airport_directory.mkdir(parents=True)
+    source_pdf = airport_directory / "airport.pdf"
+    evidence = Ad219Vor(
+        "ZBCF", "CZW", 111.2, 36.276556, 113.130778, 942.0,
+        SourceRef(str(source_pdf), 14, 14, "hash"),
+    )
+    monkeypatch.setattr(
+        "fenix_default_navdata.source.extract_airport_ad219_landing_aids",
+        lambda _: ([], [evidence]),
+    )
+    model = NavModel(root)
+
+    _load_terminal_landing_aids(model)
+
+    assert model.navaids == []
+    assert model.ad219_vors == [
+        Ad219Vor(
+            "ZBCF", "CZW", 111.2, 36.276556, 113.130778, 942.0,
+            SourceRef("Terminal/ZBCF/airport.pdf", 14, 14, "hash"),
+        ),
+    ]
 
 
 def test_load_naip_retains_each_runways_own_airport_key(tmp_path: Path) -> None:

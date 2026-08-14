@@ -19,7 +19,7 @@ from typing import Callable
 import pymupdf
 from pypdf import PdfReader
 
-from .model import ChartFixCoordinate, ChartHoldingEvidence, ChartRouteFix, ChartStandardProcedureRoute, ChartTerminalLeg, Ils, ProcedureChart, SourceRef
+from .model import Ad219Vor, ChartFixCoordinate, ChartHoldingEvidence, ChartRouteFix, ChartStandardProcedureRoute, ChartTerminalLeg, Ils, ProcedureChart, SourceRef
 
 
 _EVIDENCE_CACHE_VERSION = 34
@@ -110,6 +110,14 @@ _AIP_SPLIT_LOC = re.compile(
     r".{0,960}?ILS\s*CAT\s*(?P<category>I{1,3})\s*(?P<longitude>E\s*\d{7}(?:\.\d+)?)",
     re.IGNORECASE | re.DOTALL,
 )
+_AIP_VOR_DME = re.compile(
+    r"\bVOR\s*/\s*DME\s+(?P<ident>[A-Z0-9]{2,5})\s+"
+    r"(?P<frequency>\d{3}\.\d{1,3})\s*MHz"
+    r"(?:\s*CH\s*\d+[XY]?)?"
+    r".{0,320}?(?P<coordinate>N\s*\d{6}(?:\.\d+)?\s*E\s*\d{7}(?:\.\d+)?)"
+    r"(?:.{0,160}?(?P<elevation>\d+(?:\.\d+)?)\s*m\b)?",
+    re.IGNORECASE | re.DOTALL,
+)
 
 
 def _parse_aip_dms_coordinate(value: str) -> tuple[float, float]:
@@ -192,6 +200,35 @@ def extract_ad219_ils(text: str, airport: str, source: SourceRef) -> tuple[Ils, 
             glide_slope_latitude=glide_latitude,
             glide_slope_longitude=glide_longitude, dme_latitude=dme_latitude,
             dme_longitude=dme_longitude, dme_elevation_meters=dme_elevation, source=source,
+        ))
+    return tuple(result)
+
+
+def extract_ad219_vors(text: str, airport: str, source: SourceRef) -> tuple[Ad219Vor, ...]:
+    """Extract direct AD 2.19 VOR/DME facts without inventing magnetic variation."""
+    result: list[Ad219Vor] = []
+    seen: set[tuple[str, float, float, float, float | None]] = set()
+    for match in _AIP_VOR_DME.finditer(text):
+        latitude, longitude = _parse_aip_dms_coordinate(match["coordinate"])
+        elevation = float(match["elevation"]) if match["elevation"] else None
+        identity = (
+            match["ident"].upper(),
+            float(match["frequency"]),
+            latitude,
+            longitude,
+            elevation,
+        )
+        if identity in seen:
+            continue
+        seen.add(identity)
+        result.append(Ad219Vor(
+            airport=airport.upper(),
+            ident=match["ident"].upper(),
+            frequency_mhz=float(match["frequency"]),
+            latitude=latitude,
+            longitude=longitude,
+            dme_elevation_meters=elevation,
+            source=source,
         ))
     return tuple(result)
 
@@ -937,8 +974,10 @@ def extract_airport_charts(airport_directory: Path) -> list[ProcedureChart]:
     return charts
 
 
-def extract_airport_ad219_ils(airport_directory: Path) -> list[Ils]:
-    """Read unindexed airport AD 2.19 landing-aid pages from PDF text layers."""
+def extract_airport_ad219_landing_aids(
+    airport_directory: Path,
+) -> tuple[list[Ils], list[Ad219Vor]]:
+    """Read direct AD 2.19 ILS and VOR/DME facts from unindexed airport PDFs."""
     airport = airport_directory.resolve().name.upper()
     index = airport_directory / "Charts.csv"
     indexed = {
@@ -946,7 +985,13 @@ def extract_airport_ad219_ils(airport_directory: Path) -> list[Ils]:
         for row in _chart_rows(index)
         if (row.get("PAGE_NUMBER") or "").strip()
     } if index.is_file() else set()
-    result: list[Ils] = []
+    ilses: list[Ils] = []
+    vors: list[Ad219Vor] = []
+
+    def append_evidence(text: str, source: SourceRef) -> None:
+        ilses.extend(extract_ad219_ils(text, airport, source))
+        vors.extend(extract_ad219_vors(text, airport, source))
+
     for pdf in sorted(airport_directory.glob("*.pdf")):
         if pdf.name.lower() in indexed:
             continue
@@ -968,19 +1013,25 @@ def extract_airport_ad219_ils(airport_directory: Path) -> list[Ils]:
                 ad219_text = text[:min(terminators)] if terminators else text
                 active_text.append(ad219_text)
                 if terminators:
-                    result.extend(extract_ad219_ils(
-                        "\n".join(active_text), airport,
+                    append_evidence(
+                        "\n".join(active_text),
                         SourceRef(str(pdf), start_page, start_page, file_hash),
-                    ))
+                    )
                     in_ad219 = False
                     start_page = None
                     active_text.clear()
             if in_ad219 and active_text:
-                result.extend(extract_ad219_ils(
-                    "\n".join(active_text), airport,
+                append_evidence(
+                    "\n".join(active_text),
                     SourceRef(str(pdf), start_page, start_page, file_hash),
-                ))
-    return result
+                )
+    return ilses, vors
+
+
+def extract_airport_ad219_ils(airport_directory: Path) -> list[Ils]:
+    """Compatibility wrapper for AD 2.19 ILS consumers."""
+    ilses, _ = extract_airport_ad219_landing_aids(airport_directory)
+    return ilses
 
 
 def extract_airport_database_charts(airport_directory: Path, cache_dir: Path | None = None) -> list[ProcedureChart]:
