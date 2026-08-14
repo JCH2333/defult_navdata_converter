@@ -22,6 +22,18 @@
 与 `P394 -> ZYJM` 没有官方索引匹配，但仍可由该严格源规则确定为 `ZU` 与 `ZY`。
 不符合严格格式的服务机场值保持空区域并进入后续验证。
 
+对于严格服务机场、显式 FIR 和既有边界覆盖均不能恢复的空区域指定点，加载器可只读
+使用当期 424 `AIRSPACE.csv` 中 `CODE_TYPE=FIR` 的 FIR `CODE_ID` 与
+`AIRSPACE_BORDER_VERTEX.csv` 中按 `NO_SEQ` 排序的边界顶点。仅当点唯一位于一个
+中国 FIR 多边形内，且到该 FIR 边界的最短大圆距离至少为 `5 NM` 时，才可使用
+`CODE_ID` 前两位作为区域键；重叠、边界 `5 NM` 内、多边形外、顶点不足或坐标异常
+的 FIR 都必须保留为空。该规则只恢复区域键，不能复制任何官方记录或参考 BGL 内容，
+且恢复计数必须写入 `model.source_fir_region_resolution` 和候选报告，随后才能通过
+同源 `DESIGNATED_POINT.csv` 身份恢复匹配的 `RTE_SEG.csv` 航路端点。2608R1 的
+真实只读加载得到 9 个 FIR、多边形顶点 150 个；175 个剩余空区域指定点中恢复 124，
+13 个边界附近、38 个多边形外、0 个歧义。自动化覆盖：
+`test_load_naip_recovers_blank_waypoint_fir_only_when_source_geometry_is_unambiguous`。
+
 ### Navdatareader 语义差分
 
 候选和参考覆盖包可以分别由 Navdatareader 解析为 SQLite 后，使用

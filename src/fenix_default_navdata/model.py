@@ -345,3 +345,7 @@ class NavModel:
     # Audit-only summary of source-backed IAP coverage.  Target adapters must
     # not treat role evidence as proof that every chart leg was decoded.
     iap_coverage: dict[str, object] = field(default_factory=dict)
+    # Audit-only result of recovering blank designated-point regions from
+    # source FIR boundary geometry.  Empty means the optional FIR tables were
+    # unavailable to the source loader.
+    source_fir_region_resolution: dict[str, object] = field(default_factory=dict)

@@ -227,6 +227,72 @@ def test_load_naip_uses_strict_serviced_airport_prefix_for_blank_waypoint_fir(
     }
 
 
+def test_load_naip_recovers_blank_waypoint_fir_only_when_source_geometry_is_unambiguous(
+    tmp_path: Path,
+) -> None:
+    root = _minimal_naip_root(tmp_path, "沥青")
+    _write_csv(root, "AIRSPACE.csv", "\n".join((
+        "AIRSPACE_ID,CODE_TYPE,CODE_ID",
+        "beijing,FIR,ZBPE",
+        "guangzhou,FIR,ZGZU",
+    )))
+    _write_csv(root, "AIRSPACE_BORDER_VERTEX.csv", "\n".join((
+        "VERTEX_ID,AIRSPACE_ID,NO_SEQ,GEO_LAT,GEO_LONG",
+        "1,beijing,1,N340000,E1040000",
+        "2,beijing,2,N340000,E1060000",
+        "3,beijing,3,N360000,E1060000",
+        "4,beijing,4,N360000,E1040000",
+        "5,guangzhou,1,N343000,E1043000",
+        "6,guangzhou,2,N343000,E1053000",
+        "7,guangzhou,3,N353000,E1053000",
+        "8,guangzhou,4,N353000,E1043000",
+    )))
+    _write_csv(root, "DESIGNATED_POINT.csv", "\n".join((
+        "SIGNIFICANT_POINT_ID,CODE_ID,TXT_NAME,GEO_LAT_ACCURACY,GEO_LONG_ACCURACY,CODE_FIR",
+        "safe,SAFE,SAFE,N350000,E1041500,",
+        "ambiguous,AMB,AMB,N350000,E1050000,",
+        "boundary,BOUNDARY,BOUNDARY,N340100,E1050000,",
+        "outside,OUTSIDE,OUTSIDE,N380000,E1080000,",
+    )))
+    _write_csv(root, "RTE_SEG.csv", "\n".join((
+        "TXT_DESIG,VAL_SORT,CODE_POINT_START,CODE_POINT_END,GEO_LAT_START_ACCURACY,GEO_LONG_START_ACCURACY,GEO_LAT_END_ACCURACY,GEO_LONG_END_ACCURACY,CODE_FIR_START,CODE_FIR_END,CODE_DIR,CODE_TYPE,CODE_TYPE_START,CODE_TYPE_END",
+        "R1,1,SAFE,OUTSIDE,N350000,E1041500,N380000,E1080000,,,B,L,DESIGNATED_POINT,DESIGNATED_POINT",
+    )))
+
+    model = load_naip(root, include_terminal_documents=False)
+
+    assert {
+        point.ident: point.country
+        for point in model.waypoints
+    } == {
+        "SAFE": "ZB",
+        "AMB": "",
+        "BOUNDARY": "",
+        "OUTSIDE": "",
+    }
+    assert (model.airway_legs[0].start_country, model.airway_legs[0].end_country) == (
+        "ZB",
+        "",
+    )
+    assert model.source_fir_region_resolution == {
+        "source": {
+            "airspace": "AIRSPACE.csv",
+            "vertices": "AIRSPACE_BORDER_VERTEX.csv",
+        },
+        "minimum_boundary_distance_nm": 5.0,
+        "polygons_loaded": 2,
+        "vertices_loaded": 8,
+        "waypoints": {
+            "blank_before": 4,
+            "recovered": 1,
+            "ambiguous": 1,
+            "near_boundary": 1,
+            "outside": 1,
+            "blank_after": 3,
+        },
+    }
+
+
 def test_load_naip_separates_source_pbn_from_target_route_type_and_links_airway_tables(
     tmp_path: Path,
 ) -> None:

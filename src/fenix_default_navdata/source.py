@@ -5,7 +5,7 @@ import hashlib
 import math
 import re
 from collections import Counter
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from pypinyin import lazy_pinyin
@@ -46,6 +46,53 @@ _AIRWAY_ENDPOINT_SOURCE_TYPES = {
     "VORDME": "VORDME",
     "NDB": "NDB",
 }
+_EARTH_RADIUS_NM = 3440.065
+_FIR_BOUNDARY_MIN_DISTANCE_NM = 5.0
+
+
+@dataclass(frozen=True)
+class _FirPolygon:
+    code: str
+    country: str
+    vertices: tuple[tuple[float, float], ...]
+
+
+@dataclass(frozen=True)
+class _FirRegionMatch:
+    status: str
+    country: str = ""
+
+
+@dataclass(frozen=True)
+class SourceFirRegionResolution:
+    """Audit results for source-only blank designated-point FIR recovery."""
+
+    polygons_loaded: int
+    vertices_loaded: int
+    blank_before: int
+    recovered: int
+    ambiguous: int
+    near_boundary: int
+    outside: int
+
+    def to_report(self) -> dict[str, object]:
+        return {
+            "source": {
+                "airspace": "AIRSPACE.csv",
+                "vertices": "AIRSPACE_BORDER_VERTEX.csv",
+            },
+            "minimum_boundary_distance_nm": _FIR_BOUNDARY_MIN_DISTANCE_NM,
+            "polygons_loaded": self.polygons_loaded,
+            "vertices_loaded": self.vertices_loaded,
+            "waypoints": {
+                "blank_before": self.blank_before,
+                "recovered": self.recovered,
+                "ambiguous": self.ambiguous,
+                "near_boundary": self.near_boundary,
+                "outside": self.outside,
+                "blank_after": self.blank_before - self.recovered,
+            },
+        }
 
 
 def parse_dms(value: str) -> float:
@@ -396,6 +443,209 @@ def _restore_airway_endpoint_countries(
     ]
 
 
+def _unwrap_longitude(longitude: float, origin_longitude: float) -> float:
+    """Keep a polygon longitude close to the tested point's meridian."""
+    return origin_longitude + ((longitude - origin_longitude + 180) % 360) - 180
+
+
+def _angular_distance(
+    latitude: float,
+    longitude: float,
+    other_latitude: float,
+    other_longitude: float,
+) -> float:
+    first_latitude = math.radians(latitude)
+    second_latitude = math.radians(other_latitude)
+    delta_latitude = second_latitude - first_latitude
+    delta_longitude = math.radians(other_longitude - longitude)
+    value = (
+        math.sin(delta_latitude / 2) ** 2
+        + math.cos(first_latitude)
+        * math.cos(second_latitude)
+        * math.sin(delta_longitude / 2) ** 2
+    )
+    return 2 * math.asin(math.sqrt(min(1.0, value)))
+
+
+def _initial_bearing(
+    latitude: float,
+    longitude: float,
+    other_latitude: float,
+    other_longitude: float,
+) -> float:
+    first_latitude = math.radians(latitude)
+    second_latitude = math.radians(other_latitude)
+    delta_longitude = math.radians(other_longitude - longitude)
+    return math.atan2(
+        math.sin(delta_longitude) * math.cos(second_latitude),
+        math.cos(first_latitude) * math.sin(second_latitude)
+        - math.sin(first_latitude)
+        * math.cos(second_latitude)
+        * math.cos(delta_longitude),
+    )
+
+
+def _distance_to_fir_segment_nm(
+    latitude: float,
+    longitude: float,
+    start_latitude: float,
+    start_longitude: float,
+    end_latitude: float,
+    end_longitude: float,
+) -> float:
+    """Return the nearest great-circle distance from a point to one FIR edge."""
+    point_to_start = _angular_distance(
+        start_latitude, start_longitude, latitude, longitude,
+    )
+    segment_length = _angular_distance(
+        start_latitude, start_longitude, end_latitude, end_longitude,
+    )
+    if segment_length == 0:
+        return point_to_start * _EARTH_RADIUS_NM
+    start_to_point_bearing = _initial_bearing(
+        start_latitude, start_longitude, latitude, longitude,
+    )
+    segment_bearing = _initial_bearing(
+        start_latitude, start_longitude, end_latitude, end_longitude,
+    )
+    bearing_delta = start_to_point_bearing - segment_bearing
+    cross_track = math.asin(
+        max(-1.0, min(1.0, math.sin(point_to_start) * math.sin(bearing_delta)))
+    )
+    along_track = math.atan2(
+        math.sin(point_to_start) * math.cos(bearing_delta),
+        math.cos(point_to_start),
+    )
+    if 0 <= along_track <= segment_length:
+        return abs(cross_track) * _EARTH_RADIUS_NM
+    point_to_end = _angular_distance(
+        end_latitude, end_longitude, latitude, longitude,
+    )
+    return min(point_to_start, point_to_end) * _EARTH_RADIUS_NM
+
+
+def _point_is_inside_fir(
+    latitude: float,
+    longitude: float,
+    polygon: _FirPolygon,
+) -> bool:
+    """Use a deterministic ray cast after locally unwrapping longitudes."""
+    inside = False
+    vertices = [
+        (vertex_latitude, _unwrap_longitude(vertex_longitude, longitude))
+        for vertex_latitude, vertex_longitude in polygon.vertices
+    ]
+    for index, (start_latitude, start_longitude) in enumerate(vertices):
+        end_latitude, end_longitude = vertices[(index + 1) % len(vertices)]
+        if (start_latitude > latitude) == (end_latitude > latitude):
+            continue
+        crossing_longitude = (
+            (end_longitude - start_longitude)
+            * (latitude - start_latitude)
+            / (end_latitude - start_latitude)
+            + start_longitude
+        )
+        if longitude < crossing_longitude:
+            inside = not inside
+    return inside
+
+
+def _distance_to_fir_boundary_nm(
+    latitude: float,
+    longitude: float,
+    polygon: _FirPolygon,
+) -> float:
+    distances = []
+    for index, (start_latitude, start_longitude) in enumerate(polygon.vertices):
+        end_latitude, end_longitude = polygon.vertices[
+            (index + 1) % len(polygon.vertices)
+        ]
+        distances.append(_distance_to_fir_segment_nm(
+            latitude,
+            longitude,
+            start_latitude,
+            start_longitude,
+            end_latitude,
+            end_longitude,
+        ))
+    return min(distances)
+
+
+def _load_fir_polygons(root: Path) -> tuple[tuple[_FirPolygon, ...], int]:
+    """Load only well-formed Chinese FIR boundaries from the 424 source."""
+    airspace_path = root / "AIRSPACE.csv"
+    vertices_path = root / "AIRSPACE_BORDER_VERTEX.csv"
+    if not airspace_path.is_file() or not vertices_path.is_file():
+        return (), 0
+    firs: dict[str, tuple[str, str]] = {}
+    for row in _rows(airspace_path):
+        if (row.get("CODE_TYPE") or "").strip().upper() != "FIR":
+            continue
+        airspace_id = (row.get("AIRSPACE_ID") or "").strip()
+        code = (row.get("CODE_ID") or "").strip().upper()
+        country = code[:2]
+        if airspace_id and country in CN_PREFIXES:
+            firs.setdefault(airspace_id, (code, country))
+    vertices: dict[str, list[tuple[int, float, float]]] = {
+        airspace_id: [] for airspace_id in firs
+    }
+    invalid_firs: set[str] = set()
+    for row in _rows(vertices_path):
+        airspace_id = (row.get("AIRSPACE_ID") or "").strip()
+        if airspace_id not in vertices:
+            continue
+        try:
+            vertices[airspace_id].append((
+                _number(row.get("NO_SEQ") or "0"),
+                parse_dms(row.get("GEO_LAT") or ""),
+                parse_dms(row.get("GEO_LONG") or ""),
+            ))
+        except ValueError:
+            invalid_firs.add(airspace_id)
+    polygons: list[_FirPolygon] = []
+    vertices_loaded = 0
+    for airspace_id, (code, country) in sorted(
+        firs.items(), key=lambda item: item[1][0],
+    ):
+        polygon_vertices = vertices[airspace_id]
+        if airspace_id in invalid_firs or len(polygon_vertices) < 3:
+            continue
+        polygon_vertices.sort(key=lambda item: item[0])
+        polygons.append(_FirPolygon(
+            code=code,
+            country=country,
+            vertices=tuple(
+                (latitude, longitude)
+                for _, latitude, longitude in polygon_vertices
+            ),
+        ))
+        vertices_loaded += len(polygon_vertices)
+    return tuple(polygons), vertices_loaded
+
+
+def _match_source_fir_region(
+    polygons: tuple[_FirPolygon, ...],
+    latitude: float,
+    longitude: float,
+) -> _FirRegionMatch:
+    """Recover a region only when source geometry leaves no boundary doubt."""
+    containing = [
+        polygon
+        for polygon in polygons
+        if _point_is_inside_fir(latitude, longitude, polygon)
+    ]
+    if len(containing) > 1:
+        return _FirRegionMatch("ambiguous")
+    if len(containing) == 1:
+        if (
+            _distance_to_fir_boundary_nm(latitude, longitude, containing[0])
+            < _FIR_BOUNDARY_MIN_DISTANCE_NM
+        ):
+            return _FirRegionMatch("near_boundary")
+        return _FirRegionMatch("recovered", containing[0].country)
+    return _FirRegionMatch("outside")
+
+
 def _validate_pdf_cache(root: Path, pdf_cache: Path | None) -> Path | None:
     if pdf_cache is None:
         return None
@@ -418,6 +668,8 @@ def load_naip(
     airway_endpoint_countries: dict[tuple[str, str, float, float], set[str]] = {}
     segment_rows = _optional_index(root, "SEGMENT.csv", "SEGMENT_ID")
     en_route_rows = _optional_index(root, "EN_ROUTE_RTE.csv", "EN_ROUTE_RTE_ID")
+    fir_polygons, fir_vertices_loaded = _load_fir_polygons(root)
+    fir_region_counts: Counter[str] = Counter()
     for row_number, row in enumerate(_rows(root / "AD_HP.csv"), start=2):
         icao = (row.get("CODE_ID") or "").strip().upper()
         if not is_china_icao(icao):
@@ -523,6 +775,16 @@ def load_naip(
                 )
                 else ""
             )
+            if not country:
+                fir_region_counts["blank_before"] += 1
+                fir_match = _match_source_fir_region(
+                    fir_polygons,
+                    latitude,
+                    longitude,
+                )
+                fir_region_counts[fir_match.status] += 1
+                if fir_match.status == "recovered":
+                    country = fir_match.country
             model.waypoints.append(Waypoint(row["SIGNIFICANT_POINT_ID"], ident, row.get("TXT_NAME") or "",
                 latitude, longitude, SourceRef("DESIGNATED_POINT.csv", row_number), country))
             if country:
@@ -539,6 +801,15 @@ def load_naip(
                 kind="designated-point", key=row.get("CODE_ID") or row.get("SIGNIFICANT_POINT_ID") or "",
                 reason="invalid coordinate or unmapped country", source=SourceRef("DESIGNATED_POINT.csv", row_number),
             ))
+    model.source_fir_region_resolution = SourceFirRegionResolution(
+        polygons_loaded=len(fir_polygons),
+        vertices_loaded=fir_vertices_loaded,
+        blank_before=fir_region_counts["blank_before"],
+        recovered=fir_region_counts["recovered"],
+        ambiguous=fir_region_counts["ambiguous"],
+        near_boundary=fir_region_counts["near_boundary"],
+        outside=fir_region_counts["outside"],
+    ).to_report()
     for row_number, row in enumerate(_rows(root / "RTE_SEG.csv"), start=2):
         try:
             start_latitude = parse_dms(row.get("GEO_LAT_START_ACCURACY") or "")

@@ -297,6 +297,7 @@ def build_candidate(
             "ad219_vor_evidence": len(model.ad219_vors),
             "selected_navaids": len(selected_navaids),
             "waypoints": len(model.waypoints),
+            "source_fir_region_resolution": model.source_fir_region_resolution,
             "airway_legs": len(model.airway_legs),
             "procedure_segments": len(model.procedure_segments),
             "ilses": len(model.ilses),
