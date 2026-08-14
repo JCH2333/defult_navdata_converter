@@ -474,6 +474,7 @@ def test_candidate_projects_verified_official_baseline_ndb_preservation(
         "official_baseline_preservation": 1,
         "rejected_ambiguous": 0,
         "official_baseline_precedence": 0,
+        "verified_cross_region_raw_addition": 0,
         "rejected_sdk_identity_conflict": 0,
     }
     assert report["model"]["selected_navaids"] == 1

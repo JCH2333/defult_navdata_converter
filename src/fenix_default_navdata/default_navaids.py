@@ -84,6 +84,26 @@ _KNOWN_OFFICIAL_PRECEDENCE_CONFLICTS = frozenset({
     ),
 })
 
+# The 2608R1 source record below is a published ZUWS VOR. The official
+# baseline still carries a nearby, otherwise matching ZH identity, while the
+# reference overlay preserves the direct 424 ZU identity. Keep the exception
+# fully source- and cycle-specific; every other cross-region physical match
+# remains suppressed until equivalent evidence exists.
+_KNOWN_VERIFIED_CROSS_REGION_ADDITIONS = frozenset({
+    (
+        "VOR",
+        "SNF",
+        "ZU",
+        112150.0,
+        31.073611,
+        109.710556,
+        "ZH",
+        112150.0,
+        31.075001,
+        109.71167,
+    ),
+})
+
 
 @dataclass(frozen=True)
 class DefaultNavaidSelection:
@@ -109,6 +129,7 @@ class DefaultNavaidSelection:
     property_corrections: tuple[NavaidMatch, ...]
     baseline_preservations: tuple[BaselineNavaidPreservation, ...]
     suppressed_physical_duplicates: tuple[PhysicalNavaidMatch, ...]
+    verified_cross_region_additions: tuple[PhysicalNavaidMatch, ...]
     physical_ambiguities: tuple[PhysicalNavaidAmbiguity, ...]
     baseline_raw_ambiguities: tuple[BaselineNavaidRawAmbiguity, ...]
     baseline_projection_rejections: tuple[BaselineNavaidProjectionRejection, ...]
@@ -188,6 +209,9 @@ class DefaultNavaidSelection:
                 len(self.strict_diff.property_deltas) - len(self.property_corrections)
             ),
             "suppressed_physical_duplicates": len(self.suppressed_physical_duplicates),
+            "verified_cross_region_additions": len(
+                self.verified_cross_region_additions
+            ),
             "physical_ambiguities": len(self.physical_ambiguities),
             "baseline_raw_ambiguities": len(self.baseline_raw_ambiguities),
             "baseline_projection_rejections": len(self.baseline_projection_rejections),
@@ -213,6 +237,9 @@ class DefaultNavaidSelection:
                 "official_baseline_precedence": sum(
                     item.resolution == "official_baseline_precedence"
                     for item in self.sdk_identity_conflicts
+                ),
+                "verified_cross_region_raw_addition": len(
+                    self.verified_cross_region_additions
                 ),
                 "rejected_sdk_identity_conflict": sum(
                     item.resolution == "unresolved"
@@ -280,6 +307,15 @@ class DefaultNavaidSelection:
                     "distance_nm": item.distance_nm,
                 }
                 for item in self.suppressed_physical_duplicates[:100]
+            ],
+            "verified_cross_region_addition_records": [
+                {
+                    "reason": "verified_cross_region_raw_addition",
+                    "raw": raw_payload(item.raw),
+                    "baseline": baseline_payload(item.baseline),
+                    "distance_nm": item.distance_nm,
+                }
+                for item in self.verified_cross_region_additions[:100]
             ],
             "physical_ambiguity_records": [
                 {
@@ -384,6 +420,27 @@ def _known_identity_conflict(
                 round(baseline.longitude, 6),
             )
         ) in _KNOWN_OFFICIAL_PRECEDENCE_CONFLICTS
+    )
+
+
+def _known_cross_region_addition(
+    raw: Navaid,
+    baseline: BaselineNavaid,
+) -> bool:
+    return (
+        raw.source.file.strip().casefold() == "vor.csv"
+        and (
+            raw.kind.upper(),
+            raw.ident.strip().upper(),
+            raw.country.strip().upper()[:2],
+            round(_source_frequency_khz(raw), 3),
+            round(raw.latitude, 6),
+            round(raw.longitude, 6),
+            baseline.region.strip().upper()[:2],
+            round(baseline.frequency_khz, 3),
+            round(baseline.latitude, 6),
+            round(baseline.longitude, 6),
+        ) in _KNOWN_VERIFIED_CROSS_REGION_ADDITIONS
     )
 
 
@@ -538,6 +595,7 @@ def select_default_navaids(
             property_corrections=(),
             baseline_preservations=(),
             suppressed_physical_duplicates=(),
+            verified_cross_region_additions=(),
             physical_ambiguities=(),
             baseline_raw_ambiguities=(),
             baseline_projection_rejections=(),
@@ -547,6 +605,7 @@ def select_default_navaids(
 
     selected_missing: list[Navaid] = []
     suppressed: list[PhysicalNavaidMatch] = []
+    verified_cross_region_additions: list[PhysicalNavaidMatch] = []
     sdk_identity_conflicts = _sdk_identity_conflicts(
         strict_diff.raw,
         baseline,
@@ -609,7 +668,11 @@ def select_default_navaids(
             continue
         candidates = candidates_for(raw_item)
         if len(candidates) == 1:
-            suppressed.append(candidates[0])
+            if _known_cross_region_addition(raw_item, candidates[0].baseline):
+                selected_missing.append(raw_item)
+                verified_cross_region_additions.append(candidates[0])
+            else:
+                suppressed.append(candidates[0])
         elif len(candidates) > 1:
             physical_ambiguities.setdefault(
                 _raw_physical_identity(raw_item),
@@ -712,6 +775,10 @@ def select_default_navaids(
         )),
         suppressed_physical_duplicates=tuple(sorted(
             suppressed,
+            key=lambda item: (_sort_raw(item.raw), item.baseline.sort_key),
+        )),
+        verified_cross_region_additions=tuple(sorted(
+            verified_cross_region_additions,
             key=lambda item: (_sort_raw(item.raw), item.baseline.sort_key),
         )),
         physical_ambiguities=tuple(sorted(

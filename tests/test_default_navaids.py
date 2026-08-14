@@ -100,6 +100,38 @@ def test_default_selection_suppresses_cross_region_physical_duplicate() -> None:
     }
 
 
+def test_default_selection_keeps_verified_snf_cross_region_vor_addition() -> None:
+    raw = replace(
+        _raw(
+            "snf", "SNF", "VOR", latitude=31.073611, longitude=109.710556,
+            frequency=112.15, country="ZU", source_file="VOR.csv",
+        ),
+        serviced_airport="ZUWS",
+        code_fir="武汉情报区",
+    )
+    baseline = _index(_baseline(
+        "VOR", "SNF", "ZH", 112150, 31.075001, 109.71167, 4064,
+    ))
+
+    result = select_default_navaids([raw], baseline)
+
+    assert result.navaid_selection_verified is True
+    assert result.selected_missing_navaids == (raw,)
+    assert result.selected_navaids == (raw,)
+    assert result.suppressed_physical_duplicates == ()
+    assert len(result.verified_cross_region_additions) == 1
+    report = result.to_report()
+    assert report["verified_cross_region_additions"] == 1
+    assert report["projection_categories"][
+        "verified_cross_region_raw_addition"
+    ] == 1
+    assert report["verified_cross_region_addition_records"][0]["raw"]["source"] == {
+        "file": "VOR.csv",
+        "row": 2,
+        "page": None,
+    }
+
+
 def test_default_selection_keeps_source_facility_without_physical_official_match() -> None:
     raw = _raw(
         "raw", "NEW", "NDB", latitude=36.0, longitude=106.0,
@@ -198,6 +230,7 @@ def test_default_selection_preserves_unreplaced_official_china_ndb() -> None:
         "official_baseline_preservation": 1,
         "rejected_ambiguous": 0,
         "official_baseline_precedence": 0,
+        "verified_cross_region_raw_addition": 0,
         "rejected_sdk_identity_conflict": 0,
     }
     assert report["official_baseline_preservation_records"][0]["reason"] == (
