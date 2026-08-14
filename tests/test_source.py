@@ -62,8 +62,8 @@ def test_surface_retains_first_expressible_source_component(composition: str, ex
     assert _surface(composition) == expected
 
 
-def test_navaid_country_prefers_single_fir_when_serviced_airport_conflicts() -> None:
-    assert navaid_country("ZBES", "沈阳情报区") == "ZY"
+def test_navaid_country_prefers_serviced_airport_when_fir_conflicts() -> None:
+    assert navaid_country("ZBES", "沈阳情报区") == "ZB"
 
 
 def test_navaid_country_uses_serviced_airport_for_multi_fir_boundary() -> None:
@@ -72,6 +72,11 @@ def test_navaid_country_uses_serviced_airport_for_multi_fir_boundary() -> None:
 
 def test_navaid_country_uses_serviced_airport_when_fir_is_blank() -> None:
     assert navaid_country("ZBES", "") == "ZB"
+
+
+def test_navaid_country_rejects_cross_region_fir_without_serviced_airport() -> None:
+    with pytest.raises(ValueError, match="ambiguous navaid FIR"):
+        navaid_country("", "武汉情报区，上海情报区")
 
 
 def test_waypoint_country_keeps_primary_source_fir_for_multi_fir_point() -> None:
@@ -209,7 +214,7 @@ def test_load_naip_recovers_blank_route_endpoint_firs_from_matching_424_records(
         for leg in model.airway_legs
     ] == [
         ("ZB", "ZG"),
-        ("ZP", "ZB"),
+        ("ZU", "ZB"),
         ("ZB", ""),
     ]
     assert next(point.country for point in model.waypoints if point.ident == "NOFIR") == ""
