@@ -103,6 +103,55 @@ def test_source_gap_audit_rejects_truncated_reference_gap_samples(tmp_path: Path
         audit_source_gaps(_model(tmp_path), report)
 
 
+def test_source_gap_audit_records_airline_points_as_existing_rte_references(
+    tmp_path: Path,
+) -> None:
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    model = _model(raw)
+    (raw / "RTE_SEG.csv").write_text(
+        "\n".join((
+            "TXT_DESIG,POINT_START_ID,POINT_END_ID",
+            "A1,direct,unresolved",
+        )),
+        encoding="utf-8",
+    )
+    (raw / "FLIGHT_AIRLINE_POINT.csv").write_text(
+        "\n".join((
+            "AirwayName,StartPointID,EndPointID",
+            "A1,direct,unresolved",
+            "A1,unresolved,direct",
+        )),
+        encoding="utf-8",
+    )
+    report = _semantic_report(
+        waypoint_samples=[],
+        airway_samples=[
+            {"logical_key": {
+                "airway_name": "A1", "airway_type": "B", "route_type": None,
+                "airway_fragment_no": 2, "sequence_no": 1,
+            }},
+            {"logical_key": {
+                "airway_name": "A2", "airway_type": "B", "route_type": None,
+                "airway_fragment_no": 1, "sequence_no": 1,
+            }},
+        ],
+    )
+
+    result = audit_source_gaps(model, report)
+
+    assert result["flight_airline_point_evidence"] == {
+        "available": True,
+        "rows": 2,
+        "endpoint_pairs_resolved_to_direct_424_points": 2,
+        "forward_rte_seg_matches": 1,
+        "reverse_rte_seg_matches": 1,
+        "unmatched_rte_seg_references": 0,
+        "rte_absent_reference_airway_names": 1,
+        "rows_for_rte_absent_reference_airways": 0,
+    }
+
+
 def test_cli_writes_source_gap_audit_without_loading_terminal_documents(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -132,5 +181,5 @@ def test_cli_writes_source_gap_audit_without_loading_terminal_documents(
 
     assert exit_code == 0
     assert observed["include_terminal_documents"] is False
-    assert json.loads(output.read_text(encoding="utf-8"))["diagnostic"] == "source-gap-audit-v2"
+    assert json.loads(output.read_text(encoding="utf-8"))["diagnostic"] == "source-gap-audit-v3"
     assert json.loads(capsys.readouterr().out)["read_only"] is True

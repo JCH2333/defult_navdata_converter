@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Mapping
 
 from .model import NavModel
+from .source import _rows
 
 
 class SourceGapAuditError(RuntimeError):
@@ -132,6 +133,68 @@ def _airway_categories(
     return dict(sorted(categories.items()))
 
 
+def _flight_airline_point_evidence(
+    model: NavModel,
+    keys: tuple[dict[str, object], ...],
+) -> dict[str, object]:
+    """Show whether airline-route references add source legs beyond RTE_SEG."""
+    rte_path = model.root / "RTE_SEG.csv"
+    airline_point_path = model.root / "FLIGHT_AIRLINE_POINT.csv"
+    if not rte_path.is_file() or not airline_point_path.is_file():
+        return {"available": False}
+    rte_rows = tuple(_rows(rte_path))
+    rte_signatures = {
+        (
+            _normalized(row.get("TXT_DESIG")),
+            str(row.get("POINT_START_ID") or "").strip(),
+            str(row.get("POINT_END_ID") or "").strip(),
+        )
+        for row in rte_rows
+    }
+    source_airways = {
+        _normalized(row.get("TXT_DESIG"))
+        for row in rte_rows
+    }
+    absent_reference_airways = {
+        _normalized(key["airway_name"])
+        for key in keys
+        if _normalized(key["airway_name"]) not in source_airways
+    }
+    direct_point_ids = {point.key for point in model.waypoints}
+    direct_point_ids.update(navaid.key for navaid in model.navaids)
+    counts: Counter[str] = Counter()
+    for row in _rows(airline_point_path):
+        counts["rows"] += 1
+        airway = _normalized(row.get("AirwayName"))
+        start_id = str(row.get("StartPointID") or "").strip()
+        end_id = str(row.get("EndPointID") or "").strip()
+        if start_id in direct_point_ids and end_id in direct_point_ids:
+            counts["endpoint_pairs_resolved_to_direct_424_points"] += 1
+        signature = (airway, start_id, end_id)
+        if signature in rte_signatures:
+            counts["forward_rte_seg_matches"] += 1
+        elif (airway, end_id, start_id) in rte_signatures:
+            counts["reverse_rte_seg_matches"] += 1
+        else:
+            counts["unmatched_rte_seg_references"] += 1
+        if airway in absent_reference_airways:
+            counts["rows_for_rte_absent_reference_airways"] += 1
+    return {
+        "available": True,
+        "rows": counts["rows"],
+        "endpoint_pairs_resolved_to_direct_424_points": (
+            counts["endpoint_pairs_resolved_to_direct_424_points"]
+        ),
+        "forward_rte_seg_matches": counts["forward_rte_seg_matches"],
+        "reverse_rte_seg_matches": counts["reverse_rte_seg_matches"],
+        "unmatched_rte_seg_references": counts["unmatched_rte_seg_references"],
+        "rte_absent_reference_airway_names": len(absent_reference_airways),
+        "rows_for_rte_absent_reference_airways": (
+            counts["rows_for_rte_absent_reference_airways"]
+        ),
+    }
+
+
 def audit_source_gaps(
     model: NavModel,
     semantic_report: Mapping[str, object],
@@ -153,7 +216,7 @@ def audit_source_gaps(
     if sum(airway_categories.values()) != len(airway_keys):
         raise SourceGapAuditError("航路来源分类未覆盖全部参考缺失逻辑身份")
     return {
-        "diagnostic": "source-gap-audit-v2",
+        "diagnostic": "source-gap-audit-v3",
         "read_only": True,
         "reference_values_redacted": True,
         "source": {
@@ -164,6 +227,9 @@ def audit_source_gaps(
         "waypoint_source_categories": waypoint_categories,
         "airway_reference_only_total": len(airway_keys),
         "airway_source_categories": airway_categories,
+        "flight_airline_point_evidence": _flight_airline_point_evidence(
+            model, airway_keys
+        ),
     }
 
 
