@@ -2,7 +2,12 @@ from pathlib import Path
 
 import pytest
 
-from fenix_default_navdata.source import _surface, load_naip, summarize_airway_source_metadata
+from fenix_default_navdata.source import (
+    _surface,
+    load_naip,
+    navaid_country,
+    summarize_airway_source_metadata,
+)
 
 
 def _write_csv(root: Path, name: str, text: str) -> None:
@@ -52,6 +57,11 @@ def _minimal_naip_root(tmp_path: Path, composition: str, *, include_second_airpo
 ))
 def test_surface_retains_first_expressible_source_component(composition: str, expected: str) -> None:
     assert _surface(composition) == expected
+
+
+def test_navaid_country_prefers_explicit_fir_over_serviced_airport() -> None:
+    assert navaid_country("ZBES", "\u6c88\u9633\u60c5\u62a5\u533a") == "ZY"
+    assert navaid_country("ZBES", "") == "ZB"
 
 
 def test_load_naip_derives_runway_end_coordinates_from_airport_reference(tmp_path: Path) -> None:
@@ -156,7 +166,7 @@ def test_load_naip_recovers_blank_route_endpoint_firs_from_matching_424_records(
         for leg in model.airway_legs
     ] == [
         ("ZB", "ZG"),
-        ("ZU", "ZB"),
+        ("ZP", "ZB"),
         ("ZB", ""),
     ]
     assert next(point.country for point in model.waypoints if point.ident == "NOFIR") == ""
