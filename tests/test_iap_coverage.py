@@ -55,7 +55,7 @@ def test_iap_coverage_counts_unique_map_disambiguation():
 
     report = analyze_iap_coverage(model)
 
-    assert report["version"] == 2
+    assert report["version"] == 3
     assert report["chart_pages"]["total"] == 2
     assert report["chart_pages"]["matched_to_primary_group"] == 2
     assert report["chart_pages"]["selected_for_role_projection"] == 1
@@ -132,6 +132,77 @@ def test_iap_coverage_does_not_select_a_chart_with_only_one_matching_role():
         "ambiguous_chart": 1,
     }
     assert report["unresolved_groups"][0]["status"] == "ambiguous_chart"
+
+
+def test_iap_coverage_does_not_reject_same_page_shared_variant_sections():
+    model = _model_with_iap_segments()
+    source = SourceRef("approach.pdf", 1, 1, "hash")
+    model.procedure_segments = [
+        ProcedureSegment(
+            "ZBCF", "R03", "approach_transition", "03", "TRANS", (
+                ChartTerminalLeg("R03", "03", "IF", "TRANS", "fixture", sequence=1),
+            ), source,
+        ),
+        ProcedureSegment(
+            "ZBCF", "R03", "missed", "03", "", (
+                ChartTerminalLeg("R03", "03", "DF", "MISSED", "fixture", sequence=1),
+            ), source,
+        ),
+        ProcedureSegment(
+            "ZBCF", "R03-Z", "approach", "03", "", (
+                ChartTerminalLeg("R03-Z", "03", "TF", "FINAL", "fixture", sequence=1),
+            ), source,
+        ),
+    ]
+    model.procedure_charts.append(
+        ProcedureChart(
+            "ZBCF", "selected.pdf", 1, "instrument-approach-index", "RNP z RWY03",
+            "text", (), ("03",), (), (), (), source,
+        ),
+    )
+
+    report = analyze_iap_coverage(model)
+
+    assert report["procedure_groups"]["shared_section_groups"] == 1
+    assert report["procedure_groups"]["status_counts"] == {
+        "unique_chart_without_roles": 1,
+    }
+    assert report["unresolved_groups"] == []
+
+
+def test_iap_coverage_keeps_base_sections_when_variant_is_from_another_page():
+    model = _model_with_iap_segments()
+    base_source = SourceRef("approach.pdf", 1, 1, "hash")
+    variant_source = SourceRef("approach.pdf", 2, 2, "hash")
+    model.procedure_segments = [
+        ProcedureSegment(
+            "ZBCF", "R03", "approach_transition", "03", "TRANS", (
+                ChartTerminalLeg("R03", "03", "IF", "TRANS", "fixture", sequence=1),
+            ), base_source,
+        ),
+        ProcedureSegment(
+            "ZBCF", "R03-Z", "approach", "03", "", (
+                ChartTerminalLeg("R03-Z", "03", "TF", "FINAL", "fixture", sequence=1),
+            ), variant_source,
+        ),
+    ]
+    model.procedure_charts.append(
+        ProcedureChart(
+            "ZBCF", "selected.pdf", 1, "instrument-approach-index", "RNP z RWY03",
+            "text", (), ("03",), (), (), (), variant_source,
+        ),
+    )
+
+    report = analyze_iap_coverage(model)
+
+    assert report["procedure_groups"]["shared_section_groups"] == 0
+    assert report["procedure_groups"]["status_counts"] == {
+        "no_unique_primary": 1,
+        "unique_chart_without_roles": 1,
+    }
+    assert [item["status"] for item in report["unresolved_groups"]] == [
+        "no_unique_primary",
+    ]
 
 
 def test_iap_coverage_keeps_ambiguous_and_missing_primary_groups_auditable():

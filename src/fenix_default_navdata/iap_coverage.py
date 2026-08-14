@@ -146,12 +146,54 @@ def _group_source(primary: list[Any], selected: list[Any]) -> dict[str, object]:
     return {"file": None, "row": None, "page": None, "sha256": None}
 
 
+def _shared_section_group_keys(
+    groups: dict[tuple[str, str, str], list[Any]],
+) -> set[tuple[str, str, str]]:
+    """Identify base-label sections already consumed by same-page variants."""
+    primary_by_group = {
+        key: [
+            segment for segment in selected
+            if iap_section_kind(segment) == "approach"
+        ]
+        for key, selected in groups.items()
+    }
+    shared: set[tuple[str, str, str]] = set()
+    for (airport, label, runway), selected in groups.items():
+        if primary_by_group[(airport, label, runway)]:
+            continue
+        source_pages = {
+            (segment.source.file, segment.source.page)
+            for segment in selected
+            if iap_section_kind(segment) in {
+                "approach_transition",
+                "missed",
+            }
+        }
+        if source_pages and all(
+            any(
+                candidate_airport == airport
+                and candidate_runway == runway
+                and candidate_label.startswith(label + "-")
+                and len(primary_by_group[(candidate_airport, candidate_label, candidate_runway)]) == 1
+                and (
+                    primary_by_group[(candidate_airport, candidate_label, candidate_runway)][0].source.file,
+                    primary_by_group[(candidate_airport, candidate_label, candidate_runway)][0].source.page,
+                ) == source_page
+                for candidate_airport, candidate_label, candidate_runway in groups
+            )
+            for source_page in source_pages
+        ):
+            shared.add((airport, label, runway))
+    return shared
+
+
 def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
     """Classify IAP evidence without claiming complete chart decoding."""
     groups: dict[tuple[str, str, str], list[Any]] = defaultdict(list)
     for segment in model.procedure_segments:
         if iap_section_kind(segment) in IAP_KINDS:
             groups[(segment.airport, segment.label, segment.runway)].append(segment)
+    shared_section_groups = _shared_section_group_keys(groups)
 
     charts = sorted(
         (
@@ -169,6 +211,8 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
     role_groups = 0
 
     for airport, label, runway in sorted(groups):
+        if (airport, label, runway) in shared_section_groups:
+            continue
         selected = groups[(airport, label, runway)]
         primary = [
             segment for segment in selected
@@ -230,7 +274,7 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
     role_evidence_pages = sum(bool(chart.route_fixes) for chart in charts)
     missed_evidence_pages = sum(bool(chart.has_missed_approach) for chart in charts)
     return {
-        "version": 2,
+        "version": 3,
         "chart_pages": {
             "total": len(charts),
             "with_route_role_evidence": role_evidence_pages,
@@ -241,6 +285,7 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
         },
         "procedure_groups": {
             "total": len(groups),
+            "shared_section_groups": len(shared_section_groups),
             "complete_primary_legs": complete_primary_groups,
             "role_evidence_used": role_groups,
             "status_counts": dict(sorted(status_counts.items())),
