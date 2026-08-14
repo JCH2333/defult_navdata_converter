@@ -8,6 +8,7 @@ from fenix_default_navdata.source import (
     load_naip,
     navaid_country,
     summarize_airway_source_metadata,
+    waypoint_country,
 )
 from fenix_default_navdata.model import Ad219Vor, NavModel, SourceRef
 
@@ -71,6 +72,10 @@ def test_navaid_country_uses_serviced_airport_for_multi_fir_boundary() -> None:
 
 def test_navaid_country_uses_serviced_airport_when_fir_is_blank() -> None:
     assert navaid_country("ZBES", "") == "ZB"
+
+
+def test_waypoint_country_keeps_primary_source_fir_for_multi_fir_point() -> None:
+    assert waypoint_country("武汉情报区，上海情报区") == "ZH"
 
 
 def test_load_naip_derives_runway_end_coordinates_from_airport_reference(tmp_path: Path) -> None:

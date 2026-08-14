@@ -377,7 +377,11 @@ def waypoint_country(
     if "\u9999\u6e2f" in (fir or ""):
         return "VH"
     if fir:
-        return navaid_country("", fir)
+        # A designated point has no serviced-airport side.  For a published
+        # multi-FIR list, retain its first source-listed FIR as the primary
+        # ownership marker instead of applying the navaid boundary rule.
+        primary_fir = re.split(r"[，,]", fir, maxsplit=1)[0].strip()
+        return navaid_country("", primary_fir)
     if ident in _EMPTY_FIR_COUNTRY_OVERRIDES:
         return _EMPTY_FIR_COUNTRY_OVERRIDES[ident]
     normalized_airport = (serviced_airport or "").strip().upper()
