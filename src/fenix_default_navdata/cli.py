@@ -10,6 +10,8 @@ from .official_index import build_official_navaid_index
 from .paths import detect_paths
 from .profile import DEFAULT_CYCLE
 from .semantic_diff import SUPPORTED_TABLES, semantic_diff, write_semantic_diff
+from .source import load_naip
+from .source_gap import audit_source_gaps, load_semantic_diff, write_source_gap_audit
 from .validation import validate_candidate
 
 
@@ -72,6 +74,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     semantic.add_argument("--sample-limit", type=int, default=50, help="每类差异最多输出的样本数")
     semantic.add_argument("--output", help="可选的本地诊断 JSON 输出路径")
+    source_gap = sub.add_parser(
+        "source-gap-audit",
+        help="只读按 424 原始记录分类已脱敏的航点/航路来源缺口",
+    )
+    source_gap.add_argument("--raw", help="2608 原始 CSV/PDF 目录")
+    source_gap.add_argument(
+        "--semantic-diff",
+        required=True,
+        help="完整、只读且已脱敏的 semantic-diff JSON",
+    )
+    source_gap.add_argument("--output", help="可选的本地来源缺口审计 JSON 输出路径")
     validate = sub.add_parser("validate", help="验证候选")
     validate.add_argument("--candidate", required=True)
     validate.add_argument("--reference")
@@ -135,6 +148,20 @@ def main(argv: list[str] | None = None) -> int:
             output = Path(args.output).expanduser().resolve()
             report["output"] = str(output)
             write_semantic_diff(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "source-gap-audit":
+        raw = _path(args.raw) or detect_paths().raw_root
+        if not raw:
+            raise SystemExit("无法自动检测 424 原始目录，请显式传入 --raw")
+        report = audit_source_gaps(
+            load_naip(raw, include_terminal_documents=False),
+            load_semantic_diff(Path(args.semantic_diff)),
+        )
+        if args.output:
+            output = Path(args.output).expanduser().resolve()
+            report["output"] = str(output)
+            write_source_gap_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "validate":
