@@ -1493,15 +1493,11 @@ def _append_enroute(
                 "ident": leg.start_ident,
                 "type": leg.start_type,
                 "region": leg.start_country,
-                "latitude": leg.start_latitude,
-                "longitude": leg.start_longitude,
             },
             "end": {
                 "ident": leg.end_ident,
                 "type": leg.end_type,
                 "region": leg.end_country,
-                "latitude": leg.end_latitude,
-                "longitude": leg.end_longitude,
             },
         })
     skipped_legs_detail.sort(

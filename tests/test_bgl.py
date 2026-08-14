@@ -171,15 +171,11 @@ def test_enroute_projection_skips_records_without_source_proven_regions(tmp_path
                 "ident": "KNOWN",
                 "type": "DESIGNATED_POINT",
                 "region": "ZB",
-                "latitude": 35.0,
-                "longitude": 105.0,
             },
             "end": {
                 "ident": "UNRES",
                 "type": "DESIGNATED_POINT",
                 "region": "",
-                "latitude": 36.0,
-                "longitude": 106.0,
             },
         },
     )
