@@ -152,6 +152,40 @@ def test_source_gap_audit_records_airline_points_as_existing_rte_references(
     }
 
 
+def test_source_gap_audit_marks_route_holdings_without_unique_named_identity(
+    tmp_path: Path,
+) -> None:
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    model = _model(raw)
+    (raw / "ROUTE_HOLDING.csv").write_text(
+        "\n".join((
+            "POINT_ID,LOCATION_POINT,GEO_LAT_ACCURACY,GEO_LONG_ACCURACY",
+            "direct,DIRECT,N350000,E1050000",
+            "holding-1,SHARED,N360000,E1060000",
+            "holding-2,SHARED,N370000,E1070000",
+        )),
+        encoding="utf-8",
+    )
+
+    result = audit_source_gaps(model, _semantic_report(
+        waypoint_samples=[],
+        airway_samples=[],
+    ))
+
+    assert result["route_holding_evidence"] == {
+        "available": True,
+        "rows": 3,
+        "direct_point_id_resolved": 1,
+        "point_id_unresolved": 2,
+        "unresolved_rows_with_coordinate": 2,
+        "unresolved_location_point_values": 1,
+        "unresolved_location_point_reused": 1,
+        "unresolved_unique_location_coordinate_pairs": 2,
+        "can_add_independent_enroute_waypoints": False,
+    }
+
+
 def test_cli_writes_source_gap_audit_without_loading_terminal_documents(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -195,6 +195,48 @@ def _flight_airline_point_evidence(
     }
 
 
+def _route_holding_evidence(model: NavModel) -> dict[str, object]:
+    """Show whether raw holding rows can prove independent enroute waypoints."""
+    holding_path = model.root / "ROUTE_HOLDING.csv"
+    if not holding_path.is_file():
+        return {"available": False}
+    direct_point_ids = {point.key for point in model.waypoints}
+    direct_point_ids.update(navaid.key for navaid in model.navaids)
+    unresolved_locations: Counter[str] = Counter()
+    unresolved_coordinates: set[tuple[str, str, str]] = set()
+    counts: Counter[str] = Counter()
+    for row in _rows(holding_path):
+        counts["rows"] += 1
+        point_id = str(row.get("POINT_ID") or "").strip()
+        if point_id in direct_point_ids:
+            counts["direct_point_id_resolved"] += 1
+            continue
+        counts["point_id_unresolved"] += 1
+        location = _normalized(row.get("LOCATION_POINT"))
+        latitude = str(row.get("GEO_LAT_ACCURACY") or "").strip()
+        longitude = str(row.get("GEO_LONG_ACCURACY") or "").strip()
+        if latitude and longitude:
+            counts["unresolved_rows_with_coordinate"] += 1
+            unresolved_coordinates.add((location, latitude, longitude))
+        if location:
+            unresolved_locations[location] += 1
+    return {
+        "available": True,
+        "rows": counts["rows"],
+        "direct_point_id_resolved": counts["direct_point_id_resolved"],
+        "point_id_unresolved": counts["point_id_unresolved"],
+        "unresolved_rows_with_coordinate": counts["unresolved_rows_with_coordinate"],
+        "unresolved_location_point_values": len(unresolved_locations),
+        "unresolved_location_point_reused": sum(
+            count > 1 for count in unresolved_locations.values()
+        ),
+        "unresolved_unique_location_coordinate_pairs": len(unresolved_coordinates),
+        # The source table has no region key. A repeated LOCATION_POINT must
+        # never become several MSFS named waypoints with the same identity.
+        "can_add_independent_enroute_waypoints": False,
+    }
+
+
 def audit_source_gaps(
     model: NavModel,
     semantic_report: Mapping[str, object],
@@ -230,6 +272,7 @@ def audit_source_gaps(
         "flight_airline_point_evidence": _flight_airline_point_evidence(
             model, airway_keys
         ),
+        "route_holding_evidence": _route_holding_evidence(model),
     }
 
 
