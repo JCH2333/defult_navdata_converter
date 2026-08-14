@@ -13,6 +13,65 @@ from fenix_default_navdata.source import (
 from fenix_default_navdata.model import Ad219Vor, NavModel, SourceRef
 
 
+def test_load_naip_enriches_only_colocated_unique_ad219_vor_dme_elevation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = _minimal_naip_root(tmp_path, "ASP")
+    airport_directory = root / "Terminal" / "ZBCF"
+    airport_directory.mkdir(parents=True)
+    (airport_directory / "Charts.csv").write_text("", encoding="utf-8")
+    source_pdf = airport_directory / "airport.pdf"
+    _write_csv(root, "VOR.csv", "\n".join((
+        "SIGNIFICANT_POINT_ID,CODE_ID,TXT_NAME,GEO_LAT_ACCURACY,GEO_LONG_ACCURACY,VAL_FREQ,VAL_MAG_VAR,VAL_ELEV,UOM_DIST_VER,SERVICED_AIRPORT,CODE_FIR",
+        "vor,DMX,VOR,N350000,E1050000,113.1,-2.0,100,M,ZBCF,",
+    )))
+    evidence = Ad219Vor(
+        "ZBCF", "DMX", 113.1, 35.0, 105.0, 123.4,
+        SourceRef(str(source_pdf), 14, 14, "hash"),
+    )
+    monkeypatch.setattr(
+        "fenix_default_navdata.source.extract_airport_ad219_landing_aids",
+        lambda _: ([], [evidence]),
+    )
+
+    model = load_naip(root)
+
+    navaid = next(item for item in model.navaids if item.ident == "DMX")
+    assert navaid.elevation_ft == 328
+    assert navaid.dme_elevation_ft == 405
+    assert navaid.dme_source == SourceRef("Terminal/ZBCF/airport.pdf", 14, 14, "hash")
+
+
+def test_load_naip_does_not_enrich_vor_dme_elevation_from_offset_ad219_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = _minimal_naip_root(tmp_path, "ASP")
+    airport_directory = root / "Terminal" / "ZBCF"
+    airport_directory.mkdir(parents=True)
+    (airport_directory / "Charts.csv").write_text("", encoding="utf-8")
+    source_pdf = airport_directory / "airport.pdf"
+    _write_csv(root, "VOR.csv", "\n".join((
+        "SIGNIFICANT_POINT_ID,CODE_ID,TXT_NAME,GEO_LAT_ACCURACY,GEO_LONG_ACCURACY,VAL_FREQ,VAL_MAG_VAR,VAL_ELEV,UOM_DIST_VER,SERVICED_AIRPORT,CODE_FIR",
+        "vor,DMX,VOR,N350000,E1050000,113.1,-2.0,100,M,ZBCF,",
+    )))
+    evidence = Ad219Vor(
+        "ZBCF", "DMX", 113.1, 35.016667, 105.0, 123.4,
+        SourceRef(str(source_pdf), 14, 14, "hash"),
+    )
+    monkeypatch.setattr(
+        "fenix_default_navdata.source.extract_airport_ad219_landing_aids",
+        lambda _: ([], [evidence]),
+    )
+
+    model = load_naip(root)
+
+    navaid = next(item for item in model.navaids if item.ident == "DMX")
+    assert navaid.dme_elevation_ft is None
+    assert navaid.dme_source is None
+
+
 def _write_csv(root: Path, name: str, text: str) -> None:
     (root / name).write_text(text, encoding="utf-8")
 
