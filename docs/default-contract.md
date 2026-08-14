@@ -212,6 +212,12 @@ IAP 覆盖报告由 `iap_coverage.version=3` 标记。所有角色投影必须�
 - 当前候选已经可以生成两个具有 BGL、`bglIndex.bout`、`layout.json`、
   `manifest.json` 和 ContentInfo 的测试覆盖包，但与参考成品同名文件尚未逐字节
   收敛。
+- 2026-08-14 的当前 `r45` 航路 BGL 只读语义差分为：VOR `121/135`、NDB
+  `133/143`、航点 `2519/3266`、航路 `4300/4614`（候选/参考）。14 个参考
+  VOR 逻辑身份和 18 个参考 NDB 逻辑身份不在当期 424 的直接 VOR/NDB 表中，
+  也没有作为 `RTE_SEG.csv` 的同周期航路端点出现；这些缺口不能由参考成品、
+  Fenix 或名称猜测反向补写。另有 6 个 VOR 与 3 个 NDB 仅以不同的 424
+  区域键出现，继续按区域冲突契约保守处理。
 - 程序标题分类仍有少量复杂双栏版式和无分隔程序名需要继续以 424 PDF 原文处理。
 - 在 `byte_equal_reference=true` 且完成实机验证前，任何候选都不得覆盖
   `F:\games\community\Community`，不得创建正式 Release。
