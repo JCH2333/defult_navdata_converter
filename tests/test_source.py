@@ -487,10 +487,88 @@ def test_load_naip_keeps_verified_general_document_navaids_as_audit_evidence(
         "pages": 1,
         "parsed_records": 1,
         "matched_424": 1,
+        "ocr_identifier_reconciled": 0,
+        "ocr_identifier_reconciliations": [],
         "direct_identity_missing": 0,
         "direct_identity_ambiguous": 0,
+        "physical_identity_ambiguous": 0,
         "identity_conflict": 0,
     }
+
+
+def test_load_naip_reconciles_unique_general_document_ocr_identifier_misread(
+    tmp_path: Path,
+) -> None:
+    root = _minimal_naip_root(tmp_path, "ASP")
+    _write_csv(root, "VOR.csv", "\n".join((
+        "SIGNIFICANT_POINT_ID,CODE_ID,TXT_NAME,GEO_LAT_ACCURACY,GEO_LONG_ACCURACY,VAL_FREQ,VAL_MAG_VAR,VAL_ELEV,UOM_DIST_VER,SERVICED_AIRPORT,CODE_FIR",
+        "vor,NLT,source-vor,N432600,E0832246,115.5,3.25,935,M,ZWNL,",
+    )))
+    source_pdf = root / ENROUTE_NAVAID_DOCUMENT
+    source_pdf.parent.mkdir(parents=True)
+    source_pdf.write_bytes(b"navaids")
+    key_point_pdf = root / ENROUTE_KEY_POINT_DOCUMENT
+    key_point_pdf.write_bytes(b"key-points")
+    cache_root = tmp_path / "general-doc-cache"
+    key_point_cache = cache_root / "enr-4.4"
+    cache = cache_root / "enr-4.1-navaids"
+    key_point_cache.mkdir(parents=True)
+    cache.mkdir(parents=True)
+    (key_point_cache / "manifest.json").write_text(json.dumps({
+        "schema_version": 1,
+        "source_file": ENROUTE_KEY_POINT_DOCUMENT,
+        "source_sha256": hashlib.sha256(key_point_pdf.read_bytes()).hexdigest(),
+        "page_count": 1,
+    }), encoding="utf-8")
+    (key_point_cache / "page-0001.json").write_text(json.dumps({
+        "ok": True,
+        "data": {"documents": [{"markdown": ""}]},
+    }), encoding="utf-8")
+    (cache / "manifest.json").write_text(json.dumps({
+        "schema_version": 1,
+        "source_file": ENROUTE_NAVAID_DOCUMENT,
+        "source_sha256": hashlib.sha256(source_pdf.read_bytes()).hexdigest(),
+        "page_count": 1,
+    }), encoding="utf-8")
+    (cache / "page-0001.json").write_text(json.dumps({
+        "ok": True,
+        "data": {"documents": [{"markdown": "\n".join((
+            "NL7[[192, 304, 232, 319]]",
+            "115.5MHz[[256, 299, 336, 313]]",
+            "N43\ufffd\ufffd26'00\"[[433, 299, 512, 313]]",
+            "935[[551, 305, 591, 320]]",
+            "VOR/DME[[92, 317, 167, 331]]",
+            "E083\ufffd\ufffd22'46\"[[433, 317, 514, 331]]",
+        ))}]},
+    }), encoding="utf-8")
+
+    model = load_naip(
+        root,
+        general_doc_cache=cache_root,
+        include_terminal_documents=False,
+    )
+
+    assert [(item.ident, item.magnetic_variation) for item in model.navaids] == [
+        ("NLT", 3.25),
+    ]
+    assert [(item.ident, item.source.page) for item in model.enroute_navaid_evidence] == [
+        ("NL7", 1),
+    ]
+    assert model.general_document_evidence["navaids"][
+        "ocr_identifier_reconciliations"
+    ] == [{
+        "page": 1,
+        "kind": "VOR",
+        "ocr_ident": "NL7",
+        "direct_424_ident": "NLT",
+        "source_file": "VOR.csv",
+        "source_row": 2,
+    }]
+    assert model.general_document_evidence["navaids"]["direct_identity_missing"] == 0
+    assert not [
+        item for item in model.rejected_records
+        if item.kind == "general-document-navaid"
+    ]
 
 
 def test_load_naip_separates_source_pbn_from_target_route_type_and_links_airway_tables(

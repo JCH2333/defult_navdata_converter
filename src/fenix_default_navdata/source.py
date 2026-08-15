@@ -817,10 +817,44 @@ def _load_general_document_navaids(
         by_identity.setdefault((navaid.kind.upper(), navaid.ident.upper()), []).append(navaid)
 
     counts: Counter[str] = Counter()
+    identifier_reconciliations: list[dict[str, object]] = []
     for item in evidence:
         model.enroute_navaid_evidence.append(item)
         matches = by_identity.get((item.kind.upper(), item.ident.upper()), [])
         if not matches:
+            physical_matches = [
+                navaid
+                for navaid in model.navaids
+                if navaid.kind.upper() == item.kind.upper()
+                and abs(navaid.frequency - item.frequency) <= 0.001
+                and _angular_distance(
+                    navaid.latitude,
+                    navaid.longitude,
+                    item.latitude,
+                    item.longitude,
+                ) * _EARTH_RADIUS_NM <= 0.02
+            ]
+            if len(physical_matches) == 1:
+                navaid = physical_matches[0]
+                counts["ocr_identifier_reconciled"] += 1
+                identifier_reconciliations.append({
+                    "page": item.source.page,
+                    "kind": item.kind,
+                    "ocr_ident": item.ident,
+                    "direct_424_ident": navaid.ident,
+                    "source_file": navaid.source.file,
+                    "source_row": navaid.source.row,
+                })
+                continue
+            if len(physical_matches) > 1:
+                counts["physical_identity_ambiguous"] += 1
+                model.rejected_records.append(RejectedRecord(
+                    "general-document-navaid",
+                    item.ident,
+                    "general document physical identity is ambiguous in direct 424 navaids",
+                    item.source,
+                ))
+                continue
             counts["direct_identity_missing"] += 1
             continue
         if len(matches) != 1:
@@ -856,8 +890,11 @@ def _load_general_document_navaids(
         "navaids": {
             **report,
             "matched_424": counts["matched_424"],
+            "ocr_identifier_reconciled": counts["ocr_identifier_reconciled"],
+            "ocr_identifier_reconciliations": identifier_reconciliations,
             "direct_identity_missing": counts["direct_identity_missing"],
             "direct_identity_ambiguous": counts["direct_identity_ambiguous"],
+            "physical_identity_ambiguous": counts["physical_identity_ambiguous"],
             "identity_conflict": counts["identity_conflict"],
         },
     }
