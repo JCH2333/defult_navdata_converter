@@ -22,7 +22,7 @@ python -m fenix_default_navdata.cli ocr-cache `
   --first-page 1 --last-page 1
 ```
 
-首张页检查通过后，移除 `--first-page` 和 `--last-page` 即可继续整册。默认单页 OCR 超时为 180 秒，可通过 `--timeout` 调整。`--force` 仅用于明确要求重新识别已有有效页面。
+首张页检查通过后，移除 `--first-page` 和 `--last-page` 即可继续整册。默认单页 OCR 超时为 180 秒，可通过 `--timeout` 调整。`--force` 仅用于明确要求重新识别已有有效页面。通用 `ocr-cache` 默认不重试；`iap-ocr-cache` 默认对每页重试 2 次，可通过 `--retries` 调整。子进程固定以 UTF-8 输出，避免 Windows 控制台代码页把有效 OCR JSON 误判为失败。
 
 仅完整页集可提供给后续解析器。缓存本身是本地数据资产，不得提交到 Git 仓库。
 
@@ -38,3 +38,8 @@ python -m fenix_default_navdata.cli ocr-cache `
 先使用 `--dry-run` 固定任务清单，再移除该开关执行。每个 PDF 缓存目录包含相对路径和
 源 SHA-256，页面级 JSON、图像渲染参数和 OCR 配置均可断点复用。该命令的输出始终是
 来源证据，不会写入候选包、解除 IAP 拒绝或修改参考比较结果。
+
+2608R1 已用本机 DeepSeek-OCR-2/llama.cpp 完成 113 份源侧 IAP PDF 的 113 页缓存；
+服务以 3 倍渲染处理图页时如出现 `Context size has been exceeded`，应将 llama-server
+上下文提升至 `8192` 后重试既有缓存页。该缓存只用于后续可验证的图页解析规则，不是
+候选导航数据来源。

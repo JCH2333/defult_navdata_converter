@@ -118,6 +118,18 @@ def _select_iap_chart(charts: list[Any], segment: Any) -> tuple[Any | None, str 
         )
     ):
         return supporting[0], "multi_role"
+    dominant = [
+        chart
+        for chart in supporting
+        if all(
+            len({ident for ident, _ in evidence[id(chart)]})
+            > len({ident for ident, _ in evidence[id(other)]})
+            for other in charts
+            if other is not chart
+        )
+    ]
+    if len(dominant) == 1:
+        return dominant[0], "dominant_multi_role"
     return None, None
 
 
@@ -243,7 +255,11 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
                     else (
                         "roles_final_mapt_disambiguated"
                         if selection == "final_mapt"
-                        else "roles_multi_role_disambiguated"
+                        else (
+                            "roles_multi_role_disambiguated"
+                            if selection == "multi_role"
+                            else "roles_dominant_multi_role_disambiguated"
+                        )
                     )
                 )
                 selected_role_pages.add(
@@ -274,7 +290,7 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
     role_evidence_pages = sum(bool(chart.route_fixes) for chart in charts)
     missed_evidence_pages = sum(bool(chart.has_missed_approach) for chart in charts)
     return {
-        "version": 3,
+        "version": 4,
         "chart_pages": {
             "total": len(charts),
             "with_route_role_evidence": role_evidence_pages,

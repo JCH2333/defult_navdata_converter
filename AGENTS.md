@@ -50,3 +50,4 @@
 - AD 2.19 继续保留为带页码和 SHA-256 的独立审计证据；不得新增、重区域化或修改任何 VOR 本体字段，也不得写入 `Vor/Dme.alt`。
 - 证据：2026-08-14 的 r52 真实 SDK 构建和受控 Navdatareader 差分中，投影 108 条已匹配 VOR 的 PDF DME 高程后，VOR 严格一致行从 40 降至 36、字段差异从 75 增至 79、含 `dme_altitude` 的差异样本从 27 增至 44。故该高程不是默认 BGL `Vor/Dme.alt` 的可证明来源。
 - 回归：`test_load_naip_keeps_ad219_vor_evidence_separate_from_direct_vor`、`test_ad219_vor_evidence_is_not_promoted_to_a_navaid`。
+- IAP 图页严格占优消歧（默认通用数据、2608R1，证据：2026-08-15 全量 424 CSV/PDF 只读加载、113 份源侧 IAP PDF 的可续跑 OCR 缓存、`tests/test_iap_coverage.py` 与全量 180 项测试）：当多个候选图页都与同一主进近段匹配时，只有一张图页对至少两个不同数据库腿提供 `IAF`、`IF`、`FAF`、`MAP` 或 `MAPT` 角色，其中至少一个为 `FAF`、`MAP` 或 `MAPT`，且其不同腿角色数量严格高于每一张其他候选图页，才可选中；同分和单角色仍必须拒绝。`iap_coverage.version=4` 的实际统计为 743 组、665 个唯一非空主段、642 组已使用图页角色、20 个多图歧义、2 个无匹配图页、50 个无唯一主段，未决共 72。OCR 缓存仅作可复用来源证据，不能直接写入候选包或解除其他 IAP 拒绝。
