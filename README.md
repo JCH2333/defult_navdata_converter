@@ -15,6 +15,7 @@
 - 自动探测 MSFS 2024 SDK `fspackagetool.exe`。
 - 通过纯 ASCII 暂存项目调用 Package Tool，生成 BGL、`bglIndex.bout`、包元数据与 ContentInfo。
 - 将 PDF 解析证据缓存到本机可复用目录，长时间转换中断后可以断点续跑。
+- 可将完整 OCR 缓存与局部重跑缓存逐页比对；重跑不完全一致时可由命令行门禁返回非零，且 OCR 结果始终只作为来源审计。
 - 比较参考成品目录的逐文件大小和 SHA-256。
 - 对候选与参考的 Navdatareader SQLite 执行只读语义差分；报告只保留逻辑身份、差异字段名和数量，不导出参考字段值。
 - 在转换报告中分开记录 IAP 数据库腿、图页角色证据和未决分组；唯一 MAP/MAPT 终点只用于来源消歧，不代表完整图形语义已经解码。
@@ -51,12 +52,26 @@ python -m fenix_default_navdata.cli source-gap-audit `
   --raw "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
   --semantic-diff diagnostics\navdatareader\semantic-diff.json `
   --output diagnostics\source-gap-audit.json
+python -m fenix_default_navdata.cli ocr-cache `
+  --pdf "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608\GeneralDoc\航路_4.1无线电导航设施——航路.pdf" `
+  --source-root "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
+  --cache "C:\Users\Administrator\AppData\Local\default_navdata_converter\general-doc-ocr-cache-2608r1\enr-4.1-navaids-rerun" `
+  --first-page 19 `
+  --last-page 26
+python -m fenix_default_navdata.cli ocr-audit `
+  --source-root "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
+  --canonical-cache "C:\Users\Administrator\AppData\Local\default_navdata_converter\general-doc-ocr-cache-2608r1\enr-4.1-navaids" `
+  --rerun-cache "C:\Users\Administrator\AppData\Local\default_navdata_converter\general-doc-ocr-cache-2608r1\enr-4.1-navaids-rerun" `
+  --require-agreement `
+  --output diagnostics\ocr-rerun-audit.json
 python -m fenix_default_navdata.gui
 ```
 
 也可以双击 `run_gui.bat`。
 
 `read-package` 默认最多运行 120 秒，并在外部读取器日志超过 16 MiB 时停止本次诊断，避免异常 BGL 读取消耗无限磁盘空间。
+
+`ocr-audit` 的主缓存必须完整，并且两份缓存必须绑定同一份原始 PDF SHA-256。它只比较重跑所含的物理页；`--require-agreement` 适合用于自动化任务，发现任何主缓存独有或重跑独有记录时返回退出代码 `1`。
 
 显式指定 SDK Package Tool：
 

@@ -8,6 +8,7 @@ from fenix_default_navdata.general_docs import (
     ENROUTE_NAVAID_DOCUMENT,
     ENROUTE_KEY_POINT_DOCUMENT,
     GeneralDocumentCacheError,
+    audit_enroute_navaid_ocr_rerun,
     load_enroute_navaid_evidence,
     load_enroute_key_point_evidence,
     parse_enroute_navaids,
@@ -50,6 +51,44 @@ def _cache(root: Path, pages: dict[int, str]) -> Path:
             encoding="utf-8",
         )
     return cache.parent
+
+
+def _navaid_cache(
+    root: Path,
+    name: str,
+    pages: dict[int, str],
+    *,
+    page_count: int,
+) -> Path:
+    source = root / ENROUTE_NAVAID_DOCUMENT
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_bytes(b"source-pdf")
+    cache = root.parent / "ocr-cache" / name
+    cache.mkdir(parents=True)
+    manifest = {
+        "schema_version": 1,
+        "source_file": ENROUTE_NAVAID_DOCUMENT,
+        "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+        "page_count": page_count,
+    }
+    (cache / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    for page, markdown in pages.items():
+        (cache / f"page-{page:04d}.json").write_text(
+            json.dumps(_payload(markdown)),
+            encoding="utf-8",
+        )
+    return cache
+
+
+def _navaid_markdown(ident: str) -> str:
+    return "\n".join((
+        f"{ident}[[192, 304, 232, 319]]",
+        "112.1MHz[[256, 299, 336, 313]]",
+        "N41\ufffd\ufffd15'38\"[[433, 299, 512, 313]]",
+        "1188[[551, 305, 591, 320]]",
+        "VOR/DME[[92, 317, 167, 331]]",
+        "E080\ufffd\ufffd19'34\"[[433, 317, 514, 331]]",
+    ))
 
 
 def test_parse_enroute_key_points_accepts_adjacent_two_column_ocr_cells() -> None:
@@ -176,3 +215,59 @@ def test_load_enroute_navaid_evidence_requires_complete_hashed_cache(
 
     assert [(item.ident, item.source.page) for item in records] == [("KQS", 1)]
     assert report["parsed_records"] == 1
+
+
+def test_audit_enroute_navaid_ocr_rerun_compares_partial_same_source_cache(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "raw"
+    canonical = _navaid_cache(
+        root,
+        "enr-4.1-navaids",
+        {1: _navaid_markdown("KQS"), 2: _navaid_markdown("DNY")},
+        page_count=2,
+    )
+    rerun = _navaid_cache(
+        root,
+        "enr-4.1-navaids-rerun",
+        {2: _navaid_markdown("DNY")},
+        page_count=2,
+    )
+
+    report = audit_enroute_navaid_ocr_rerun(root, canonical, rerun)
+
+    assert report["diagnostic"] == "enroute-navaid-ocr-rerun-audit-v1"
+    assert report["evidence_only"] is True
+    assert report["canonical"]["parsed_records"] == 2
+    assert report["canonical"]["selected_pages_parsed_records"] == 1
+    assert report["rerun"]["selected_pages"] == [2]
+    assert report["rerun"]["parsed_records"] == 1
+    assert report["comparison"] == {
+        "consistent": True,
+        "agreement_ratio": 1.0,
+        "selected_pages": [2],
+    }
+    assert report["records"]["agreed"] == 1
+    assert report["records"]["canonical_only"] == 0
+    assert report["records"]["rerun_only"] == 0
+
+
+def test_audit_enroute_navaid_ocr_rerun_rejects_incomplete_canonical_cache(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "raw"
+    canonical = _navaid_cache(
+        root,
+        "enr-4.1-navaids",
+        {1: _navaid_markdown("KQS")},
+        page_count=2,
+    )
+    rerun = _navaid_cache(
+        root,
+        "enr-4.1-navaids-rerun",
+        {1: _navaid_markdown("KQS")},
+        page_count=2,
+    )
+
+    with pytest.raises(GeneralDocumentCacheError, match="incomplete"):
+        audit_enroute_navaid_ocr_rerun(root, canonical, rerun)

@@ -320,6 +320,230 @@ def _load_complete_document(
     }
 
 
+def _load_selected_document_pages(
+    root: Path,
+    cache: Path,
+    *,
+    document: str,
+    require_complete: bool,
+) -> tuple[tuple[tuple[int, str], ...], str, dict[str, object]]:
+    """Load a verified OCR cache, allowing a deliberate subset for reruns."""
+    cache = cache.expanduser().resolve()
+    document_cache, source_pdf, manifest = _document_cache(
+        root,
+        cache.parent,
+        document=document,
+        cache_directory=cache.name,
+    )
+    page_count = manifest.get("page_count")
+    if not isinstance(page_count, int) or page_count < 1:
+        raise GeneralDocumentCacheError("OCR cache manifest has an invalid page count")
+
+    numbered_pages: dict[int, Path] = {}
+    for page_path in document_cache.glob("page-*.json"):
+        match = re.fullmatch(r"page-(\d{4})\.json", page_path.name)
+        if match is None:
+            raise GeneralDocumentCacheError(
+                f"invalid OCR cache page filename: {page_path.name}"
+            )
+        page_number = int(match.group(1))
+        if page_number < 1 or page_number > page_count:
+            raise GeneralDocumentCacheError(
+                f"OCR cache page is outside document range: {page_path.name}"
+            )
+        numbered_pages[page_number] = page_path
+    if not numbered_pages:
+        raise GeneralDocumentCacheError("OCR cache has no valid page files")
+    if require_complete and set(numbered_pages) != set(range(1, page_count + 1)):
+        missing = page_count - len(numbered_pages)
+        raise GeneralDocumentCacheError(
+            f"OCR cache page set is incomplete (missing={missing}, unexpected=0)"
+        )
+
+    pages: list[tuple[int, str]] = []
+    for page_number, page_path in sorted(numbered_pages.items()):
+        try:
+            payload = json.loads(page_path.read_text(encoding="utf-8-sig"))
+            ocr_document = payload["data"]["documents"][0]
+            markdown = ocr_document["markdown"]
+        except (
+            IndexError,
+            KeyError,
+            TypeError,
+            json.JSONDecodeError,
+        ) as error:
+            raise GeneralDocumentCacheError(
+                f"invalid OCR cache page: {page_path}"
+            ) from error
+        if payload.get("ok") is not True or not isinstance(markdown, str):
+            raise GeneralDocumentCacheError(
+                f"failed OCR cache page: {page_path}"
+            )
+        pages.append((page_number, markdown))
+
+    source_hash = hashlib.sha256(source_pdf.read_bytes()).hexdigest()
+    return tuple(pages), source_hash, {
+        "cache": str(document_cache),
+        "page_count": page_count,
+        "selected_pages": list(numbered_pages),
+    }
+
+
+def _navaid_evidence_identity(
+    item: EnrouteNavaidEvidence,
+) -> tuple[object, ...]:
+    return (
+        item.kind,
+        item.ident,
+        item.frequency,
+        item.latitude,
+        item.longitude,
+        item.elevation_meters,
+    )
+
+
+def _navaid_evidence_report_item(item: EnrouteNavaidEvidence) -> dict[str, object]:
+    return {
+        "kind": item.kind,
+        "ident": item.ident,
+        "frequency": item.frequency,
+        "latitude": item.latitude,
+        "longitude": item.longitude,
+        "elevation_meters": item.elevation_meters,
+        "page": item.source.page,
+    }
+
+
+def audit_enroute_navaid_ocr_rerun(
+    root: Path,
+    canonical_cache: Path,
+    rerun_cache: Path,
+) -> dict[str, object]:
+    """Compare a complete 4.1 cache with a same-PDF OCR rerun.
+
+    The audit is intentionally evidence-only: it reports parser agreement and
+    omissions by physical PDF page and never promotes OCR facts to a Navaid.
+    """
+    root = root.expanduser().resolve()
+    canonical_pages, canonical_hash, canonical_report = _load_selected_document_pages(
+        root,
+        canonical_cache,
+        document=ENROUTE_NAVAID_DOCUMENT,
+        require_complete=True,
+    )
+    rerun_pages, rerun_hash, rerun_report = _load_selected_document_pages(
+        root,
+        rerun_cache,
+        document=ENROUTE_NAVAID_DOCUMENT,
+        require_complete=False,
+    )
+    if canonical_hash != rerun_hash:
+        raise GeneralDocumentCacheError("OCR rerun cache source PDF SHA-256 does not match")
+    if canonical_report["page_count"] != rerun_report["page_count"]:
+        raise GeneralDocumentCacheError("OCR rerun cache page count does not match")
+
+    canonical_by_page = {
+        page: tuple(
+            parse_enroute_navaids(
+                markdown,
+                SourceRef(
+                    ENROUTE_NAVAID_DOCUMENT,
+                    page=page,
+                    sha256=canonical_hash,
+                ),
+            )
+        )
+        for page, markdown in canonical_pages
+    }
+    rerun_by_page = {
+        page: tuple(
+            parse_enroute_navaids(
+                markdown,
+                SourceRef(
+                    ENROUTE_NAVAID_DOCUMENT,
+                    page=page,
+                    sha256=rerun_hash,
+                ),
+            )
+        )
+        for page, markdown in rerun_pages
+    }
+    agreed: list[EnrouteNavaidEvidence] = []
+    canonical_only: list[EnrouteNavaidEvidence] = []
+    rerun_only: list[EnrouteNavaidEvidence] = []
+    for page, rerun_records in rerun_by_page.items():
+        canonical_records = canonical_by_page[page]
+        canonical_keys = {_navaid_evidence_identity(item) for item in canonical_records}
+        rerun_keys = {_navaid_evidence_identity(item) for item in rerun_records}
+        agreed.extend(
+            item
+            for item in canonical_records
+            if _navaid_evidence_identity(item) in rerun_keys
+        )
+        canonical_only.extend(
+            item
+            for item in canonical_records
+            if _navaid_evidence_identity(item) not in rerun_keys
+        )
+        rerun_only.extend(
+            item
+            for item in rerun_records
+            if _navaid_evidence_identity(item) not in canonical_keys
+        )
+    union_count = len(agreed) + len(canonical_only) + len(rerun_only)
+    consistent = not canonical_only and not rerun_only
+
+    return {
+        "diagnostic": "enroute-navaid-ocr-rerun-audit-v1",
+        "evidence_only": True,
+        "document": ENROUTE_NAVAID_DOCUMENT,
+        "source_sha256": canonical_hash,
+        "canonical": {
+            **canonical_report,
+            "parsed_records": sum(len(records) for records in canonical_by_page.values()),
+            "selected_pages_parsed_records": sum(
+                len(canonical_by_page[page]) for page in rerun_by_page
+            ),
+        },
+        "rerun": {
+            **rerun_report,
+            "parsed_records": sum(len(records) for records in rerun_by_page.values()),
+        },
+        "comparison": {
+            "consistent": consistent,
+            "agreement_ratio": round(len(agreed) / union_count, 6) if union_count else 1.0,
+            "selected_pages": list(rerun_by_page),
+        },
+        "records": {
+            "agreed": len(agreed),
+            "canonical_only": len(canonical_only),
+            "rerun_only": len(rerun_only),
+            "canonical_only_items": [
+                _navaid_evidence_report_item(item)
+                for item in canonical_only
+            ],
+            "rerun_only_items": [
+                _navaid_evidence_report_item(item)
+                for item in rerun_only
+            ],
+        },
+    }
+
+
+def write_enroute_navaid_ocr_rerun_audit(
+    path: Path,
+    report: dict[str, object],
+) -> None:
+    path = path.expanduser().resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(f"{path.suffix}.tmp")
+    temporary.write_text(
+        json.dumps(report, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    temporary.replace(path)
+
+
 def load_enroute_key_point_evidence(
     root: Path,
     cache_root: Path,

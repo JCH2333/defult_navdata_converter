@@ -6,6 +6,10 @@ from pathlib import Path
 
 from .convert import convert
 from .deployment import deploy, restore
+from .general_docs import (
+    audit_enroute_navaid_ocr_rerun,
+    write_enroute_navaid_ocr_rerun_audit,
+)
 from .ocr_cache import build_ocr_cache
 from .official_index import build_official_navaid_index
 from .package_reader import DEFAULT_READER_TIMEOUT_SECONDS, read_package
@@ -116,6 +120,19 @@ def build_parser() -> argparse.ArgumentParser:
     ocr_cache.add_argument("--first-page", type=int, help="可选的起始物理页")
     ocr_cache.add_argument("--last-page", type=int, help="可选的结束物理页")
     ocr_cache.add_argument("--force", action="store_true", help="重新识别已存在的有效页面")
+    ocr_audit = sub.add_parser(
+        "ocr-audit",
+        help="比较同一原始 PDF 的完整 OCR 缓存与局部重跑缓存，仅输出证据审计",
+    )
+    ocr_audit.add_argument("--source-root", required=True, help="424 原始数据根目录")
+    ocr_audit.add_argument("--canonical-cache", required=True, help="完整的已验证 OCR 缓存目录")
+    ocr_audit.add_argument("--rerun-cache", required=True, help="同源 PDF 的局部或完整重跑缓存目录")
+    ocr_audit.add_argument("--output", help="可选的本地审计 JSON 输出路径")
+    ocr_audit.add_argument(
+        "--require-agreement",
+        action="store_true",
+        help="重跑记录与主缓存不完全一致时返回非零，便于自动化门禁",
+    )
     package_reader = sub.add_parser(
         "read-package",
         help="在纯 ASCII 暂存区镜像完整覆盖包并生成 Navdatareader SQLite",
@@ -238,6 +255,18 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(json.dumps(report.to_report(), ensure_ascii=False, indent=2))
         return 0
+    if args.command == "ocr-audit":
+        report = audit_enroute_navaid_ocr_rerun(
+            Path(args.source_root),
+            Path(args.canonical_cache),
+            Path(args.rerun_cache),
+        )
+        if args.output:
+            output = Path(args.output).expanduser().resolve()
+            write_enroute_navaid_ocr_rerun_audit(output, report)
+            report["output"] = str(output)
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0 if report["comparison"]["consistent"] or not args.require_agreement else 1
     if args.command == "read-package":
         result = read_package(
             Path(args.package),
