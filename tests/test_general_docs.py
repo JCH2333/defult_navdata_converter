@@ -14,6 +14,7 @@ from fenix_default_navdata.general_docs import (
     parse_enroute_navaids,
     parse_enroute_key_points,
 )
+from fenix_default_navdata.cli import main
 from fenix_default_navdata.model import SourceRef
 from fenix_default_navdata.source import audit_enroute_key_point_ocr_rerun
 
@@ -331,6 +332,46 @@ def test_audit_enroute_key_point_ocr_rerun_allows_explicit_page_subset(
         "canonical_only": 0,
         "rerun_only": 0,
         "differences_by_page": [],
+    }
+
+
+def test_cli_keypoint_ocr_audit_passes_partial_rerun_flag(monkeypatch) -> None:
+    received: dict[str, object] = {}
+
+    def fake_audit(
+        root: Path,
+        canonical_cache: Path,
+        rerun_cache: Path,
+        *,
+        allow_partial_rerun: bool = False,
+    ) -> dict[str, object]:
+        received.update(
+            root=root,
+            canonical_cache=canonical_cache,
+            rerun_cache=rerun_cache,
+            allow_partial_rerun=allow_partial_rerun,
+        )
+        return {"comparison": {"consistent": True}}
+
+    monkeypatch.setattr(
+        "fenix_default_navdata.cli.audit_enroute_key_point_ocr_rerun",
+        fake_audit,
+    )
+
+    exit_code = main([
+        "keypoint-ocr-audit",
+        "--source-root", "raw",
+        "--canonical-cache", "canonical",
+        "--rerun-cache", "rerun",
+        "--allow-partial-rerun",
+    ])
+
+    assert exit_code == 0
+    assert received == {
+        "root": Path("raw"),
+        "canonical_cache": Path("canonical"),
+        "rerun_cache": Path("rerun"),
+        "allow_partial_rerun": True,
     }
 
 
