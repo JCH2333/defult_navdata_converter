@@ -86,3 +86,22 @@ python -m fenix_default_navdata.cli iap-ocr-recheck `
   --require-agreement `
   --output diagnostics\iap-ocr-role-recheck-20260815.json
 ```
+
+## IAP OCR 三次共识门禁
+
+`iap-ocr-consensus` 接受至少三份不同的完整缓存，以第一份为基线逐份核对候选源图页、
+源 SHA-256、非空运行时标识、角色-航点配对及其渲染邻接关系。任一项不一致时，
+`--require-agreement` 返回非零。该命令只汇总可复查的 OCR 共识，始终输出
+`evidence_only=true` 和 `projection_allowed=false`，不会选择图页、修改候选包或解除 IAP 拒绝。
+
+```powershell
+python -m fenix_default_navdata.cli iap-ocr-consensus `
+  --source-root "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
+  --pdf-cache "$env:LOCALAPPDATA\default_navdata_converter\pdf-evidence-cache-2608r1-r35" `
+  --cache-roots `
+    "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\ocr-3x-deterministic-a-20260815" `
+    "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\ocr-3x-deterministic-b-20260815" `
+    "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\ocr-3x-deterministic-c-20260815" `
+  --require-agreement `
+  --output diagnostics\iap-ocr-role-consensus-20260815.json
+```

@@ -12,6 +12,10 @@ from .general_docs import (
 )
 from .iap_ocr import IAP_OCR_ELIGIBLE_STATUSES, build_iap_ocr_cache
 from .iap_ocr_audit import audit_iap_ocr_cache, write_iap_ocr_audit
+from .iap_ocr_consensus import (
+    audit_iap_ocr_role_consensus,
+    write_iap_ocr_role_consensus,
+)
 from .iap_ocr_recheck import audit_iap_ocr_role_recheck, write_iap_ocr_role_recheck
 from .ocr_cache import build_ocr_cache
 from .official_index import build_official_navaid_index
@@ -238,6 +242,31 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="角色证据或候选页不完全一致时返回非零，便于自动化门禁",
     )
+    iap_ocr_consensus = sub.add_parser(
+        "iap-ocr-consensus",
+        help="比较至少三份完整 IAP OCR 缓存，生成不可投影的共识审计",
+    )
+    iap_ocr_consensus.add_argument("--source-root", required=True, help="424 原始数据根目录")
+    iap_ocr_consensus.add_argument("--pdf-cache", help="现有的终端 PDF 解析缓存目录")
+    iap_ocr_consensus.add_argument(
+        "--cache-roots",
+        nargs="+",
+        required=True,
+        help="至少三份独立 IAP OCR 缓存目录",
+    )
+    iap_ocr_consensus.add_argument(
+        "--statuses",
+        nargs="+",
+        choices=IAP_OCR_ELIGIBLE_STATUSES,
+        default=list(IAP_OCR_ELIGIBLE_STATUSES),
+        help="要比较的 IAP 未决类别",
+    )
+    iap_ocr_consensus.add_argument("--output", help="可选的本地 JSON 审计输出路径")
+    iap_ocr_consensus.add_argument(
+        "--require-agreement",
+        action="store_true",
+        help="任一缓存与首份缓存不完全一致时返回非零，便于自动化门禁",
+    )
     ocr_audit = sub.add_parser(
         "ocr-audit",
         help="比较同一原始 PDF 的完整 OCR 缓存与局部重跑缓存，仅输出证据审计",
@@ -447,6 +476,19 @@ def main(argv: list[str] | None = None) -> int:
         if args.output:
             output = Path(args.output).expanduser().resolve()
             write_iap_ocr_role_recheck(output, report)
+            report["output"] = str(output)
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0 if report["comparison"]["consistent"] or not args.require_agreement else 1
+    if args.command == "iap-ocr-consensus":
+        report = audit_iap_ocr_role_consensus(
+            Path(args.source_root),
+            [Path(value) for value in args.cache_roots],
+            pdf_cache=_path(args.pdf_cache),
+            statuses=args.statuses,
+        )
+        if args.output:
+            output = Path(args.output).expanduser().resolve()
+            write_iap_ocr_role_consensus(output, report)
             report["output"] = str(output)
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0 if report["comparison"]["consistent"] or not args.require_agreement else 1
