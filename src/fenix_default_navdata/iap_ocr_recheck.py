@@ -16,6 +16,7 @@ class IapOcrRecheckError(ValueError):
 
 _CandidateKey = tuple[str, str, str, str, str]
 _RoleKey = tuple[_CandidateKey, int, str, str]
+_RuntimeProfiles = dict[_CandidateKey, str | None]
 
 
 def _text(value: object, field: str) -> str:
@@ -26,7 +27,7 @@ def _text(value: object, field: str) -> str:
 
 def _report_evidence(
     report: Mapping[str, object],
-) -> tuple[set[_CandidateKey], dict[_RoleKey, str]]:
+) -> tuple[set[_CandidateKey], dict[_RoleKey, str], _RuntimeProfiles]:
     if report.get("diagnostic") != "iap-ocr-evidence-audit-v2":
         raise IapOcrRecheckError("IAP OCR 重跑比较只接受 v2 审计报告")
     if report.get("evidence_only") is not True or report.get("projection_allowed") is not False:
@@ -37,6 +38,7 @@ def _report_evidence(
 
     candidates: set[_CandidateKey] = set()
     evidence: dict[_RoleKey, str] = {}
+    runtime_profiles: _RuntimeProfiles = {}
     for group in groups:
         if not isinstance(group, Mapping):
             raise IapOcrRecheckError("IAP OCR 审计分组格式无效")
@@ -59,6 +61,15 @@ def _report_evidence(
                 _text(candidate.get("source_sha256"), "源图页 SHA-256").lower(),
             )
             candidates.add(key)
+            profile_value = candidate.get("ocr_runtime_profile")
+            runtime_profile = (
+                profile_value.strip()
+                if isinstance(profile_value, str) and profile_value.strip()
+                else None
+            )
+            previous_profile = runtime_profiles.setdefault(key, runtime_profile)
+            if previous_profile != runtime_profile:
+                raise IapOcrRecheckError("同一 IAP OCR 候选图页混用了运行时标识")
             matches = candidate.get("ocr_role_matches")
             if not isinstance(matches, list):
                 raise IapOcrRecheckError("IAP OCR 审计缺少角色证据")
@@ -78,7 +89,7 @@ def _report_evidence(
                 if role_key in evidence:
                     raise IapOcrRecheckError("IAP OCR 审计包含重复角色证据")
                 evidence[role_key] = relation
-    return candidates, evidence
+    return candidates, evidence, runtime_profiles
 
 
 def _role_report_item(key: _RoleKey, relation: str) -> dict[str, object]:
@@ -117,8 +128,8 @@ def audit_iap_ocr_role_recheck(
         pdf_cache=pdf_cache,
         statuses=statuses,
     )
-    canonical_candidates, canonical_evidence = _report_evidence(canonical)
-    rerun_candidates, rerun_evidence = _report_evidence(rerun)
+    canonical_candidates, canonical_evidence, canonical_profiles = _report_evidence(canonical)
+    rerun_candidates, rerun_evidence, rerun_profiles = _report_evidence(rerun)
     canonical_keys = set(canonical_evidence)
     rerun_keys = set(rerun_evidence)
     agreed = canonical_keys & rerun_keys
@@ -128,9 +139,18 @@ def audit_iap_ocr_role_recheck(
         if canonical_evidence[key] != rerun_evidence[key]
     }
     candidate_sets_match = canonical_candidates == rerun_candidates
+    runtime_profiles_recorded = (
+        all(profile is not None for profile in canonical_profiles.values())
+        and all(profile is not None for profile in rerun_profiles.values())
+    )
+    runtime_profiles_match = (
+        runtime_profiles_recorded
+        and canonical_profiles == rerun_profiles
+    )
     union = canonical_keys | rerun_keys
     consistent = (
         candidate_sets_match
+        and runtime_profiles_match
         and not (canonical_keys - rerun_keys)
         and not (rerun_keys - canonical_keys)
         and not relation_changed
@@ -150,7 +170,23 @@ def audit_iap_ocr_role_recheck(
         "comparison": {
             "consistent": consistent,
             "candidate_sets_match": candidate_sets_match,
+            "runtime_profiles_recorded": runtime_profiles_recorded,
+            "runtime_profiles_match": runtime_profiles_match,
             "agreement_ratio": len(agreed) / len(union) if union else 1.0,
+        },
+        "runtime_profiles": {
+            "canonical": sorted(
+                {profile for profile in canonical_profiles.values() if profile is not None}
+            ),
+            "rerun": sorted(
+                {profile for profile in rerun_profiles.values() if profile is not None}
+            ),
+            "canonical_unrecorded": sum(
+                profile is None for profile in canonical_profiles.values()
+            ),
+            "rerun_unrecorded": sum(
+                profile is None for profile in rerun_profiles.values()
+            ),
         },
         "role_evidence": {
             "agreed": len(agreed),

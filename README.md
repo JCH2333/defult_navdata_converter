@@ -99,7 +99,7 @@ python -m fenix_default_navdata.gui
 
 `iap-ocr-audit` 逐项验证 IAP OCR 缓存的源相对路径、SHA-256、页数与页面 JSON，再报告 OCR 文本中能与主进近源腿精确匹配的标识，以及同一文本项、同一行或垂直相邻的明确角色标签。即使某一候选图页有至少两个标识的唯一命中或出现角色标签，报告仍会保持 `projection_allowed=false`；OCR 证据不能单独解除 IAP 拒绝。
 
-`iap-ocr-recheck` 比较两份完整、独立重跑的 IAP OCR 缓存，仅报告角色证据的交集和差异；`--require-agreement` 可作为自动化门禁。即使两份缓存完全一致，它也不会选择图页或解除 IAP 拒绝。
+`iap-ocr-recheck` 比较两份完整、独立重跑的 IAP OCR 缓存，仅报告角色证据的交集和差异；`--require-agreement` 会同时要求所有候选页记录了相同的非空 `runtime_profile`。即使两份缓存完全一致，它也不会选择图页或解除 IAP 拒绝。
 
 显式指定 SDK Package Tool：
 

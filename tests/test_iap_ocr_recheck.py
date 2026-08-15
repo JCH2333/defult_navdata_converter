@@ -4,7 +4,12 @@ from fenix_default_navdata.cli import main
 from fenix_default_navdata.iap_ocr_recheck import audit_iap_ocr_role_recheck
 
 
-def _report(*, relation: str = "same_row", extra: bool = False) -> dict[str, object]:
+def _report(
+    *,
+    relation: str = "same_row",
+    extra: bool = False,
+    runtime_profile: str | None = "test-runtime-profile",
+) -> dict[str, object]:
     matches = [{
         "page": 1,
         "ident": "FIX01",
@@ -32,6 +37,7 @@ def _report(*, relation: str = "same_row", extra: bool = False) -> dict[str, obj
                 "source_file": "Terminal/ZAAA/first.pdf",
                 "source_sha256": "a" * 64,
                 "cache_state": "complete",
+                "ocr_runtime_profile": runtime_profile,
                 "ocr_role_matches": matches,
             }],
         }],
@@ -52,6 +58,8 @@ def test_iap_ocr_recheck_requires_exact_role_evidence_agreement(monkeypatch) -> 
     assert report["comparison"] == {
         "consistent": True,
         "candidate_sets_match": True,
+        "runtime_profiles_recorded": True,
+        "runtime_profiles_match": True,
         "agreement_ratio": 1.0,
     }
     assert report["role_evidence"] == {
@@ -90,6 +98,29 @@ def test_iap_ocr_recheck_reports_unagreed_evidence_without_projection(monkeypatc
         "relation": "same_ocr_item",
     }]
     assert report["projection_allowed"] is False
+
+
+def test_iap_ocr_recheck_rejects_unrecorded_or_changed_runtime_profile(monkeypatch) -> None:
+    reports = [
+        _report(runtime_profile="deterministic-a"),
+        _report(runtime_profile="deterministic-b"),
+    ]
+    monkeypatch.setattr(
+        "fenix_default_navdata.iap_ocr_recheck.audit_iap_ocr_cache",
+        lambda *_args, **_kwargs: reports.pop(0),
+    )
+
+    report = audit_iap_ocr_role_recheck(Path("raw"), Path("canonical"), Path("rerun"))
+
+    assert report["comparison"]["consistent"] is False
+    assert report["comparison"]["runtime_profiles_recorded"] is True
+    assert report["comparison"]["runtime_profiles_match"] is False
+    assert report["runtime_profiles"] == {
+        "canonical": ["deterministic-a"],
+        "rerun": ["deterministic-b"],
+        "canonical_unrecorded": 0,
+        "rerun_unrecorded": 0,
+    }
 
 
 def test_cli_iap_ocr_recheck_passes_source_only_options(monkeypatch) -> None:

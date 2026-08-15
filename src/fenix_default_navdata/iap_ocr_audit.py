@@ -33,35 +33,43 @@ def _read_cached_pages(
     *,
     source_file: str,
     source_sha256: str,
-) -> tuple[tuple[tuple[int, str], ...] | None, str]:
+) -> tuple[tuple[tuple[int, str], ...] | None, str, str | None]:
     manifest_path = cache / "manifest.json"
     if not manifest_path.is_file():
-        return None, "missing_cache"
+        return None, "missing_cache", None
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
     except json.JSONDecodeError:
-        return None, "invalid_manifest"
+        return None, "invalid_manifest", None
     if not isinstance(manifest, dict):
-        return None, "invalid_manifest"
+        return None, "invalid_manifest", None
     if (
         manifest.get("source_file") != source_file
         or manifest.get("source_sha256") != source_sha256
     ):
-        return None, "source_mismatch"
+        return None, "source_mismatch", None
     page_count = manifest.get("page_count")
     if not isinstance(page_count, int) or page_count < 1:
-        return None, "invalid_manifest"
+        return None, "invalid_manifest", None
+    recognition = manifest.get("recognition")
+    runtime_profile = (
+        recognition.get("runtime_profile").strip()
+        if isinstance(recognition, Mapping)
+        and isinstance(recognition.get("runtime_profile"), str)
+        and recognition["runtime_profile"].strip()
+        else None
+    )
 
     pages: list[tuple[int, str]] = []
     for page_number in range(1, page_count + 1):
         payload = _read_page_payload(cache / f"page-{page_number:04d}.json")
         if payload is None:
-            return None, "incomplete_cache"
+            return None, "incomplete_cache", runtime_profile
         markdown = payload["data"]["documents"][0]["markdown"]
         if not isinstance(markdown, str):
-            return None, "invalid_page"
+            return None, "invalid_page", runtime_profile
         pages.append((page_number, markdown))
-    return tuple(pages), "complete"
+    return tuple(pages), "complete", runtime_profile
 
 
 def _matching_identifiers(markdown: str, idents: set[str]) -> tuple[str, ...]:
@@ -145,7 +153,7 @@ def audit_iap_ocr_cache(
             source_pdf, source_file = _source_pdf(root, chart.source.file)
             source_sha256 = _source_sha256(source_pdf, chart.source.sha256)
             cache = _cache_path(cache_root, source_file, source_sha256)
-            pages, cache_state = _read_cached_pages(
+            pages, cache_state, runtime_profile = _read_cached_pages(
                 cache,
                 source_file=source_file,
                 source_sha256=source_sha256,
@@ -157,6 +165,7 @@ def audit_iap_ocr_cache(
                 "source_sha256": source_sha256,
                 "cache": str(cache),
                 "cache_state": cache_state,
+                "ocr_runtime_profile": runtime_profile,
                 "ocr_identifier_matches": list(
                     _matching_identifiers(markdown, leg_idents)
                     if markdown is not None

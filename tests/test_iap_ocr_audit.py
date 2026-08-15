@@ -25,6 +25,7 @@ def _write_cache(
     cache_root: Path,
     source: Path,
     markdown: str,
+    runtime_profile: str = "test-runtime-profile",
 ) -> None:
     source_file = source.relative_to(root).as_posix()
     source_sha256 = hashlib.sha256(source.read_bytes()).hexdigest()
@@ -35,6 +36,9 @@ def _write_cache(
         "source_file": source_file,
         "source_sha256": source_sha256,
         "page_count": 1,
+        "recognition": {
+            "runtime_profile": runtime_profile,
+        },
     }), encoding="utf-8")
     (cache / "page-0001.json").write_text(
         json.dumps(_payload(markdown)),
@@ -139,6 +143,9 @@ def test_iap_ocr_audit_reports_unique_identifier_evidence_without_projection(
         "role": "IAF",
         "relation": "vertical_stack",
     }]
+    assert report["groups"][0]["candidates"][0]["ocr_runtime_profile"] == (
+        "test-runtime-profile"
+    )
 
 
 def test_cli_iap_ocr_audit_passes_source_and_cache_options(monkeypatch) -> None:
