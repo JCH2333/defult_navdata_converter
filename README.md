@@ -95,7 +95,7 @@ python -m fenix_default_navdata.gui
 
 `iap-ocr-cache` 会从现有 IAP 覆盖审计中自动筛出仅可能受图页识别影响的 `ambiguous_chart` 与 `no_matching_chart`，把对应的原始仪表进近 PDF 按相对路径和源 SHA-256 缓存到本机。它不会处理“没有唯一数据库主进近段”的分组，也不会因识别完成就解除任何 IAP 拒绝；必须另行新增可验证的图页解析规则和回归测试。
 
-`iap-ocr-audit` 逐项验证 IAP OCR 缓存的源相对路径、SHA-256、页数与页面 JSON，再只报告 OCR 文本中能与主进近源腿精确匹配的标识。即使某一候选图页有至少两个标识的唯一命中，报告也会标记为 `unique_identifier_only` 并保持 `projection_allowed=false`；OCR 证据不能单独解除 IAP 拒绝。
+`iap-ocr-audit` 逐项验证 IAP OCR 缓存的源相对路径、SHA-256、页数与页面 JSON，再报告 OCR 文本中能与主进近源腿精确匹配的标识，以及同一文本项、同一行或垂直相邻的明确角色标签。即使某一候选图页有至少两个标识的唯一命中或出现角色标签，报告仍会保持 `projection_allowed=false`；OCR 证据不能单独解除 IAP 拒绝。
 
 显式指定 SDK Package Tool：
 

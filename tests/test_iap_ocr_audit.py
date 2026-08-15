@@ -102,7 +102,7 @@ def test_iap_ocr_audit_reports_unique_identifier_evidence_without_projection(
             }],
         },
     )
-    _write_cache(root, cache_root, first, "FIX01")
+    _write_cache(root, cache_root, first, "IAF[[10, 10, 30, 20]]\nFIX01[[12, 24, 38, 34]]")
     _write_cache(root, cache_root, second, "FIX01 FIX02 FIX03")
     monkeypatch.setattr(
         "fenix_default_navdata.iap_ocr_audit.load_naip",
@@ -122,11 +122,23 @@ def test_iap_ocr_audit_reports_unique_identifier_evidence_without_projection(
         "evidence_status_counts": {"unique_identifier_only": 1},
         "cache_state_counts": {"complete": 2},
     }
+    assert report["ocr_role_evidence"] == {
+        "matches": 1,
+        "groups_with_matches": 1,
+        "candidates_with_matches": 1,
+        "role_counts": {"IAF": 1},
+    }
     assert report["groups"][0]["candidates"][1]["ocr_identifier_matches"] == [
         "FIX01",
         "FIX02",
         "FIX03",
     ]
+    assert report["groups"][0]["candidates"][0]["ocr_role_matches"] == [{
+        "page": 1,
+        "ident": "FIX01",
+        "role": "IAF",
+        "relation": "vertical_stack",
+    }]
 
 
 def test_cli_iap_ocr_audit_passes_source_and_cache_options(monkeypatch) -> None:

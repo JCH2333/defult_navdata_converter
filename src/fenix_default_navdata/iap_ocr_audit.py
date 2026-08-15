@@ -15,6 +15,7 @@ from .iap_ocr import (
     _source_pdf,
     _source_sha256,
 )
+from .iap_ocr_roles import extract_iap_ocr_role_evidence
 from .ocr_cache import _read_page_payload
 from .source import load_naip
 
@@ -27,12 +28,12 @@ def _cache_path(cache_root: Path, source_file: str, source_sha256: str) -> Path:
     return cache_root / Path(source_file).with_suffix("") / source_sha256[:16]
 
 
-def _read_cached_markdown(
+def _read_cached_pages(
     cache: Path,
     *,
     source_file: str,
     source_sha256: str,
-) -> tuple[str | None, str]:
+) -> tuple[tuple[tuple[int, str], ...] | None, str]:
     manifest_path = cache / "manifest.json"
     if not manifest_path.is_file():
         return None, "missing_cache"
@@ -51,7 +52,7 @@ def _read_cached_markdown(
     if not isinstance(page_count, int) or page_count < 1:
         return None, "invalid_manifest"
 
-    pages: list[str] = []
+    pages: list[tuple[int, str]] = []
     for page_number in range(1, page_count + 1):
         payload = _read_page_payload(cache / f"page-{page_number:04d}.json")
         if payload is None:
@@ -59,8 +60,8 @@ def _read_cached_markdown(
         markdown = payload["data"]["documents"][0]["markdown"]
         if not isinstance(markdown, str):
             return None, "invalid_page"
-        pages.append(markdown)
-    return "\n".join(pages), "complete"
+        pages.append((page_number, markdown))
+    return tuple(pages), "complete"
 
 
 def _matching_identifiers(markdown: str, idents: set[str]) -> tuple[str, ...]:
@@ -112,6 +113,9 @@ def audit_iap_ocr_cache(
 
     groups: list[dict[str, object]] = []
     cache_states: Counter[str] = Counter()
+    ocr_role_counts: Counter[str] = Counter()
+    role_evidence_groups = 0
+    role_evidence_candidates = 0
     for unresolved_group in unresolved:
         if not isinstance(unresolved_group, Mapping):
             continue
@@ -141,12 +145,13 @@ def audit_iap_ocr_cache(
             source_pdf, source_file = _source_pdf(root, chart.source.file)
             source_sha256 = _source_sha256(source_pdf, chart.source.sha256)
             cache = _cache_path(cache_root, source_file, source_sha256)
-            markdown, cache_state = _read_cached_markdown(
+            pages, cache_state = _read_cached_pages(
                 cache,
                 source_file=source_file,
                 source_sha256=source_sha256,
             )
             cache_states[cache_state] += 1
+            markdown = "\n".join(markdown for _, markdown in pages) if pages is not None else None
             candidates.append({
                 "source_file": source_file,
                 "source_sha256": source_sha256,
@@ -157,6 +162,10 @@ def audit_iap_ocr_cache(
                     if markdown is not None
                     else ()
                 ),
+                "ocr_role_matches": [
+                    evidence.to_report()
+                    for evidence in extract_iap_ocr_role_evidence(pages, leg_idents)
+                ] if pages is not None else [],
             })
 
         counts = [
@@ -177,6 +186,18 @@ def audit_iap_ocr_cache(
             evidence_status = "unique_identifier_only"
         else:
             evidence_status = "not_discriminating"
+        role_matches = [
+            match
+            for candidate in candidates
+            for match in candidate["ocr_role_matches"]
+        ]
+        if role_matches:
+            role_evidence_groups += 1
+            role_evidence_candidates += sum(
+                bool(candidate["ocr_role_matches"])
+                for candidate in candidates
+            )
+            ocr_role_counts.update(str(match["role"]) for match in role_matches)
         groups.append({
             "airport": airport,
             "label": label,
@@ -192,7 +213,7 @@ def audit_iap_ocr_cache(
         for group in groups
     )
     return {
-        "diagnostic": "iap-ocr-evidence-audit-v1",
+        "diagnostic": "iap-ocr-evidence-audit-v2",
         "evidence_only": True,
         "projection_allowed": False,
         "source_root": str(root),
@@ -202,6 +223,12 @@ def audit_iap_ocr_cache(
             "groups": len(groups),
             "evidence_status_counts": dict(sorted(evidence_statuses.items())),
             "cache_state_counts": dict(sorted(cache_states.items())),
+        },
+        "ocr_role_evidence": {
+            "matches": sum(ocr_role_counts.values()),
+            "groups_with_matches": role_evidence_groups,
+            "candidates_with_matches": role_evidence_candidates,
+            "role_counts": dict(sorted(ocr_role_counts.items())),
         },
         "groups": groups,
     }
