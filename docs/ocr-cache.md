@@ -53,3 +53,20 @@ SHA-256、页数与页面 JSON。它只从 OCR 文本中匹配已经存在于同
 该命令永久输出 `evidence_only=true` 与 `projection_allowed=false`。即使 OCR 中出现
 两个以上主段标识且比其他候选更多，也不能直接选择图页、改变 BGL 投影或解除 IAP
 拒绝；任何可投影规则仍须由可复现的源侧结构化图页角色与独立回归测试证明。
+
+## IAP OCR 独立重跑比较
+
+`iap-ocr-recheck` 对同一 424 原始数据重新审计两份完整 IAP OCR 缓存。它要求每个候选
+图页的源文件、SHA-256 与物理页均可验证，并比较“候选图页、页码、当前数据库腿、角色”
+的交集、各自独有项和同一配对的相邻关系变化。`--require-agreement` 仅作为自动化门禁：
+任何差异都会返回非零，且即使完全一致仍保持不可投影。
+
+```powershell
+python -m fenix_default_navdata.cli iap-ocr-recheck `
+  --source-root "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
+  --pdf-cache "$env:LOCALAPPDATA\default_navdata_converter\pdf-evidence-cache-2608r1-r34" `
+  --canonical-cache "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\ocr-3x-rerun-20260815" `
+  --rerun-cache "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\ocr-3x-role-recheck-20260815" `
+  --require-agreement `
+  --output diagnostics\iap-ocr-role-recheck-20260815.json
+```

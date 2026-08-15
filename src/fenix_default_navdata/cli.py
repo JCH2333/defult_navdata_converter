@@ -12,6 +12,7 @@ from .general_docs import (
 )
 from .iap_ocr import IAP_OCR_ELIGIBLE_STATUSES, build_iap_ocr_cache
 from .iap_ocr_audit import audit_iap_ocr_cache, write_iap_ocr_audit
+from .iap_ocr_recheck import audit_iap_ocr_role_recheck, write_iap_ocr_role_recheck
 from .ocr_cache import build_ocr_cache
 from .official_index import build_official_navaid_index
 from .package_reader import DEFAULT_READER_TIMEOUT_SECONDS, read_package
@@ -206,6 +207,27 @@ def build_parser() -> argparse.ArgumentParser:
         help="要审计的 IAP 未决类别",
     )
     iap_ocr_audit.add_argument("--output", help="可选的本地 JSON 审计输出路径")
+    iap_ocr_recheck = sub.add_parser(
+        "iap-ocr-recheck",
+        help="比较同一 424 图页的两份完整 IAP OCR 角色证据缓存，不改变图页选择",
+    )
+    iap_ocr_recheck.add_argument("--source-root", required=True, help="424 原始数据根目录")
+    iap_ocr_recheck.add_argument("--pdf-cache", help="现有的终端 PDF 解析缓存目录")
+    iap_ocr_recheck.add_argument("--canonical-cache", required=True, help="已审计的完整 IAP OCR 缓存目录")
+    iap_ocr_recheck.add_argument("--rerun-cache", required=True, help="独立重跑的完整 IAP OCR 缓存目录")
+    iap_ocr_recheck.add_argument(
+        "--statuses",
+        nargs="+",
+        choices=IAP_OCR_ELIGIBLE_STATUSES,
+        default=list(IAP_OCR_ELIGIBLE_STATUSES),
+        help="要比较的 IAP 未决类别",
+    )
+    iap_ocr_recheck.add_argument("--output", help="可选的本地 JSON 审计输出路径")
+    iap_ocr_recheck.add_argument(
+        "--require-agreement",
+        action="store_true",
+        help="角色证据或候选页不完全一致时返回非零，便于自动化门禁",
+    )
     ocr_audit = sub.add_parser(
         "ocr-audit",
         help="比较同一原始 PDF 的完整 OCR 缓存与局部重跑缓存，仅输出证据审计",
@@ -402,6 +424,20 @@ def main(argv: list[str] | None = None) -> int:
             write_iap_ocr_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0
+    if args.command == "iap-ocr-recheck":
+        report = audit_iap_ocr_role_recheck(
+            Path(args.source_root),
+            Path(args.canonical_cache),
+            Path(args.rerun_cache),
+            pdf_cache=_path(args.pdf_cache),
+            statuses=args.statuses,
+        )
+        if args.output:
+            output = Path(args.output).expanduser().resolve()
+            write_iap_ocr_role_recheck(output, report)
+            report["output"] = str(output)
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0 if report["comparison"]["consistent"] or not args.require_agreement else 1
     if args.command == "ocr-audit":
         report = audit_enroute_navaid_ocr_rerun(
             Path(args.source_root),
