@@ -103,6 +103,10 @@ python -m fenix_default_navdata.gui
 
 `iap-ocr-recheck` 比较两份完整、独立重跑的 IAP OCR 缓存，仅报告角色证据的交集和差异；`--require-agreement` 会同时要求所有候选页记录且匹配完整识别设置：命令、后端、模式、图像预处理、渲染比例与非空 `runtime_profile`。即使两份缓存完全一致，它也不会选择图页或解除 IAP 拒绝。`iap-ocr-consensus` 将这一门禁扩展为至少三份缓存，逐份校验候选页、识别设置、角色-航点对和相邻关系；其输出同样不可投影。
 
+2608R1 的严格共识已使用 A/B/D 三份独立缓存完成。历史 C 的 OCR 命令记录形式不同，
+即使角色证据相同也不能混入共识；当引擎默认等待不足时，使用 `--engine-timeout` 配合
+更长的外层 `--timeout` 断点续跑，并保留执行参数供审计。
+
 显式指定 SDK Package Tool：
 
 ```powershell

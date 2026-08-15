@@ -106,7 +106,14 @@ python -m fenix_default_navdata.cli iap-ocr-consensus `
   --cache-roots `
     "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\ocr-3x-deterministic-a-20260815" `
     "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\ocr-3x-deterministic-b-20260815" `
-    "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\ocr-3x-deterministic-c-20260815" `
+    "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\ocr-3x-deterministic-d-20260815" `
   --require-agreement `
-  --output diagnostics\iap-ocr-role-consensus-20260815.json
+  --output diagnostics\iap-ocr-role-consensus-a-b-d-strict-20260815.json
 ```
+
+2608R1 的 A/B/D 三份独立缓存通过了严格共识：22 个分组、50 个候选页和 17 条
+角色-航点证据及其相邻关系完全一致。历史 C 缓存虽然角色证据相同，但其识别设置将
+命令记录为 `E:\python\3.12\Scripts\ocr-skill.exe`，而 A/B 使用 `ocr-skill`，
+因此被完整识别设置门禁排除。D 在 `ZWHJ-5B` 页遇到本地引擎默认 300 秒内部等待后，
+以 `--engine-timeout 900 --timeout 960` 断点完成；内部等待参数会写入缓存报告，但
+不属于模型、模式或图像预处理的替代证明。
