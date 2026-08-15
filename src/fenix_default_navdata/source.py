@@ -20,6 +20,7 @@ from .general_docs import (
     GeneralDocumentCacheError,
     load_enroute_key_point_evidence,
     load_enroute_navaid_evidence,
+    load_selected_enroute_key_point_evidence,
 )
 from .model import CN_PREFIXES, Airport, AirwayLeg, Holding, NavModel, Navaid, ProcedureSegment, RejectedProcedure, RejectedRecord, Runway, SourceRef, TerminalWaypoint, Waypoint, is_china_icao
 from .pdf_charts import (
@@ -983,8 +984,10 @@ def audit_enroute_key_point_ocr_rerun(
     root: Path,
     canonical_cache: Path,
     rerun_cache: Path,
+    *,
+    allow_partial_rerun: bool = False,
 ) -> dict[str, object]:
-    """Compare complete 4.4 OCR caches without promoting either cache."""
+    """Compare full or explicitly partial 4.4 OCR rerun caches."""
     root = root.expanduser().resolve()
     canonical_cache = _validate_pdf_cache(root, canonical_cache)
     rerun_cache = _validate_pdf_cache(root, rerun_cache)
@@ -993,16 +996,30 @@ def audit_enroute_key_point_ocr_rerun(
         canonical_cache.parent,
         cache_directory=canonical_cache.name,
     )
-    rerun, rerun_report = load_enroute_key_point_evidence(
-        root,
-        rerun_cache.parent,
-        cache_directory=rerun_cache.name,
-    )
+    if allow_partial_rerun:
+        rerun, rerun_report = load_selected_enroute_key_point_evidence(
+            root,
+            rerun_cache,
+            require_complete=False,
+        )
+    else:
+        rerun, rerun_report = load_enroute_key_point_evidence(
+            root,
+            rerun_cache.parent,
+            cache_directory=rerun_cache.name,
+        )
     if canonical_report["source_sha256"] != rerun_report["source_sha256"]:
         raise GeneralDocumentCacheError("OCR rerun cache source PDF SHA-256 does not match")
     if canonical_report["pages"] != rerun_report["pages"]:
         raise GeneralDocumentCacheError("OCR rerun cache page count does not match")
 
+    selected_pages = tuple(rerun_report.get(
+        "selected_pages",
+        range(1, int(canonical_report["pages"]) + 1),
+    ))
+    canonical = tuple(
+        item for item in canonical if item.source.page in selected_pages
+    )
     canonical_keys = {_key_point_ocr_identity(item) for item in canonical}
     rerun_keys = {_key_point_ocr_identity(item) for item in rerun}
     common = canonical_keys & rerun_keys
@@ -1056,6 +1073,10 @@ def audit_enroute_key_point_ocr_rerun(
                 "canonical cache or enter a candidate build without a separate "
                 "source-backed acceptance decision"
             ),
+        },
+        "scope": {
+            "rerun_complete": len(selected_pages) == int(canonical_report["pages"]),
+            "selected_pages": list(selected_pages),
         },
         "records": {
             "agreed": len(common),

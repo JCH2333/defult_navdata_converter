@@ -161,6 +161,11 @@ def build_parser() -> argparse.ArgumentParser:
     keypoint_ocr_audit.add_argument("--rerun-cache", required=True, help="同源完整 OCR 重跑缓存目录")
     keypoint_ocr_audit.add_argument("--output", help="可选的本地审计 JSON 输出路径")
     keypoint_ocr_audit.add_argument(
+        "--allow-partial-rerun",
+        action="store_true",
+        help="仅按重跑缓存实际存在的物理页与主缓存比较；局部缓存始终不能参与构建",
+    )
+    keypoint_ocr_audit.add_argument(
         "--require-agreement",
         action="store_true",
         help="重跑记录与主缓存不完全一致时返回非零，便于自动化门禁",
@@ -302,6 +307,7 @@ def main(argv: list[str] | None = None) -> int:
             Path(args.source_root),
             Path(args.canonical_cache),
             Path(args.rerun_cache),
+            allow_partial_rerun=args.allow_partial_rerun,
         )
         if args.output:
             output = Path(args.output).expanduser().resolve()

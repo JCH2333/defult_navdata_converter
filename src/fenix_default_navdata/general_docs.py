@@ -612,6 +612,20 @@ def load_enroute_key_point_evidence(
         document=ENROUTE_KEY_POINT_DOCUMENT,
         cache_directory=cache_directory,
     )
+    records = _parse_enroute_key_point_pages(pages, source_hash)
+    return records, {
+        "available": True,
+        "document": ENROUTE_KEY_POINT_DOCUMENT,
+        "source_sha256": source_hash,
+        "pages": report["pages"],
+        "parsed_records": len(records),
+    }
+
+
+def _parse_enroute_key_point_pages(
+    pages: tuple[tuple[int, str], ...],
+    source_hash: str,
+) -> tuple[EnrouteKeyPointEvidence, ...]:
     records: list[EnrouteKeyPointEvidence] = []
     for page_number, markdown in pages:
         records.extend(
@@ -624,12 +638,29 @@ def load_enroute_key_point_evidence(
                 ),
             )
         )
+    return tuple(records)
 
-    return tuple(records), {
+
+def load_selected_enroute_key_point_evidence(
+    root: Path,
+    cache: Path,
+    *,
+    require_complete: bool,
+) -> tuple[tuple[EnrouteKeyPointEvidence, ...], dict[str, object]]:
+    """Load one verified 4.4 OCR cache, optionally as a deliberate page subset."""
+    pages, source_hash, report = _load_selected_document_pages(
+        root,
+        cache,
+        document=ENROUTE_KEY_POINT_DOCUMENT,
+        require_complete=require_complete,
+    )
+    records = _parse_enroute_key_point_pages(pages, source_hash)
+    return records, {
         "available": True,
         "document": ENROUTE_KEY_POINT_DOCUMENT,
         "source_sha256": source_hash,
-        "pages": report["pages"],
+        "pages": report["page_count"],
+        "selected_pages": report["selected_pages"],
         "parsed_records": len(records),
     }
 

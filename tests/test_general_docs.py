@@ -35,6 +35,7 @@ def _cache(
     pages: dict[int, str],
     *,
     directory: str = "enr-4.4",
+    page_count: int | None = None,
 ) -> Path:
     source = root / ENROUTE_KEY_POINT_DOCUMENT
     source.parent.mkdir(parents=True, exist_ok=True)
@@ -45,7 +46,7 @@ def _cache(
         "schema_version": 1,
         "source_file": ENROUTE_KEY_POINT_DOCUMENT,
         "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
-        "page_count": len(pages),
+        "page_count": page_count or len(pages),
     }
     (cache / "manifest.json").write_text(
         json.dumps(manifest),
@@ -292,6 +293,45 @@ def test_audit_enroute_key_point_ocr_rerun_reports_cache_agreement(
     }
     assert report["source_fir_region_resolution"]["polygons_loaded"] == 0
     assert report["source_fir_region_resolution"]["rerun"] == {"outside": 1}
+
+
+def test_audit_enroute_key_point_ocr_rerun_allows_explicit_page_subset(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "raw"
+    cache_root = _cache(
+        root,
+        {
+            1: "ABTUDN27\u00b057\u203253\u2033E112\u00b008\u203213\u2033",
+            2: "ABVILN29\u00b038\u203230\u2033E119\u00b018\u203254\u2033",
+        },
+        page_count=2,
+    )
+    _cache(
+        root,
+        {1: "ABTUDN27\u00b057\u203253\u2033E112\u00b008\u203213\u2033"},
+        directory="enr-4.4-rerun",
+        page_count=2,
+    )
+
+    report = audit_enroute_key_point_ocr_rerun(
+        root,
+        cache_root / "enr-4.4",
+        cache_root / "enr-4.4-rerun",
+        allow_partial_rerun=True,
+    )
+
+    assert report["comparison"]["consistent"] is True
+    assert report["scope"] == {
+        "rerun_complete": False,
+        "selected_pages": [1],
+    }
+    assert report["records"] == {
+        "agreed": 1,
+        "canonical_only": 0,
+        "rerun_only": 0,
+        "differences_by_page": [],
+    }
 
 
 def test_load_enroute_navaid_evidence_requires_complete_hashed_cache(
