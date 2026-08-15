@@ -11,6 +11,7 @@ from .general_docs import (
     write_enroute_navaid_ocr_rerun_audit,
 )
 from .iap_ocr import IAP_OCR_ELIGIBLE_STATUSES, build_iap_ocr_cache
+from .iap_ocr_audit import audit_iap_ocr_cache, write_iap_ocr_audit
 from .ocr_cache import build_ocr_cache
 from .official_index import build_official_navaid_index
 from .package_reader import DEFAULT_READER_TIMEOUT_SECONDS, read_package
@@ -190,6 +191,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="单页 OCR 失败后的重试次数（默认 2）",
     )
     iap_ocr_cache.add_argument("--dry-run", action="store_true", help="只输出计划，不调用 OCR")
+    iap_ocr_audit = sub.add_parser(
+        "iap-ocr-audit",
+        help="只读审计 IAP OCR 缓存的源 SHA-256、航点命中与不可投影证据",
+    )
+    iap_ocr_audit.add_argument("--source-root", required=True, help="424 原始数据根目录")
+    iap_ocr_audit.add_argument("--pdf-cache", help="现有的终端 PDF 解析缓存目录")
+    iap_ocr_audit.add_argument("--cache-root", required=True, help="IAP OCR 本地缓存根目录")
+    iap_ocr_audit.add_argument(
+        "--statuses",
+        nargs="+",
+        choices=IAP_OCR_ELIGIBLE_STATUSES,
+        default=list(IAP_OCR_ELIGIBLE_STATUSES),
+        help="要审计的 IAP 未决类别",
+    )
+    iap_ocr_audit.add_argument("--output", help="可选的本地 JSON 审计输出路径")
     ocr_audit = sub.add_parser(
         "ocr-audit",
         help="比较同一原始 PDF 的完整 OCR 缓存与局部重跑缓存，仅输出证据审计",
@@ -371,6 +387,19 @@ def main(argv: list[str] | None = None) -> int:
             retries=args.retries,
             dry_run=args.dry_run,
         )
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0
+    if args.command == "iap-ocr-audit":
+        report = audit_iap_ocr_cache(
+            Path(args.source_root),
+            Path(args.cache_root),
+            pdf_cache=_path(args.pdf_cache),
+            statuses=args.statuses,
+        )
+        if args.output:
+            output = Path(args.output).expanduser().resolve()
+            report["output"] = str(output)
+            write_iap_ocr_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0
     if args.command == "ocr-audit":

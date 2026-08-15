@@ -43,3 +43,13 @@ python -m fenix_default_navdata.cli ocr-cache `
 服务以 3 倍渲染处理图页时如出现 `Context size has been exceeded`，应将 llama-server
 上下文提升至 `8192` 后重试既有缓存页。该缓存只用于后续可验证的图页解析规则，不是
 候选导航数据来源。
+
+## IAP OCR 证据审计
+
+`iap-ocr-audit` 读取已完整的 IAP OCR 缓存，对每个源图页再次核对相对路径、源
+SHA-256、页数与页面 JSON。它只从 OCR 文本中匹配已经存在于同一 424 主进近段的完整
+标识，并输出 `unique_identifier_only` 或 `not_discriminating` 等证据状态。
+
+该命令永久输出 `evidence_only=true` 与 `projection_allowed=false`。即使 OCR 中出现
+两个以上主段标识且比其他候选更多，也不能直接选择图页、改变 BGL 投影或解除 IAP
+拒绝；任何可投影规则仍须由可复现的源侧结构化图页角色与独立回归测试证明。

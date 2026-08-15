@@ -77,6 +77,11 @@ python -m fenix_default_navdata.cli iap-ocr-cache `
   --cache-root "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\markdown-3x" `
   --statuses ambiguous_chart no_matching_chart `
   --dry-run
+python -m fenix_default_navdata.cli iap-ocr-audit `
+  --source-root "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
+  --pdf-cache "$env:LOCALAPPDATA\default_navdata_converter\pdf-evidence-cache-2608r1-r34" `
+  --cache-root "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\markdown-3x" `
+  --output diagnostics\iap-ocr-evidence-audit.json
 python -m fenix_default_navdata.gui
 ```
 
@@ -89,6 +94,8 @@ python -m fenix_default_navdata.gui
 `ocr-source-audit` 只审计 OCR 证据是否能按类型、频率和坐标唯一回链到直接 424 导航台；它会报告完全匹配、唯一 OCR 标识纠正和未决页码，但不会新增、修改或投影导航台。
 
 `iap-ocr-cache` 会从现有 IAP 覆盖审计中自动筛出仅可能受图页识别影响的 `ambiguous_chart` 与 `no_matching_chart`，把对应的原始仪表进近 PDF 按相对路径和源 SHA-256 缓存到本机。它不会处理“没有唯一数据库主进近段”的分组，也不会因识别完成就解除任何 IAP 拒绝；必须另行新增可验证的图页解析规则和回归测试。
+
+`iap-ocr-audit` 逐项验证 IAP OCR 缓存的源相对路径、SHA-256、页数与页面 JSON，再只报告 OCR 文本中能与主进近源腿精确匹配的标识。即使某一候选图页有至少两个标识的唯一命中，报告也会标记为 `unique_identifier_only` 并保持 `projection_allowed=false`；OCR 证据不能单独解除 IAP 拒绝。
 
 显式指定 SDK Package Tool：
 
