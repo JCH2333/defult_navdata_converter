@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .convert import convert
 from .deployment import deploy, restore
+from .ocr_cache import build_ocr_cache
 from .official_index import build_official_navaid_index
 from .package_reader import DEFAULT_READER_TIMEOUT_SECONDS, read_package
 from .paths import detect_paths
@@ -90,6 +91,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="完整、只读且已脱敏的 semantic-diff JSON",
     )
     source_gap.add_argument("--output", help="可选的本地来源缺口审计 JSON 输出路径")
+    ocr_cache = sub.add_parser(
+        "ocr-cache",
+        help="将原始 PDF 逐物理页 OCR 为带 SHA-256 清单、可断点续跑的本地缓存",
+    )
+    ocr_cache.add_argument("--pdf", required=True, help="424 原始 PDF 路径")
+    ocr_cache.add_argument("--cache", required=True, help="PDF 对应的本地 OCR 缓存目录")
+    ocr_cache.add_argument("--source-root", required=True, help="424 原始数据根目录")
+    ocr_cache.add_argument("--ocr-command", default="ocr-skill", help="本地 OCR CLI 命令")
+    ocr_cache.add_argument(
+        "--backend",
+        choices=("llamacpp", "deepseek"),
+        default="llamacpp",
+        help="OCR 后端；默认使用本机 llama.cpp 服务",
+    )
+    ocr_cache.add_argument(
+        "--mode",
+        choices=("markdown", "free", "figure", "ocr"),
+        default="ocr",
+        help="传给 OCR 引擎的识别模式",
+    )
+    ocr_cache.add_argument("--timeout", type=int, default=180, help="每页 OCR 超时秒数")
+    ocr_cache.add_argument("--render-scale", type=float, default=2.0, help="PDF 页面渲染比例")
+    ocr_cache.add_argument("--first-page", type=int, help="可选的起始物理页")
+    ocr_cache.add_argument("--last-page", type=int, help="可选的结束物理页")
+    ocr_cache.add_argument("--force", action="store_true", help="重新识别已存在的有效页面")
     package_reader = sub.add_parser(
         "read-package",
         help="在纯 ASCII 暂存区镜像完整覆盖包并生成 Navdatareader SQLite",
@@ -195,6 +221,22 @@ def main(argv: list[str] | None = None) -> int:
             report["output"] = str(output)
             write_source_gap_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "ocr-cache":
+        report = build_ocr_cache(
+            Path(args.pdf),
+            Path(args.cache),
+            source_root=Path(args.source_root),
+            command=args.ocr_command,
+            backend=args.backend,
+            mode=args.mode,
+            timeout_seconds=args.timeout,
+            render_scale=args.render_scale,
+            first_page=args.first_page,
+            last_page=args.last_page,
+            force=args.force,
+        )
+        print(json.dumps(report.to_report(), ensure_ascii=False, indent=2))
         return 0
     if args.command == "read-package":
         result = read_package(
