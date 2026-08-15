@@ -217,6 +217,27 @@ def test_load_enroute_navaid_evidence_requires_complete_hashed_cache(
     assert report["parsed_records"] == 1
 
 
+def test_load_enroute_navaid_evidence_accepts_an_explicit_cache_directory(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "raw"
+    cache = _navaid_cache(
+        root,
+        "enr-4.1-navaids-rerun",
+        {1: _navaid_markdown("KQS")},
+        page_count=1,
+    )
+
+    records, report = load_enroute_navaid_evidence(
+        root,
+        cache.parent,
+        cache_directory=cache.name,
+    )
+
+    assert [(item.ident, item.source.page) for item in records] == [("KQS", 1)]
+    assert report["parsed_records"] == 1
+
+
 def test_audit_enroute_navaid_ocr_rerun_compares_partial_same_source_cache(
     tmp_path: Path,
 ) -> None:

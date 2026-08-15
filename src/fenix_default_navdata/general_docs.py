@@ -580,13 +580,15 @@ def load_enroute_key_point_evidence(
 def load_enroute_navaid_evidence(
     root: Path,
     cache_root: Path,
+    *,
+    cache_directory: str = ENROUTE_NAVAID_CACHE_DIRECTORY,
 ) -> tuple[tuple[EnrouteNavaidEvidence, ...], dict[str, object]]:
     """Load complete 4.1 OCR evidence without inventing missing target fields."""
     pages, _, source_hash, report = _load_complete_document(
         root,
         cache_root,
         document=ENROUTE_NAVAID_DOCUMENT,
-        cache_directory=ENROUTE_NAVAID_CACHE_DIRECTORY,
+        cache_directory=cache_directory,
     )
     records: list[EnrouteNavaidEvidence] = []
     for page_number, markdown in pages:

@@ -16,7 +16,7 @@ from .package_reader import DEFAULT_READER_TIMEOUT_SECONDS, read_package
 from .paths import detect_paths
 from .profile import DEFAULT_CYCLE
 from .semantic_diff import SUPPORTED_TABLES, semantic_diff, write_semantic_diff
-from .source import load_naip
+from .source import audit_enroute_navaid_ocr_source, load_naip
 from .source_gap import audit_source_gaps, load_semantic_diff, write_source_gap_audit
 from .validation import validate_candidate
 
@@ -139,6 +139,13 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="重跑记录与主缓存不完全一致时返回非零，便于自动化门禁",
     )
+    ocr_source_audit = sub.add_parser(
+        "ocr-source-audit",
+        help="逐条审计一个完整 OCR 缓存是否能唯一回链到直接 424 导航台",
+    )
+    ocr_source_audit.add_argument("--source-root", required=True, help="424 原始数据根目录")
+    ocr_source_audit.add_argument("--cache", required=True, help="完整 OCR 缓存目录")
+    ocr_source_audit.add_argument("--output", help="可选的本地审计 JSON 输出路径")
     package_reader = sub.add_parser(
         "read-package",
         help="在纯 ASCII 暂存区镜像完整覆盖包并生成 Navdatareader SQLite",
@@ -274,6 +281,17 @@ def main(argv: list[str] | None = None) -> int:
             report["output"] = str(output)
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0 if report["comparison"]["consistent"] or not args.require_agreement else 1
+    if args.command == "ocr-source-audit":
+        report = audit_enroute_navaid_ocr_source(
+            Path(args.source_root),
+            Path(args.cache),
+        )
+        if args.output:
+            output = Path(args.output).expanduser().resolve()
+            write_enroute_navaid_ocr_rerun_audit(output, report)
+            report["output"] = str(output)
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0
     if args.command == "read-package":
         result = read_package(
             Path(args.package),

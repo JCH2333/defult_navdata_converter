@@ -12,7 +12,7 @@ from pypinyin import lazy_pinyin
 import pymupdf
 
 from .iap_coverage import analyze_iap_coverage
-from .general_docs import GeneralDocumentCacheError, load_enroute_key_point_evidence, load_enroute_navaid_evidence
+from .general_docs import ENROUTE_NAVAID_CACHE_DIRECTORY, ENROUTE_NAVAID_DOCUMENT, GeneralDocumentCacheError, load_enroute_key_point_evidence, load_enroute_navaid_evidence
 from .model import CN_PREFIXES, Airport, AirwayLeg, Holding, NavModel, Navaid, ProcedureSegment, RejectedProcedure, RejectedRecord, Runway, SourceRef, TerminalWaypoint, Waypoint, is_china_icao
 from .pdf_charts import (
     _is_instrument_approach_index_row,
@@ -789,6 +789,8 @@ def _load_general_document_waypoints(
 def _load_general_document_navaids(
     model: NavModel,
     cache_root: Path | None,
+    *,
+    cache_directory: str = ENROUTE_NAVAID_CACHE_DIRECTORY,
 ) -> None:
     """Retain 4.1 facts and prove matching direct 424 identities conservatively."""
     if cache_root is None:
@@ -801,7 +803,11 @@ def _load_general_document_navaids(
         }
         return
     try:
-        evidence, report = load_enroute_navaid_evidence(model.root, cache_root)
+        evidence, report = load_enroute_navaid_evidence(
+            model.root,
+            cache_root,
+            cache_directory=cache_directory,
+        )
     except GeneralDocumentCacheError as error:
         model.general_document_evidence = {
             **model.general_document_evidence,
@@ -897,6 +903,42 @@ def _load_general_document_navaids(
             "physical_identity_ambiguous": counts["physical_identity_ambiguous"],
             "identity_conflict": counts["identity_conflict"],
         },
+    }
+
+
+def audit_enroute_navaid_ocr_source(
+    root: Path,
+    cache: Path,
+) -> dict[str, object]:
+    """Audit one complete OCR cache against direct 424 navaid identities."""
+    root = root.expanduser().resolve()
+    cache = _validate_pdf_cache(root, cache)
+    model = load_naip(root, include_terminal_documents=False)
+    _load_general_document_navaids(
+        model,
+        cache.parent,
+        cache_directory=cache.name,
+    )
+    navaids = model.general_document_evidence["navaids"]
+    if navaids.get("available") is not True:
+        raise GeneralDocumentCacheError(str(navaids.get("reason") or "OCR cache is unavailable"))
+    unresolved = [
+        {
+            "ident": record.key,
+            "page": record.source.page,
+            "reason": record.reason,
+        }
+        for record in model.rejected_records
+        if record.kind == "general-document-navaid"
+    ]
+    return {
+        "diagnostic": "enroute-navaid-ocr-source-audit-v1",
+        "evidence_only": True,
+        "document": ENROUTE_NAVAID_DOCUMENT,
+        "cache": str(cache),
+        "source_sha256": navaids["source_sha256"],
+        "navaids": navaids,
+        "unresolved_evidence": unresolved,
     }
 
 

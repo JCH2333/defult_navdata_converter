@@ -7,6 +7,7 @@ import pytest
 from fenix_default_navdata.source import (
     _load_terminal_landing_aids,
     _surface,
+    audit_enroute_navaid_ocr_source,
     load_naip,
     navaid_country,
     summarize_airway_source_metadata,
@@ -569,6 +570,46 @@ def test_load_naip_reconciles_unique_general_document_ocr_identifier_misread(
         item for item in model.rejected_records
         if item.kind == "general-document-navaid"
     ]
+
+
+def test_audit_enroute_navaid_ocr_source_uses_an_explicit_complete_cache(
+    tmp_path: Path,
+) -> None:
+    root = _minimal_naip_root(tmp_path, "ASP")
+    _write_csv(root, "VOR.csv", "\n".join((
+        "SIGNIFICANT_POINT_ID,CODE_ID,TXT_NAME,GEO_LAT_ACCURACY,GEO_LONG_ACCURACY,VAL_FREQ,VAL_MAG_VAR,VAL_ELEV,UOM_DIST_VER,SERVICED_AIRPORT,CODE_FIR",
+        "vor,KQS,source-vor,N411538,E0801934,112.1,-9.0,1188,M,ZBHZ,",
+    )))
+    source_pdf = root / ENROUTE_NAVAID_DOCUMENT
+    source_pdf.parent.mkdir(parents=True)
+    source_pdf.write_bytes(b"navaids")
+    cache = tmp_path / "general-doc-cache" / "enr-4.1-navaids-rerun"
+    cache.mkdir(parents=True)
+    (cache / "manifest.json").write_text(json.dumps({
+        "schema_version": 1,
+        "source_file": ENROUTE_NAVAID_DOCUMENT,
+        "source_sha256": hashlib.sha256(source_pdf.read_bytes()).hexdigest(),
+        "page_count": 1,
+    }), encoding="utf-8")
+    (cache / "page-0001.json").write_text(json.dumps({
+        "ok": True,
+        "data": {"documents": [{"markdown": "\n".join((
+            "KQS[[192, 304, 232, 319]]",
+            "112.1MHz[[256, 299, 336, 313]]",
+            "N41\ufffd\ufffd15'38\"[[433, 299, 512, 313]]",
+            "1188[[551, 305, 591, 320]]",
+            "VOR/DME[[92, 317, 167, 331]]",
+            "E080\ufffd\ufffd19'34\"[[433, 317, 514, 331]]",
+        ))}]},
+    }), encoding="utf-8")
+
+    report = audit_enroute_navaid_ocr_source(root, cache)
+
+    assert report["diagnostic"] == "enroute-navaid-ocr-source-audit-v1"
+    assert report["evidence_only"] is True
+    assert report["navaids"]["matched_424"] == 1
+    assert report["navaids"]["direct_identity_missing"] == 0
+    assert report["unresolved_evidence"] == []
 
 
 def test_load_naip_separates_source_pbn_from_target_route_type_and_links_airway_tables(
