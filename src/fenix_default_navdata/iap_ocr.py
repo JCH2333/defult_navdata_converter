@@ -169,6 +169,7 @@ def build_iap_ocr_cache(
     render_scale: float = 3.0,
     image_profile: str = "original",
     runtime_profile: str = "",
+    engine_timeout_seconds: int | None = None,
     force: bool = False,
     limit: int | None = None,
     retries: int = 2,
@@ -195,6 +196,11 @@ def build_iap_ocr_cache(
         "source_root": str(root),
         "cache_root": str(cache_root),
         "statuses": list(requested_statuses),
+        "execution_settings": {
+            "outer_timeout_seconds": timeout_seconds,
+            "engine_timeout_seconds": engine_timeout_seconds,
+            "retries": retries,
+        },
         "jobs": [job.to_report() for job in jobs],
         "planned_pdfs": len(jobs),
         "reason": (
@@ -221,6 +227,7 @@ def build_iap_ocr_cache(
                 force=force,
                 image_profile=image_profile,
                 runtime_profile=runtime_profile,
+                engine_timeout_seconds=engine_timeout_seconds,
                 retries=retries,
             )
         except OcrCacheError as error:

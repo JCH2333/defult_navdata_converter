@@ -119,10 +119,12 @@ def test_build_iap_ocr_cache_builds_deterministic_source_hashed_jobs(
     )
     builds: list[tuple[Path, Path]] = []
     retries: list[int] = []
+    engine_timeouts: list[int | None] = []
 
     def fake_build(source_pdf: Path, cache: Path, **kwargs) -> OcrCacheBuild:
         builds.append((source_pdf, cache))
         retries.append(kwargs["retries"])
+        engine_timeouts.append(kwargs["engine_timeout_seconds"])
         return OcrCacheBuild(
             cache=cache,
             source_file=source_pdf.relative_to(root).as_posix(),
@@ -144,6 +146,7 @@ def test_build_iap_ocr_cache_builds_deterministic_source_hashed_jobs(
     assert all(cache_root in cache.parents for _, cache in builds)
     assert all(len(cache.name) == 16 for _, cache in builds)
     assert retries == [2, 2]
+    assert engine_timeouts == [None, None]
 
 
 def test_cli_iap_ocr_cache_passes_evidence_only_options(monkeypatch) -> None:
@@ -178,6 +181,7 @@ def test_cli_iap_ocr_cache_passes_evidence_only_options(monkeypatch) -> None:
         "backend": "llamacpp",
         "mode": "markdown",
         "timeout_seconds": 240,
+        "engine_timeout_seconds": None,
         "render_scale": 3.0,
         "image_profile": "original",
         "runtime_profile": "",

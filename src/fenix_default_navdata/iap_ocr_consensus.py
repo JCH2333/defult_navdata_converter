@@ -43,15 +43,20 @@ def audit_iap_ocr_role_consensus(
         for cache_root in roots
     ]
     parsed = [_report_evidence(report) for report in reports]
-    canonical_candidates, canonical_evidence, canonical_profiles = parsed[0]
+    (
+        canonical_candidates,
+        canonical_evidence,
+        canonical_profiles,
+        canonical_settings,
+    ) = parsed[0]
     canonical_keys = set(canonical_evidence)
-    all_evidence_keys = [set(evidence) for _, evidence, _ in parsed]
+    all_evidence_keys = [set(evidence) for _, evidence, _, _ in parsed]
     union = set().union(*all_evidence_keys)
     agreed = set.intersection(*all_evidence_keys)
 
     comparisons: list[dict[str, object]] = []
     all_consistent = True
-    for report, (candidates, evidence, profiles) in zip(
+    for report, (candidates, evidence, profiles, settings) in zip(
         reports[1:],
         parsed[1:],
         strict=True,
@@ -71,9 +76,18 @@ def audit_iap_ocr_role_consensus(
             runtime_profiles_recorded
             and profiles == canonical_profiles
         )
+        recognition_settings_recorded = (
+            all(item is not None for item in canonical_settings.values())
+            and all(item is not None for item in settings.values())
+        )
+        recognition_settings_match = (
+            recognition_settings_recorded
+            and settings == canonical_settings
+        )
         consistent = (
             candidate_sets_match
             and runtime_profiles_match
+            and recognition_settings_match
             and not (canonical_keys - evidence_keys)
             and not (evidence_keys - canonical_keys)
             and not relation_changed
@@ -85,6 +99,8 @@ def audit_iap_ocr_role_consensus(
             "candidate_sets_match": candidate_sets_match,
             "runtime_profiles_recorded": runtime_profiles_recorded,
             "runtime_profiles_match": runtime_profiles_match,
+            "recognition_settings_recorded": recognition_settings_recorded,
+            "recognition_settings_match": recognition_settings_match,
             "canonical_only": len(canonical_keys - evidence_keys),
             "cache_only": len(evidence_keys - canonical_keys),
             "relation_changed": len(relation_changed),

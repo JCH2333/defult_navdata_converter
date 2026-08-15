@@ -36,7 +36,12 @@ def _write_cache(
         "source_file": source_file,
         "source_sha256": source_sha256,
         "page_count": 1,
+        "render_scale": 3.0,
         "recognition": {
+            "command": "ocr-skill",
+            "backend": "llamacpp",
+            "mode": "ocr",
+            "image_profile": "original",
             "runtime_profile": runtime_profile,
         },
     }), encoding="utf-8")
@@ -146,6 +151,14 @@ def test_iap_ocr_audit_reports_unique_identifier_evidence_without_projection(
     assert report["groups"][0]["candidates"][0]["ocr_runtime_profile"] == (
         "test-runtime-profile"
     )
+    assert report["groups"][0]["candidates"][0]["ocr_recognition_settings"] == {
+        "command": "ocr-skill",
+        "backend": "llamacpp",
+        "mode": "ocr",
+        "image_profile": "original",
+        "render_scale": 3.0,
+        "runtime_profile": "test-runtime-profile",
+    }
 
 
 def test_cli_iap_ocr_audit_passes_source_and_cache_options(monkeypatch) -> None:

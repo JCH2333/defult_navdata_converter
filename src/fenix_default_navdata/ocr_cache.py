@@ -136,10 +136,13 @@ def _run_ocr(
     backend: str,
     mode: str,
     timeout_seconds: int,
+    engine_timeout_seconds: int | None = None,
     retries: int = 0,
 ) -> dict[str, object]:
     if retries < 0:
         raise OcrCacheError("OCR 重试次数不能为负数")
+    if engine_timeout_seconds is not None and engine_timeout_seconds < 1:
+        raise OcrCacheError("OCR 引擎超时必须为正整数秒")
     arguments = [
         command,
         "extract",
@@ -150,6 +153,9 @@ def _run_ocr(
         mode,
         "--json",
     ]
+    environment = {**os.environ, "PYTHONIOENCODING": "utf-8"}
+    if engine_timeout_seconds is not None:
+        environment["OCR_LLAMA_TIMEOUT_S"] = str(engine_timeout_seconds)
     last_error = ""
     for attempt in range(retries + 1):
         try:
@@ -159,7 +165,7 @@ def _run_ocr(
                 check=False,
                 encoding="utf-8",
                 errors="replace",
-                env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+                env=environment,
                 timeout=timeout_seconds,
             )
         except FileNotFoundError as error:
@@ -302,6 +308,7 @@ def build_ocr_cache(
     force: bool = False,
     image_profile: str = _DEFAULT_IMAGE_PROFILE,
     runtime_profile: str = "",
+    engine_timeout_seconds: int | None = None,
     retries: int = 0,
 ) -> OcrCacheBuild:
     """Render physical PDF pages, OCR each page, and retain resumable evidence."""
@@ -324,6 +331,8 @@ def build_ocr_cache(
         raise OcrCacheError(f"不支持的 OCR 图像预处理: {image_profile}")
     if runtime_profile and not runtime_profile.strip():
         raise OcrCacheError("OCR 运行时标识不能只包含空白字符")
+    if engine_timeout_seconds is not None and engine_timeout_seconds < 1:
+        raise OcrCacheError("OCR 引擎超时必须为正整数秒")
 
     source_file = _source_file(source_pdf, source_root)
     source_sha256 = _sha256(source_pdf)
@@ -370,6 +379,7 @@ def build_ocr_cache(
             backend=backend,
             mode=mode,
             timeout_seconds=timeout_seconds,
+            engine_timeout_seconds=engine_timeout_seconds,
             retries=retries,
         )
         _write_json(page_path, payload)

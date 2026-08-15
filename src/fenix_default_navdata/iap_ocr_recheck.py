@@ -17,6 +17,8 @@ class IapOcrRecheckError(ValueError):
 _CandidateKey = tuple[str, str, str, str, str]
 _RoleKey = tuple[_CandidateKey, int, str, str]
 _RuntimeProfiles = dict[_CandidateKey, str | None]
+_RecognitionSettings = tuple[str, str, str, str, float, str]
+_RecognitionSettingsByCandidate = dict[_CandidateKey, _RecognitionSettings | None]
 
 
 def _text(value: object, field: str) -> str:
@@ -25,9 +27,54 @@ def _text(value: object, field: str) -> str:
     return value.strip()
 
 
+def _recognition_settings(
+    candidate: Mapping[str, object],
+) -> _RecognitionSettings | None:
+    value = candidate.get("ocr_recognition_settings")
+    if not isinstance(value, Mapping):
+        return None
+    try:
+        render_scale = value["render_scale"]
+        if (
+            not isinstance(render_scale, (int, float))
+            or isinstance(render_scale, bool)
+            or render_scale <= 0
+        ):
+            return None
+        return (
+            _text(value.get("command"), "OCR 命令"),
+            _text(value.get("backend"), "OCR 后端"),
+            _text(value.get("mode"), "OCR 模式"),
+            _text(value.get("image_profile"), "OCR 图像预处理"),
+            float(render_scale),
+            _text(value.get("runtime_profile"), "OCR 运行时标识"),
+        )
+    except KeyError:
+        return None
+
+
+def _recognition_settings_report(
+    settings: _RecognitionSettings,
+) -> dict[str, object]:
+    command, backend, mode, image_profile, render_scale, runtime_profile = settings
+    return {
+        "command": command,
+        "backend": backend,
+        "mode": mode,
+        "image_profile": image_profile,
+        "render_scale": render_scale,
+        "runtime_profile": runtime_profile,
+    }
+
+
 def _report_evidence(
     report: Mapping[str, object],
-) -> tuple[set[_CandidateKey], dict[_RoleKey, str], _RuntimeProfiles]:
+) -> tuple[
+    set[_CandidateKey],
+    dict[_RoleKey, str],
+    _RuntimeProfiles,
+    _RecognitionSettingsByCandidate,
+]:
     if report.get("diagnostic") != "iap-ocr-evidence-audit-v2":
         raise IapOcrRecheckError("IAP OCR 重跑比较只接受 v2 审计报告")
     if report.get("evidence_only") is not True or report.get("projection_allowed") is not False:
@@ -39,6 +86,7 @@ def _report_evidence(
     candidates: set[_CandidateKey] = set()
     evidence: dict[_RoleKey, str] = {}
     runtime_profiles: _RuntimeProfiles = {}
+    recognition_settings: _RecognitionSettingsByCandidate = {}
     for group in groups:
         if not isinstance(group, Mapping):
             raise IapOcrRecheckError("IAP OCR 审计分组格式无效")
@@ -70,6 +118,12 @@ def _report_evidence(
             previous_profile = runtime_profiles.setdefault(key, runtime_profile)
             if previous_profile != runtime_profile:
                 raise IapOcrRecheckError("同一 IAP OCR 候选图页混用了运行时标识")
+            settings = _recognition_settings(candidate)
+            if settings is not None and settings[-1] != runtime_profile:
+                raise IapOcrRecheckError("IAP OCR 审计的运行时标识与识别设置不一致")
+            previous_settings = recognition_settings.setdefault(key, settings)
+            if previous_settings != settings:
+                raise IapOcrRecheckError("同一 IAP OCR 候选图页混用了识别设置")
             matches = candidate.get("ocr_role_matches")
             if not isinstance(matches, list):
                 raise IapOcrRecheckError("IAP OCR 审计缺少角色证据")
@@ -89,7 +143,7 @@ def _report_evidence(
                 if role_key in evidence:
                     raise IapOcrRecheckError("IAP OCR 审计包含重复角色证据")
                 evidence[role_key] = relation
-    return candidates, evidence, runtime_profiles
+    return candidates, evidence, runtime_profiles, recognition_settings
 
 
 def _role_report_item(key: _RoleKey, relation: str) -> dict[str, object]:
@@ -128,8 +182,18 @@ def audit_iap_ocr_role_recheck(
         pdf_cache=pdf_cache,
         statuses=statuses,
     )
-    canonical_candidates, canonical_evidence, canonical_profiles = _report_evidence(canonical)
-    rerun_candidates, rerun_evidence, rerun_profiles = _report_evidence(rerun)
+    (
+        canonical_candidates,
+        canonical_evidence,
+        canonical_profiles,
+        canonical_settings,
+    ) = _report_evidence(canonical)
+    (
+        rerun_candidates,
+        rerun_evidence,
+        rerun_profiles,
+        rerun_settings,
+    ) = _report_evidence(rerun)
     canonical_keys = set(canonical_evidence)
     rerun_keys = set(rerun_evidence)
     agreed = canonical_keys & rerun_keys
@@ -147,10 +211,19 @@ def audit_iap_ocr_role_recheck(
         runtime_profiles_recorded
         and canonical_profiles == rerun_profiles
     )
+    recognition_settings_recorded = (
+        all(settings is not None for settings in canonical_settings.values())
+        and all(settings is not None for settings in rerun_settings.values())
+    )
+    recognition_settings_match = (
+        recognition_settings_recorded
+        and canonical_settings == rerun_settings
+    )
     union = canonical_keys | rerun_keys
     consistent = (
         candidate_sets_match
         and runtime_profiles_match
+        and recognition_settings_match
         and not (canonical_keys - rerun_keys)
         and not (rerun_keys - canonical_keys)
         and not relation_changed
@@ -172,6 +245,8 @@ def audit_iap_ocr_role_recheck(
             "candidate_sets_match": candidate_sets_match,
             "runtime_profiles_recorded": runtime_profiles_recorded,
             "runtime_profiles_match": runtime_profiles_match,
+            "recognition_settings_recorded": recognition_settings_recorded,
+            "recognition_settings_match": recognition_settings_match,
             "agreement_ratio": len(agreed) / len(union) if union else 1.0,
         },
         "runtime_profiles": {
@@ -186,6 +261,26 @@ def audit_iap_ocr_role_recheck(
             ),
             "rerun_unrecorded": sum(
                 profile is None for profile in rerun_profiles.values()
+            ),
+        },
+        "recognition_settings": {
+            "canonical": [
+                _recognition_settings_report(settings)
+                for settings in sorted(
+                    {settings for settings in canonical_settings.values() if settings is not None}
+                )
+            ],
+            "rerun": [
+                _recognition_settings_report(settings)
+                for settings in sorted(
+                    {settings for settings in rerun_settings.values() if settings is not None}
+                )
+            ],
+            "canonical_unrecorded": sum(
+                settings is None for settings in canonical_settings.values()
+            ),
+            "rerun_unrecorded": sum(
+                settings is None for settings in rerun_settings.values()
             ),
         },
         "role_evidence": {

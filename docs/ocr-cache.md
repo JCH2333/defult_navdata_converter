@@ -39,6 +39,11 @@ python -m fenix_default_navdata.cli ocr-cache `
 
 首张页检查通过后，移除 `--first-page` 和 `--last-page` 即可继续整册。默认单页 OCR 超时为 180 秒，可通过 `--timeout` 调整。`--force` 仅用于明确要求重新识别已有有效页面。通用 `ocr-cache` 默认不重试；`iap-ocr-cache` 默认对每页重试 2 次，可通过 `--retries` 调整。子进程固定以 UTF-8 输出，避免 Windows 控制台代码页把有效 OCR JSON 误判为失败。
 
+本地 `ocr-skill` 的 llama.cpp 后端还具有独立的内部 HTTP 等待。可用 `--engine-timeout`
+显式传入秒数，转换器仅对该子进程设置 `OCR_LLAMA_TIMEOUT_S`，并在 IAP 缓存报告中记录；
+外层 `--timeout` 应大于该值。内部等待只决定何时放弃无响应页面，不改变模型输入、模式、
+渲染比例或图像预处理。
+
 仅完整页集可提供给后续解析器。缓存本身是本地数据资产，不得提交到 Git 仓库。
 
 ## IAP 图页批量缓存
@@ -72,10 +77,10 @@ SHA-256、页数与页面 JSON。它只从 OCR 文本中匹配已经存在于同
 ## IAP OCR 独立重跑比较
 
 `iap-ocr-recheck` 对同一 424 原始数据重新审计两份完整 IAP OCR 缓存。它要求每个候选
-图页的源文件、SHA-256、物理页和非空 `runtime_profile` 均可验证，并比较“候选图页、
-页码、当前数据库腿、角色”的交集、各自独有项和同一配对的相邻关系变化。`--require-agreement`
-会拒绝未记录、候选间混用或两份缓存不一致的运行时标识；任何差异都会返回非零，且即使
-完全一致仍保持不可投影。
+图页的源文件、SHA-256、物理页和完整识别设置均可验证：命令、后端、模式、图像预处理、
+渲染比例与非空 `runtime_profile`。它比较“候选图页、页码、当前数据库腿、角色”的交集、
+各自独有项和同一配对的相邻关系变化。`--require-agreement` 会拒绝未记录、候选间混用或
+两份缓存不一致的识别设置；任何差异都会返回非零，且即使完全一致仍保持不可投影。
 
 ```powershell
 python -m fenix_default_navdata.cli iap-ocr-recheck `
@@ -90,7 +95,7 @@ python -m fenix_default_navdata.cli iap-ocr-recheck `
 ## IAP OCR 三次共识门禁
 
 `iap-ocr-consensus` 接受至少三份不同的完整缓存，以第一份为基线逐份核对候选源图页、
-源 SHA-256、非空运行时标识、角色-航点配对及其渲染邻接关系。任一项不一致时，
+源 SHA-256、完整识别设置、角色-航点配对及其渲染邻接关系。任一项不一致时，
 `--require-agreement` 返回非零。该命令只汇总可复查的 OCR 共识，始终输出
 `evidence_only=true` 和 `projection_allowed=false`，不会选择图页、修改候选包或解除 IAP 拒绝。
 

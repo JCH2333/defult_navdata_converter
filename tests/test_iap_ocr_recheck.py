@@ -9,6 +9,7 @@ def _report(
     relation: str = "same_row",
     extra: bool = False,
     runtime_profile: str | None = "test-runtime-profile",
+    image_profile: str | None = "original",
 ) -> dict[str, object]:
     matches = [{
         "page": 1,
@@ -38,6 +39,18 @@ def _report(
                 "source_sha256": "a" * 64,
                 "cache_state": "complete",
                 "ocr_runtime_profile": runtime_profile,
+                "ocr_recognition_settings": (
+                    {
+                        "command": "ocr-skill",
+                        "backend": "llamacpp",
+                        "mode": "ocr",
+                        "image_profile": image_profile,
+                        "render_scale": 3.0,
+                        "runtime_profile": runtime_profile,
+                    }
+                    if runtime_profile is not None and image_profile is not None
+                    else None
+                ),
                 "ocr_role_matches": matches,
             }],
         }],
@@ -60,6 +73,8 @@ def test_iap_ocr_recheck_requires_exact_role_evidence_agreement(monkeypatch) -> 
         "candidate_sets_match": True,
         "runtime_profiles_recorded": True,
         "runtime_profiles_match": True,
+        "recognition_settings_recorded": True,
+        "recognition_settings_match": True,
         "agreement_ratio": 1.0,
     }
     assert report["role_evidence"] == {
@@ -115,12 +130,38 @@ def test_iap_ocr_recheck_rejects_unrecorded_or_changed_runtime_profile(monkeypat
     assert report["comparison"]["consistent"] is False
     assert report["comparison"]["runtime_profiles_recorded"] is True
     assert report["comparison"]["runtime_profiles_match"] is False
+    assert report["comparison"]["recognition_settings_match"] is False
     assert report["runtime_profiles"] == {
         "canonical": ["deterministic-a"],
         "rerun": ["deterministic-b"],
         "canonical_unrecorded": 0,
         "rerun_unrecorded": 0,
     }
+
+
+def test_iap_ocr_recheck_rejects_changed_image_profile_with_same_runtime_profile(
+    monkeypatch,
+) -> None:
+    reports = [
+        _report(image_profile="original"),
+        _report(image_profile="autocontrast-grayscale"),
+    ]
+    monkeypatch.setattr(
+        "fenix_default_navdata.iap_ocr_recheck.audit_iap_ocr_cache",
+        lambda *_args, **_kwargs: reports.pop(0),
+    )
+
+    report = audit_iap_ocr_role_recheck(Path("raw"), Path("canonical"), Path("rerun"))
+
+    assert report["comparison"]["consistent"] is False
+    assert report["comparison"]["runtime_profiles_match"] is True
+    assert report["comparison"]["recognition_settings_recorded"] is True
+    assert report["comparison"]["recognition_settings_match"] is False
+    assert report["recognition_settings"]["canonical"][0]["image_profile"] == "original"
+    assert (
+        report["recognition_settings"]["rerun"][0]["image_profile"]
+        == "autocontrast-grayscale"
+    )
 
 
 def test_cli_iap_ocr_recheck_passes_source_only_options(monkeypatch) -> None:

@@ -13,6 +13,7 @@ def _report(
     cache_root: str,
     *,
     relation: str = "same_row",
+    image_profile: str = "original",
 ) -> dict[str, object]:
     return {
         "diagnostic": "iap-ocr-evidence-audit-v2",
@@ -29,6 +30,14 @@ def _report(
                 "source_sha256": "a" * 64,
                 "cache_state": "complete",
                 "ocr_runtime_profile": "deterministic-profile",
+                "ocr_recognition_settings": {
+                    "command": "ocr-skill",
+                    "backend": "llamacpp",
+                    "mode": "ocr",
+                    "image_profile": image_profile,
+                    "render_scale": 3.0,
+                    "runtime_profile": "deterministic-profile",
+                },
                 "ocr_role_matches": [{
                     "page": 1,
                     "ident": "FIX01",
@@ -82,6 +91,28 @@ def test_iap_ocr_consensus_reports_any_relation_change_without_projection(monkey
     }
     assert report["comparisons"][1]["relation_changed"] == 1
     assert report["projection_allowed"] is False
+
+
+def test_iap_ocr_consensus_rejects_changed_image_profile(monkeypatch) -> None:
+    reports = [
+        _report("a"),
+        _report("b"),
+        _report("c", image_profile="autocontrast-grayscale"),
+    ]
+    monkeypatch.setattr(
+        "fenix_default_navdata.iap_ocr_consensus.audit_iap_ocr_cache",
+        lambda *_args, **_kwargs: reports.pop(0),
+    )
+
+    report = audit_iap_ocr_role_consensus(
+        Path("raw"),
+        [Path("a"), Path("b"), Path("c")],
+    )
+
+    assert report["comparison"]["consistent"] is False
+    assert report["comparisons"][1]["runtime_profiles_match"] is True
+    assert report["comparisons"][1]["recognition_settings_recorded"] is True
+    assert report["comparisons"][1]["recognition_settings_match"] is False
 
 
 def test_iap_ocr_consensus_rejects_too_few_or_duplicate_cache_roots() -> None:

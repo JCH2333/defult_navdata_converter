@@ -51,6 +51,7 @@ def test_run_ocr_retries_transient_failure(monkeypatch: pytest.MonkeyPatch, tmp_
         backend="llamacpp",
         mode="markdown",
         timeout_seconds=1,
+        engine_timeout_seconds=45,
         retries=1,
     )
 
@@ -59,6 +60,25 @@ def test_run_ocr_retries_transient_failure(monkeypatch: pytest.MonkeyPatch, tmp_
         "utf-8",
         "utf-8",
     ]
+    assert [environment["OCR_LLAMA_TIMEOUT_S"] for environment in environments] == [
+        "45",
+        "45",
+    ]
+
+
+def test_run_ocr_rejects_nonpositive_engine_timeout(tmp_path: Path) -> None:
+    image = tmp_path / "page-0001.png"
+    image.write_bytes(b"png")
+
+    with pytest.raises(OcrCacheError, match="引擎超时"):
+        ocr_cache._run_ocr(
+            image=image,
+            command="ocr-skill",
+            backend="llamacpp",
+            mode="ocr",
+            timeout_seconds=1,
+            engine_timeout_seconds=0,
+        )
 
 
 def test_build_ocr_cache_is_resumable_and_uses_source_relative_identity(

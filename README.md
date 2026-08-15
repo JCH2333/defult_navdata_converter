@@ -97,9 +97,11 @@ python -m fenix_default_navdata.gui
 
 `iap-ocr-cache` 会从现有 IAP 覆盖审计中自动筛出仅可能受图页识别影响的 `ambiguous_chart` 与 `no_matching_chart`，把对应的原始仪表进近 PDF 按相对路径和源 SHA-256 缓存到本机。它不会处理“没有唯一数据库主进近段”的分组，也不会因识别完成就解除任何 IAP 拒绝；必须另行新增可验证的图页解析规则和回归测试。
 
+当本地 `ocr-skill` 在其默认 300 秒引擎等待内提前失败时，可显式传入 `--engine-timeout`，并将外层 `--timeout` 设得更长。该参数只覆盖单页等待，不改变模型、提示模式或图像预处理；IAP 缓存报告会记录本次执行设置。
+
 `iap-ocr-audit` 逐项验证 IAP OCR 缓存的源相对路径、SHA-256、页数与页面 JSON，再报告 OCR 文本中能与主进近源腿精确匹配的标识，以及同一文本项、同一行或垂直相邻的明确角色标签。即使某一候选图页有至少两个标识的唯一命中或出现角色标签，报告仍会保持 `projection_allowed=false`；OCR 证据不能单独解除 IAP 拒绝。
 
-`iap-ocr-recheck` 比较两份完整、独立重跑的 IAP OCR 缓存，仅报告角色证据的交集和差异；`--require-agreement` 会同时要求所有候选页记录了相同的非空 `runtime_profile`。即使两份缓存完全一致，它也不会选择图页或解除 IAP 拒绝。`iap-ocr-consensus` 将这一门禁扩展为至少三份缓存，逐份校验候选页、运行时、角色-航点对和相邻关系；其输出同样不可投影。
+`iap-ocr-recheck` 比较两份完整、独立重跑的 IAP OCR 缓存，仅报告角色证据的交集和差异；`--require-agreement` 会同时要求所有候选页记录且匹配完整识别设置：命令、后端、模式、图像预处理、渲染比例与非空 `runtime_profile`。即使两份缓存完全一致，它也不会选择图页或解除 IAP 拒绝。`iap-ocr-consensus` 将这一门禁扩展为至少三份缓存，逐份校验候选页、识别设置、角色-航点对和相邻关系；其输出同样不可投影。
 
 显式指定 SDK Package Tool：
 

@@ -136,6 +136,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="传给 OCR 引擎的识别模式",
     )
     ocr_cache.add_argument("--timeout", type=int, default=180, help="每页 OCR 超时秒数")
+    ocr_cache.add_argument(
+        "--engine-timeout",
+        type=int,
+        help="可选：覆盖本地 OCR 引擎单页等待秒数",
+    )
     ocr_cache.add_argument("--render-scale", type=float, default=2.0, help="PDF 页面渲染比例")
     ocr_cache.add_argument(
         "--image-profile",
@@ -185,6 +190,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="传给 OCR 引擎的识别模式",
     )
     iap_ocr_cache.add_argument("--timeout", type=int, default=240, help="每页 OCR 超时秒数")
+    iap_ocr_cache.add_argument(
+        "--engine-timeout",
+        type=int,
+        help="可选：覆盖本地 OCR 引擎单页等待秒数",
+    )
     iap_ocr_cache.add_argument("--render-scale", type=float, default=3.0, help="PDF 页面渲染比例")
     iap_ocr_cache.add_argument(
         "--image-profile",
@@ -428,6 +438,7 @@ def main(argv: list[str] | None = None) -> int:
             force=args.force,
             image_profile=args.image_profile,
             runtime_profile=args.runtime_profile,
+            engine_timeout_seconds=args.engine_timeout,
             retries=args.retries,
         )
         print(json.dumps(report.to_report(), ensure_ascii=False, indent=2))
@@ -445,6 +456,7 @@ def main(argv: list[str] | None = None) -> int:
             render_scale=args.render_scale,
             image_profile=args.image_profile,
             runtime_profile=args.runtime_profile,
+            engine_timeout_seconds=args.engine_timeout,
             force=args.force,
             limit=args.limit,
             retries=args.retries,
