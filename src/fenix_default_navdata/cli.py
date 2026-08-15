@@ -10,6 +10,7 @@ from .general_docs import (
     audit_enroute_navaid_ocr_rerun,
     write_enroute_navaid_ocr_rerun_audit,
 )
+from .iap_ocr import IAP_OCR_ELIGIBLE_STATUSES, build_iap_ocr_cache
 from .ocr_cache import build_ocr_cache
 from .official_index import build_official_navaid_index
 from .package_reader import DEFAULT_READER_TIMEOUT_SECONDS, read_package
@@ -139,6 +140,44 @@ def build_parser() -> argparse.ArgumentParser:
     ocr_cache.add_argument("--first-page", type=int, help="可选的起始物理页")
     ocr_cache.add_argument("--last-page", type=int, help="可选的结束物理页")
     ocr_cache.add_argument("--force", action="store_true", help="重新识别已存在的有效页面")
+    iap_ocr_cache = sub.add_parser(
+        "iap-ocr-cache",
+        help="对阻塞 IAP 图页匹配的源 PDF 建立本地 OCR 证据缓存，不修改投影",
+    )
+    iap_ocr_cache.add_argument("--source-root", required=True, help="424 原始数据根目录")
+    iap_ocr_cache.add_argument("--pdf-cache", help="现有的终端 PDF 解析缓存目录")
+    iap_ocr_cache.add_argument("--cache-root", required=True, help="IAP OCR 本地缓存根目录")
+    iap_ocr_cache.add_argument(
+        "--statuses",
+        nargs="+",
+        choices=IAP_OCR_ELIGIBLE_STATUSES,
+        default=list(IAP_OCR_ELIGIBLE_STATUSES),
+        help="要识别的 IAP 未决类别",
+    )
+    iap_ocr_cache.add_argument("--ocr-command", default="ocr-skill", help="本地 OCR CLI 命令")
+    iap_ocr_cache.add_argument(
+        "--backend",
+        choices=("llamacpp", "deepseek"),
+        default="llamacpp",
+        help="OCR 后端；默认使用本机 llama.cpp 服务",
+    )
+    iap_ocr_cache.add_argument(
+        "--mode",
+        choices=("markdown", "free", "figure", "ocr"),
+        default="markdown",
+        help="传给 OCR 引擎的识别模式",
+    )
+    iap_ocr_cache.add_argument("--timeout", type=int, default=240, help="每页 OCR 超时秒数")
+    iap_ocr_cache.add_argument("--render-scale", type=float, default=3.0, help="PDF 页面渲染比例")
+    iap_ocr_cache.add_argument(
+        "--image-profile",
+        choices=("original", "autocontrast-grayscale"),
+        default="original",
+        help="渲染后的固定图像预处理；不同设置必须使用不同缓存根目录",
+    )
+    iap_ocr_cache.add_argument("--limit", type=int, help="只处理排序后的前 N 个源 PDF")
+    iap_ocr_cache.add_argument("--force", action="store_true", help="重新识别已有有效页面")
+    iap_ocr_cache.add_argument("--dry-run", action="store_true", help="只输出计划，不调用 OCR")
     ocr_audit = sub.add_parser(
         "ocr-audit",
         help="比较同一原始 PDF 的完整 OCR 缓存与局部重跑缓存，仅输出证据审计",
@@ -301,6 +340,24 @@ def main(argv: list[str] | None = None) -> int:
             image_profile=args.image_profile,
         )
         print(json.dumps(report.to_report(), ensure_ascii=False, indent=2))
+        return 0
+    if args.command == "iap-ocr-cache":
+        report = build_iap_ocr_cache(
+            Path(args.source_root),
+            Path(args.cache_root),
+            pdf_cache=_path(args.pdf_cache),
+            statuses=args.statuses,
+            command=args.ocr_command,
+            backend=args.backend,
+            mode=args.mode,
+            timeout_seconds=args.timeout,
+            render_scale=args.render_scale,
+            image_profile=args.image_profile,
+            force=args.force,
+            limit=args.limit,
+            dry_run=args.dry_run,
+        )
+        print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0
     if args.command == "ocr-audit":
         report = audit_enroute_navaid_ocr_rerun(
