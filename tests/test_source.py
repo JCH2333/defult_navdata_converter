@@ -12,7 +12,10 @@ from fenix_default_navdata.source import (
     summarize_airway_source_metadata,
     waypoint_country,
 )
-from fenix_default_navdata.general_docs import ENROUTE_KEY_POINT_DOCUMENT
+from fenix_default_navdata.general_docs import (
+    ENROUTE_KEY_POINT_DOCUMENT,
+    ENROUTE_NAVAID_DOCUMENT,
+)
 from fenix_default_navdata.model import Ad219Vor, NavModel, SourceRef
 
 
@@ -413,6 +416,81 @@ def test_load_naip_adds_only_unambiguous_general_document_waypoints(
     assert [(item.key, item.reason) for item in model.rejected_records] == [
         ("OUT", "general document region outside"),
     ]
+
+
+def test_load_naip_keeps_verified_general_document_navaids_as_audit_evidence(
+    tmp_path: Path,
+) -> None:
+    root = _minimal_naip_root(tmp_path, "ASP")
+    _write_csv(root, "VOR.csv", "\n".join((
+        "SIGNIFICANT_POINT_ID,CODE_ID,TXT_NAME,GEO_LAT_ACCURACY,GEO_LONG_ACCURACY,VAL_FREQ,VAL_MAG_VAR,VAL_ELEV,UOM_DIST_VER,SERVICED_AIRPORT,CODE_FIR",
+        "vor,KQS,source-vor,N411538,E0801934,112.1,-9.0,1188,M,ZBHZ,",
+    )))
+    key_point_pdf = root / ENROUTE_KEY_POINT_DOCUMENT
+    navaid_pdf = root / ENROUTE_NAVAID_DOCUMENT
+    key_point_pdf.parent.mkdir(parents=True)
+    key_point_pdf.write_bytes(b"key-points")
+    navaid_pdf.write_bytes(b"navaids")
+    cache_root = tmp_path / "general-doc-cache"
+    key_point_cache = cache_root / "enr-4.4"
+    navaid_cache = cache_root / "enr-4.1-navaids"
+    key_point_cache.mkdir(parents=True)
+    navaid_cache.mkdir(parents=True)
+    (key_point_cache / "manifest.json").write_text(json.dumps({
+        "schema_version": 1,
+        "source_file": ENROUTE_KEY_POINT_DOCUMENT,
+        "source_sha256": hashlib.sha256(key_point_pdf.read_bytes()).hexdigest(),
+        "page_count": 1,
+    }), encoding="utf-8")
+    (key_point_cache / "page-0001.json").write_text(json.dumps({
+        "ok": True,
+        "data": {"documents": [{"markdown": ""}]},
+    }), encoding="utf-8")
+    (navaid_cache / "manifest.json").write_text(json.dumps({
+        "schema_version": 1,
+        "source_file": ENROUTE_NAVAID_DOCUMENT,
+        "source_sha256": hashlib.sha256(navaid_pdf.read_bytes()).hexdigest(),
+        "page_count": 1,
+    }), encoding="utf-8")
+    (navaid_cache / "page-0001.json").write_text(json.dumps({
+        "ok": True,
+        "data": {"documents": [{"markdown": "\n".join((
+            "KQS[[192, 304, 232, 319]]",
+            "112.1MHz[[256, 299, 336, 313]]",
+            "N41\ufffd\ufffd15'38\"[[433, 299, 512, 313]]",
+            "1188[[551, 305, 591, 320]]",
+            "VOR/DME[[92, 317, 167, 331]]",
+            "E080\ufffd\ufffd19'34\"[[433, 317, 514, 331]]",
+        ))}]},
+    }), encoding="utf-8")
+
+    model = load_naip(
+        root,
+        general_doc_cache=cache_root,
+        include_terminal_documents=False,
+    )
+
+    assert [(item.ident, item.magnetic_variation) for item in model.navaids] == [
+        ("KQS", -9.0),
+    ]
+    assert [
+        (item.kind, item.ident, item.frequency, item.source.file, item.source.page)
+        for item in model.enroute_navaid_evidence
+    ] == [
+        ("VOR", "KQS", 112.1, ENROUTE_NAVAID_DOCUMENT, 1),
+    ]
+    assert model.general_document_evidence["navaids"] == {
+        "available": True,
+        "cache": str(navaid_cache),
+        "document": ENROUTE_NAVAID_DOCUMENT,
+        "source_sha256": hashlib.sha256(navaid_pdf.read_bytes()).hexdigest(),
+        "pages": 1,
+        "parsed_records": 1,
+        "matched_424": 1,
+        "direct_identity_missing": 0,
+        "direct_identity_ambiguous": 0,
+        "identity_conflict": 0,
+    }
 
 
 def test_load_naip_separates_source_pbn_from_target_route_type_and_links_airway_tables(

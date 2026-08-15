@@ -12,7 +12,7 @@ from pypinyin import lazy_pinyin
 import pymupdf
 
 from .iap_coverage import analyze_iap_coverage
-from .general_docs import load_enroute_key_point_evidence
+from .general_docs import GeneralDocumentCacheError, load_enroute_key_point_evidence, load_enroute_navaid_evidence
 from .model import CN_PREFIXES, Airport, AirwayLeg, Holding, NavModel, Navaid, ProcedureSegment, RejectedProcedure, RejectedRecord, Runway, SourceRef, TerminalWaypoint, Waypoint, is_china_icao
 from .pdf_charts import (
     _is_instrument_approach_index_row,
@@ -690,8 +690,13 @@ def _load_general_document_waypoints(
     """Add only OCR points whose region and logical identity are unambiguous."""
     if cache_root is None:
         model.general_document_evidence = {
+            **model.general_document_evidence,
             "available": False,
             "reason": "general document OCR cache was not provided",
+            "waypoints": {
+                "available": False,
+                "reason": "general document OCR cache was not provided",
+            },
         }
         return
 
@@ -768,6 +773,7 @@ def _load_general_document_waypoints(
         counts["accepted"] += 1
 
     model.general_document_evidence = {
+        **model.general_document_evidence,
         **report,
         "waypoints": {
             "accepted": counts["accepted"],
@@ -776,6 +782,83 @@ def _load_general_document_waypoints(
             "region_ambiguous": counts["region_ambiguous"],
             "region_near_boundary": counts["region_near_boundary"],
             "region_outside": counts["region_outside"],
+        },
+    }
+
+
+def _load_general_document_navaids(
+    model: NavModel,
+    cache_root: Path | None,
+) -> None:
+    """Retain 4.1 facts and prove matching direct 424 identities conservatively."""
+    if cache_root is None:
+        model.general_document_evidence = {
+            **model.general_document_evidence,
+            "navaids": {
+                "available": False,
+                "reason": "general document OCR cache was not provided",
+            },
+        }
+        return
+    try:
+        evidence, report = load_enroute_navaid_evidence(model.root, cache_root)
+    except GeneralDocumentCacheError as error:
+        model.general_document_evidence = {
+            **model.general_document_evidence,
+            "navaids": {
+                "available": False,
+                "reason": str(error),
+            },
+        }
+        return
+
+    by_identity: dict[tuple[str, str], list[Navaid]] = {}
+    for navaid in model.navaids:
+        by_identity.setdefault((navaid.kind.upper(), navaid.ident.upper()), []).append(navaid)
+
+    counts: Counter[str] = Counter()
+    for item in evidence:
+        model.enroute_navaid_evidence.append(item)
+        matches = by_identity.get((item.kind.upper(), item.ident.upper()), [])
+        if not matches:
+            counts["direct_identity_missing"] += 1
+            continue
+        if len(matches) != 1:
+            counts["direct_identity_ambiguous"] += 1
+            model.rejected_records.append(RejectedRecord(
+                "general-document-navaid",
+                item.ident,
+                "general document identity is ambiguous in direct 424 navaids",
+                item.source,
+            ))
+            continue
+        navaid = matches[0]
+        exact_frequency = abs(navaid.frequency - item.frequency) <= 0.001
+        exact_position = _angular_distance(
+            navaid.latitude,
+            navaid.longitude,
+            item.latitude,
+            item.longitude,
+        ) * _EARTH_RADIUS_NM <= 0.02
+        if exact_frequency and exact_position:
+            counts["matched_424"] += 1
+            continue
+        counts["identity_conflict"] += 1
+        model.rejected_records.append(RejectedRecord(
+            "general-document-navaid",
+            item.ident,
+            "general document fact conflicts with direct 424 navaid",
+            item.source,
+        ))
+
+    model.general_document_evidence = {
+        **model.general_document_evidence,
+        "navaids": {
+            **report,
+            "matched_424": counts["matched_424"],
+            "direct_identity_missing": counts["direct_identity_missing"],
+            "direct_identity_ambiguous": counts["direct_identity_ambiguous"],
+            "identity_conflict": counts["identity_conflict"],
         },
     }
 
@@ -877,6 +960,7 @@ def load_naip(
                     reason="invalid coordinate or unmapped country",
                     source=SourceRef(filename, row_number),
                 ))
+    _load_general_document_navaids(model, general_doc_cache)
     for row_number, row in enumerate(_rows(root / "DESIGNATED_POINT.csv"), start=2):
         try:
             latitude = parse_dms(row.get("GEO_LAT_ACCURACY") or "")

@@ -114,6 +114,24 @@ class Ad219Vor:
 
 
 @dataclass(frozen=True)
+class EnrouteNavaidEvidence:
+    """A GeneralDoc 4.1 fact that lacks the complete target navaid contract.
+
+    The enroute table prints type, ident, frequency, coordinates, and sometimes
+    elevation, but does not publish magnetic variation or regional identity.
+    It remains audit evidence until direct 424 records prove all target fields.
+    """
+
+    kind: str
+    ident: str
+    frequency: float
+    latitude: float
+    longitude: float
+    elevation_meters: float | None
+    source: SourceRef
+
+
+@dataclass(frozen=True)
 class Waypoint:
     key: str
     ident: str
@@ -334,6 +352,7 @@ class NavModel:
     navaids: list[Navaid] = field(default_factory=list)
     ilses: list[Ils] = field(default_factory=list)
     ad219_vors: list[Ad219Vor] = field(default_factory=list)
+    enroute_navaid_evidence: list[EnrouteNavaidEvidence] = field(default_factory=list)
     waypoints: list[Waypoint] = field(default_factory=list)
     terminal_waypoints: list[TerminalWaypoint] = field(default_factory=list)
     airway_legs: list[AirwayLeg] = field(default_factory=list)

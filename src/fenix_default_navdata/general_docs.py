@@ -8,7 +8,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from .model import SourceRef
+from .model import EnrouteNavaidEvidence, SourceRef
 
 
 ENROUTE_KEY_POINT_DOCUMENT = (
@@ -16,6 +16,11 @@ ENROUTE_KEY_POINT_DOCUMENT = (
     "\u822a\u8def_4.4\u91cd\u8981\u70b9\u540d\u79f0\u4ee3\u7801.pdf"
 )
 ENROUTE_KEY_POINT_CACHE_DIRECTORY = "enr-4.4"
+ENROUTE_NAVAID_DOCUMENT = (
+    "GeneralDoc/"
+    "\u822a\u8def_4.1\u65e0\u7ebf\u7535\u5bfc\u822a\u8bbe\u65bd\u2014\u2014\u822a\u8def.pdf"
+)
+ENROUTE_NAVAID_CACHE_DIRECTORY = "enr-4.1-navaids"
 _CACHE_SCHEMA_VERSION = 1
 _POINT = re.compile(
     r"(?P<ident>[A-Z0-9]{2,5})\s*"
@@ -26,6 +31,25 @@ _POINT = re.compile(
     r"(?P<longitude_minutes>\d{2})\s*[\N{PRIME}\N{APOSTROPHE}]\s*"
     r"(?P<longitude_seconds>\d{2})\s*[\N{DOUBLE PRIME}\N{QUOTATION MARK}]"
 )
+_CELL = re.compile(
+    r"(?P<text>.*?)\[\["
+    r"(?P<x0>\d+(?:\.\d+)?),\s*"
+    r"(?P<y0>\d+(?:\.\d+)?),\s*"
+    r"(?P<x1>\d+(?:\.\d+)?),\s*"
+    r"(?P<y1>\d+(?:\.\d+)?)\]\]"
+)
+_NAVAID_LATITUDE = re.compile(
+    r"^N(?P<degrees>\d{2})\D+(?P<minutes>\d{2})['\u2019](?P<seconds>\d{2})(?:[\"\u201d])?$"
+)
+_NAVAID_LONGITUDE = re.compile(
+    r"^E(?P<degrees>\d{3})\D+(?P<minutes>\d{2})['\u2019](?P<seconds>\d{2})(?:[\"\u201d])?$"
+)
+_NAVAID_IDENT = re.compile(r"^[A-Z0-9]{2,5}$")
+_NAVAID_FREQUENCY = re.compile(
+    r"^(?P<value>\d+(?:\.\d+)?)\s*(?P<unit>MHz|kHz)$",
+    re.IGNORECASE,
+)
+_NAVAID_ELEVATION = re.compile(r"^\d+(?:\.\d+)?$")
 
 
 class GeneralDocumentCacheError(ValueError):
@@ -38,6 +62,15 @@ class EnrouteKeyPointEvidence:
     latitude: float
     longitude: float
     source: SourceRef
+
+
+@dataclass(frozen=True)
+class _OcrCell:
+    text: str
+    x0: float
+    y0: float
+    x1: float
+    y1: float
 
 
 def _coordinate(
@@ -53,6 +86,115 @@ def _coordinate(
     if degree_value > maximum_degrees or minute_value >= 60 or second_value >= 60:
         raise GeneralDocumentCacheError("invalid OCR DMS coordinate")
     return degree_value + minute_value / 60 + second_value / 3600
+
+
+def _ocr_cells(text: str) -> tuple[_OcrCell, ...]:
+    return tuple(
+        _OcrCell(
+            match["text"].strip(),
+            float(match["x0"]),
+            float(match["y0"]),
+            float(match["x1"]),
+            float(match["y1"]),
+        )
+        for match in _CELL.finditer(text)
+        if match["text"].strip()
+    )
+
+
+def _parse_navaid_coordinate(
+    match: re.Match[str],
+    *,
+    maximum_degrees: int,
+) -> float:
+    return _coordinate(
+        match["degrees"],
+        match["minutes"],
+        match["seconds"],
+        maximum_degrees=maximum_degrees,
+    )
+
+
+def parse_enroute_navaids(
+    text: str,
+    source: SourceRef,
+) -> tuple[EnrouteNavaidEvidence, ...]:
+    """Parse complete 4.1 table rows without trusting damaged OCR name text.
+
+    The local OCR model can preserve table geometry and Latin/numeric cells
+    while replacing Chinese glyphs and degree signs.  This parser therefore
+    requires type, identifier, frequency, and both DMS coordinate cells in
+    their published table columns.  Missing or duplicated cells are rejected
+    by omission instead of being paired across rows.
+    """
+    records: list[EnrouteNavaidEvidence] = []
+    cells = _ocr_cells(text)
+    for latitude_cell in cells:
+        latitude_match = _NAVAID_LATITUDE.fullmatch(latitude_cell.text)
+        if latitude_match is None or not 400 <= latitude_cell.x0 <= 520:
+            continue
+        nearby = tuple(
+            cell
+            for cell in cells
+            if latitude_cell.y0 - 8 <= cell.y0 <= latitude_cell.y0 + 28
+        )
+        longitudes = tuple(
+            cell
+            for cell in nearby
+            if 400 <= cell.x0 <= 540
+            and _NAVAID_LONGITUDE.fullmatch(cell.text) is not None
+        )
+        kinds = tuple(
+            cell
+            for cell in nearby
+            if cell.x0 < 180 and cell.text.upper() in {"VOR/DME", "NDB"}
+        )
+        idents = tuple(
+            cell
+            for cell in nearby
+            if 180 <= cell.x0 <= 250
+            and _NAVAID_IDENT.fullmatch(cell.text.upper()) is not None
+            and cell.text.upper() not in {"VOR", "DME", "NDB"}
+        )
+        frequencies = tuple(
+            cell
+            for cell in nearby
+            if 240 <= cell.x0 <= 350
+            and _NAVAID_FREQUENCY.fullmatch(cell.text) is not None
+        )
+        if len(longitudes) != 1 or len(kinds) != 1 or len(idents) != 1 or len(frequencies) != 1:
+            continue
+        longitude_match = _NAVAID_LONGITUDE.fullmatch(longitudes[0].text)
+        frequency_match = _NAVAID_FREQUENCY.fullmatch(frequencies[0].text)
+        if longitude_match is None or frequency_match is None:
+            continue
+        elevations = tuple(
+            cell
+            for cell in nearby
+            if 530 <= cell.x0 <= 610
+            and _NAVAID_ELEVATION.fullmatch(cell.text) is not None
+        )
+        kind = "VOR" if kinds[0].text.upper() == "VOR/DME" else "NDB"
+        records.append(
+            EnrouteNavaidEvidence(
+                kind=kind,
+                ident=idents[0].text.upper(),
+                frequency=float(frequency_match["value"]),
+                latitude=_parse_navaid_coordinate(
+                    latitude_match,
+                    maximum_degrees=89,
+                ),
+                longitude=_parse_navaid_coordinate(
+                    longitude_match,
+                    maximum_degrees=179,
+                ),
+                elevation_meters=(
+                    float(elevations[0].text) if len(elevations) == 1 else None
+                ),
+                source=source,
+            )
+        )
+    return tuple(records)
 
 
 def parse_enroute_key_points(
@@ -86,8 +228,11 @@ def parse_enroute_key_points(
 def _document_cache(
     root: Path,
     cache_root: Path,
+    *,
+    document: str,
+    cache_directory: str,
 ) -> tuple[Path, Path, dict[str, object]]:
-    document_cache = cache_root / ENROUTE_KEY_POINT_CACHE_DIRECTORY
+    document_cache = cache_root / cache_directory
     manifest_path = document_cache / "manifest.json"
     if not manifest_path.is_file():
         raise GeneralDocumentCacheError(
@@ -103,9 +248,9 @@ def _document_cache(
         raise GeneralDocumentCacheError("OCR cache manifest must be an object")
     if manifest.get("schema_version") != _CACHE_SCHEMA_VERSION:
         raise GeneralDocumentCacheError("unsupported OCR cache manifest schema")
-    if manifest.get("source_file") != ENROUTE_KEY_POINT_DOCUMENT:
+    if manifest.get("source_file") != document:
         raise GeneralDocumentCacheError("OCR cache manifest names an unexpected source PDF")
-    source_pdf = root / ENROUTE_KEY_POINT_DOCUMENT
+    source_pdf = root / document
     if not source_pdf.is_file():
         raise GeneralDocumentCacheError(f"missing source PDF: {source_pdf}")
     source_hash = hashlib.sha256(source_pdf.read_bytes()).hexdigest()
@@ -114,12 +259,19 @@ def _document_cache(
     return document_cache, source_pdf, manifest
 
 
-def load_enroute_key_point_evidence(
+def _load_complete_document(
     root: Path,
     cache_root: Path,
-) -> tuple[tuple[EnrouteKeyPointEvidence, ...], dict[str, object]]:
-    """Load complete 4.4 OCR cache without trusting cache-provided source fields."""
-    document_cache, source_pdf, manifest = _document_cache(root, cache_root)
+    *,
+    document: str,
+    cache_directory: str,
+) -> tuple[tuple[tuple[int, str], ...], Path, str, dict[str, object]]:
+    document_cache, source_pdf, manifest = _document_cache(
+        root,
+        cache_root,
+        document=document,
+        cache_directory=cache_directory,
+    )
     page_count = manifest.get("page_count")
     if not isinstance(page_count, int) or page_count < 1:
         raise GeneralDocumentCacheError("OCR cache manifest has an invalid page count")
@@ -138,13 +290,13 @@ def load_enroute_key_point_evidence(
         )
 
     source_hash = hashlib.sha256(source_pdf.read_bytes()).hexdigest()
-    records: list[EnrouteKeyPointEvidence] = []
+    pages: list[tuple[int, str]] = []
     for page_number in range(1, page_count + 1):
         page_path = document_cache / f"page-{page_number:04d}.json"
         try:
             payload = json.loads(page_path.read_text(encoding="utf-8-sig"))
-            document = payload["data"]["documents"][0]
-            markdown = document["markdown"]
+            ocr_document = payload["data"]["documents"][0]
+            markdown = ocr_document["markdown"]
         except (
             IndexError,
             KeyError,
@@ -158,18 +310,73 @@ def load_enroute_key_point_evidence(
             raise GeneralDocumentCacheError(
                 f"failed OCR cache page: {page_path}"
             )
-        source = SourceRef(
-            ENROUTE_KEY_POINT_DOCUMENT,
-            page=page_number,
-            sha256=source_hash,
+        pages.append((page_number, markdown))
+    return tuple(pages), source_pdf, source_hash, {
+        "available": True,
+        "cache": str(document_cache),
+        "document": document,
+        "source_sha256": source_hash,
+        "pages": page_count,
+    }
+
+
+def load_enroute_key_point_evidence(
+    root: Path,
+    cache_root: Path,
+) -> tuple[tuple[EnrouteKeyPointEvidence, ...], dict[str, object]]:
+    """Load complete 4.4 OCR cache without trusting cache-provided source fields."""
+    pages, _, source_hash, report = _load_complete_document(
+        root,
+        cache_root,
+        document=ENROUTE_KEY_POINT_DOCUMENT,
+        cache_directory=ENROUTE_KEY_POINT_CACHE_DIRECTORY,
+    )
+    records: list[EnrouteKeyPointEvidence] = []
+    for page_number, markdown in pages:
+        records.extend(
+            parse_enroute_key_points(
+                markdown,
+                SourceRef(
+                    ENROUTE_KEY_POINT_DOCUMENT,
+                    page=page_number,
+                    sha256=source_hash,
+                ),
+            )
         )
-        records.extend(parse_enroute_key_points(markdown, source))
 
     return tuple(records), {
         "available": True,
-        "cache": str(document_cache),
         "document": ENROUTE_KEY_POINT_DOCUMENT,
         "source_sha256": source_hash,
-        "pages": page_count,
+        "pages": report["pages"],
+        "parsed_records": len(records),
+    }
+
+
+def load_enroute_navaid_evidence(
+    root: Path,
+    cache_root: Path,
+) -> tuple[tuple[EnrouteNavaidEvidence, ...], dict[str, object]]:
+    """Load complete 4.1 OCR evidence without inventing missing target fields."""
+    pages, _, source_hash, report = _load_complete_document(
+        root,
+        cache_root,
+        document=ENROUTE_NAVAID_DOCUMENT,
+        cache_directory=ENROUTE_NAVAID_CACHE_DIRECTORY,
+    )
+    records: list[EnrouteNavaidEvidence] = []
+    for page_number, markdown in pages:
+        records.extend(
+            parse_enroute_navaids(
+                markdown,
+                SourceRef(
+                    ENROUTE_NAVAID_DOCUMENT,
+                    page=page_number,
+                    sha256=source_hash,
+                ),
+            )
+        )
+    return tuple(records), {
+        **report,
         "parsed_records": len(records),
     }
