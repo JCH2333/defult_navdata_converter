@@ -80,7 +80,7 @@ SHA-256、页数与页面 JSON。它只从 OCR 文本中匹配已经存在于同
 ```powershell
 python -m fenix_default_navdata.cli iap-ocr-recheck `
   --source-root "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
-  --pdf-cache "$env:LOCALAPPDATA\default_navdata_converter\pdf-evidence-cache-2608r1-r34" `
+  --pdf-cache "$env:LOCALAPPDATA\default_navdata_converter\pdf-evidence-cache-2608r1-r35" `
   --canonical-cache "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\ocr-3x-rerun-20260815" `
   --rerun-cache "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\ocr-3x-role-recheck-20260815" `
   --require-agreement `

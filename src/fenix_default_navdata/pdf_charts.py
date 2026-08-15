@@ -22,7 +22,7 @@ from pypdf import PdfReader
 from .model import Ad219Vor, ChartFixCoordinate, ChartHoldingEvidence, ChartRouteFix, ChartStandardProcedureRoute, ChartTerminalLeg, Ils, ProcedureChart, SourceRef
 
 
-_EVIDENCE_CACHE_VERSION = 34
+_EVIDENCE_CACHE_VERSION = 35
 
 
 _PROCEDURE = re.compile(r"\b([A-Z0-9]{2,6}-\d{2}[AD])\b")
@@ -63,6 +63,11 @@ _DATABASE_APPROACH_PROCEDURE = re.compile(
     r"(?P<kind>\u8fdb\u8fd1\s*\u8fc7\u6e21|\u8fdb\u8fd1(?:\u53ca|\u3001)\s*\u590d\u98de|\u8fdb\u8fd1|\u590d\u98de)"
     r"(?:\s*-?\s*(?P<variant>[WXYZ]))?"
     r"(?:\s+(?P<transition>[A-Z][A-Z0-9]{0,5})|\s*VIA\s*(?P<via_transition>[A-Z][A-Z0-9]{0,5}))?\b", re.IGNORECASE
+)
+_AR_APPROACH_PREFIX = re.compile(
+    r"\bRWY\s?(?P<runway>\d{2}[LRC]?)\s*(?:RNP\s+)?AR\s*"
+    r"(?P<variants>[WXYZ](?:\s*[WXYZ])?)\s*",
+    re.IGNORECASE,
 )
 _DATABASE_ADJACENT_APPROACH_TRANSITION = re.compile(
     r"\bRWY\s?(?P<runway>\d{2}[LRC]?)\s*(?:(?:RNP\s+)?ILS\s*)?(?:AR\s+[WXYZ](?:\s+[WXYZ])?\s*)?"
@@ -739,7 +744,16 @@ def extract_terminal_leg_evidence(text: str) -> tuple[ChartTerminalLeg, ...]:
             flush()
             if approach_heading:
                 variant = (approach_heading.groupdict().get("variant") or "").upper()
-                active_label = f"R{approach_heading['runway']}{f'-{variant}' if variant else ''}"
+                ar_prefix = _AR_APPROACH_PREFIX.search(line)
+                ar_variants = (
+                    re.findall(r"[WXYZ]", ar_prefix["variants"].upper())
+                    if ar_prefix is not None
+                    else []
+                )
+                if len(ar_variants) == 1:
+                    active_label = f"R{approach_heading['runway']}-AR-{ar_variants[0]}"
+                else:
+                    active_label = f"R{approach_heading['runway']}{f'-{variant}' if variant else ''}"
                 active_runways = (approach_heading["runway"],)
                 kind = approach_heading.groupdict().get("kind") or "\u8fdb\u8fd1\u8fc7\u6e21"
                 normalized_kind = re.sub(r"\s+", "", kind)
