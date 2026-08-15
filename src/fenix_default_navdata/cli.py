@@ -455,7 +455,6 @@ def main(argv: list[str] | None = None) -> int:
             Path(args.source_root),
             Path(args.canonical_cache),
             Path(args.rerun_cache),
-            allow_partial_rerun=args.allow_partial_rerun,
         )
         if args.output:
             output = Path(args.output).expanduser().resolve()
