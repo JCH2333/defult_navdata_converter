@@ -9,9 +9,15 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pypdfium2
+from PIL import ImageOps
 
 
 _CACHE_SCHEMA_VERSION = 1
+_IMAGE_PROFILES = ("original", "autocontrast-grayscale")
+_DEFAULT_OCR_COMMAND = "ocr-skill"
+_DEFAULT_OCR_BACKEND = "llamacpp"
+_DEFAULT_OCR_MODE = "ocr"
+_DEFAULT_IMAGE_PROFILE = "original"
 
 
 class OcrCacheError(ValueError):
@@ -74,6 +80,7 @@ def _render_page(
     page_number: int,
     destination: Path,
     render_scale: float,
+    image_profile: str,
 ) -> None:
     document = pypdfium2.PdfDocument(str(source_pdf))
     try:
@@ -82,7 +89,13 @@ def _render_page(
             bitmap = page.render(scale=render_scale)
             try:
                 image = bitmap.to_pil()
-                image.save(destination, format="PNG")
+                if image_profile == "original":
+                    prepared = image
+                elif image_profile == "autocontrast-grayscale":
+                    prepared = ImageOps.autocontrast(image.convert("L"))
+                else:
+                    raise OcrCacheError(f"不支持的 OCR 图像预处理: {image_profile}")
+                prepared.save(destination, format="PNG")
             finally:
                 bitmap.close()
         finally:
@@ -193,6 +206,10 @@ def _prepare_manifest(
     source_sha256: str,
     page_count: int,
     render_scale: float,
+    command: str,
+    backend: str,
+    mode: str,
+    image_profile: str,
 ) -> None:
     manifest_path = cache / "manifest.json"
     expected = {
@@ -200,6 +217,12 @@ def _prepare_manifest(
         "source_file": source_file,
         "source_sha256": source_sha256,
         "page_count": page_count,
+    }
+    recognition = {
+        "command": command,
+        "backend": backend,
+        "mode": mode,
+        "image_profile": image_profile,
     }
     if manifest_path.is_file():
         try:
@@ -215,6 +238,29 @@ def _prepare_manifest(
                 raise OcrCacheError(
                     f"OCR 缓存与当前原始 PDF 不匹配: {key}"
                 )
+        if (
+            current.get("renderer") != "pypdfium2"
+            or current.get("render_scale") != render_scale
+        ):
+            raise OcrCacheError(
+                "OCR 缓存的页面渲染设置与本次识别不一致"
+            )
+        current_recognition = current.get("recognition")
+        if current_recognition is None:
+            legacy_recognition = {
+                "command": _DEFAULT_OCR_COMMAND,
+                "backend": _DEFAULT_OCR_BACKEND,
+                "mode": _DEFAULT_OCR_MODE,
+                "image_profile": _DEFAULT_IMAGE_PROFILE,
+            }
+            if recognition != legacy_recognition:
+                raise OcrCacheError(
+                    "旧版 OCR 缓存只能按原始默认识别设置复用"
+                )
+        elif current_recognition != recognition:
+            raise OcrCacheError(
+                "OCR 缓存识别设置与本次重跑不一致"
+            )
         return
     _write_json(
         manifest_path,
@@ -222,6 +268,7 @@ def _prepare_manifest(
             **expected,
             "renderer": "pypdfium2",
             "render_scale": render_scale,
+            "recognition": recognition,
         },
     )
 
@@ -231,14 +278,15 @@ def build_ocr_cache(
     cache: Path,
     *,
     source_root: Path,
-    command: str = "ocr-skill",
-    backend: str = "llamacpp",
-    mode: str = "ocr",
+    command: str = _DEFAULT_OCR_COMMAND,
+    backend: str = _DEFAULT_OCR_BACKEND,
+    mode: str = _DEFAULT_OCR_MODE,
     timeout_seconds: int = 180,
     render_scale: float = 2.0,
     first_page: int | None = None,
     last_page: int | None = None,
     force: bool = False,
+    image_profile: str = _DEFAULT_IMAGE_PROFILE,
 ) -> OcrCacheBuild:
     """Render physical PDF pages, OCR each page, and retain resumable evidence."""
     source_pdf = source_pdf.expanduser().resolve()
@@ -254,6 +302,8 @@ def build_ocr_cache(
         raise OcrCacheError("OCR 超时必须为正整数秒")
     if render_scale <= 0:
         raise OcrCacheError("渲染比例必须大于零")
+    if image_profile not in _IMAGE_PROFILES:
+        raise OcrCacheError(f"不支持的 OCR 图像预处理: {image_profile}")
 
     source_file = _source_file(source_pdf, source_root)
     source_sha256 = _sha256(source_pdf)
@@ -269,6 +319,10 @@ def build_ocr_cache(
         source_sha256=source_sha256,
         page_count=page_count,
         render_scale=render_scale,
+        command=command,
+        backend=backend,
+        mode=mode,
+        image_profile=image_profile,
     )
     image_cache = cache / ".images"
     image_cache.mkdir(exist_ok=True)
@@ -282,7 +336,13 @@ def build_ocr_cache(
             continue
         image_path = image_cache / f"page-{page_number:04d}.png"
         if not image_path.is_file():
-            _render_page(source_pdf, page_number, image_path, render_scale)
+            _render_page(
+                source_pdf,
+                page_number,
+                image_path,
+                render_scale,
+                image_profile,
+            )
         payload = _run_ocr(
             image_path,
             command=command,

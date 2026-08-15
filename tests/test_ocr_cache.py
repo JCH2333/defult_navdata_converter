@@ -38,7 +38,7 @@ def test_build_ocr_cache_is_resumable_and_uses_source_relative_identity(
 
     monkeypatch.setattr(ocr_cache, "_pdf_page_count", lambda _: 3)
 
-    def render(_: Path, page: int, destination: Path, __: float) -> None:
+    def render(_: Path, page: int, destination: Path, __: float, ___: str) -> None:
         rendered.append(page)
         destination.write_bytes(f"png-{page}".encode("ascii"))
 
@@ -78,6 +78,12 @@ def test_build_ocr_cache_is_resumable_and_uses_source_relative_identity(
         "page_count": 3,
         "renderer": "pypdfium2",
         "render_scale": 2.0,
+        "recognition": {
+            "command": "ocr-skill",
+            "backend": "llamacpp",
+            "mode": "ocr",
+            "image_profile": "original",
+        },
     }
 
 
@@ -90,7 +96,7 @@ def test_build_ocr_cache_rejects_stale_or_raw_directory_cache(
     monkeypatch.setattr(
         ocr_cache,
         "_render_page",
-        lambda _, __, destination, ___: destination.write_bytes(b"png"),
+        lambda _, __, destination, ___, ____: destination.write_bytes(b"png"),
     )
     monkeypatch.setattr(ocr_cache, "_run_ocr", lambda *_args, **_kwargs: _payload("ok"))
 
@@ -103,3 +109,57 @@ def test_build_ocr_cache_rejects_stale_or_raw_directory_cache(
 
     with pytest.raises(OcrCacheError, match="不匹配"):
         build_ocr_cache(pdf, cache, source_root=root)
+
+
+def test_build_ocr_cache_rejects_recognition_setting_mismatch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root, pdf = _source(tmp_path)
+    monkeypatch.setattr(ocr_cache, "_pdf_page_count", lambda _: 1)
+    monkeypatch.setattr(
+        ocr_cache,
+        "_render_page",
+        lambda _, __, destination, ___, ____: destination.write_bytes(b"png"),
+    )
+    monkeypatch.setattr(ocr_cache, "_run_ocr", lambda *_args, **_kwargs: _payload("ok"))
+
+    cache = tmp_path / "cache" / "enr-4.1"
+    build_ocr_cache(pdf, cache, source_root=root)
+
+    with pytest.raises(OcrCacheError, match="识别设置"):
+        build_ocr_cache(
+            pdf,
+            cache,
+            source_root=root,
+            image_profile="autocontrast-grayscale",
+        )
+
+
+def test_build_ocr_cache_accepts_legacy_default_recognition_settings(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root, pdf = _source(tmp_path)
+    source_hash = hashlib.sha256(pdf.read_bytes()).hexdigest()
+    cache = tmp_path / "cache" / "enr-4.1"
+    cache.mkdir(parents=True)
+    (cache / "manifest.json").write_text(json.dumps({
+        "schema_version": 1,
+        "source_file": "GeneralDoc/航路_4.1无线电导航设施——航路.pdf",
+        "source_sha256": source_hash,
+        "page_count": 1,
+        "renderer": "pypdfium2",
+        "render_scale": 2.0,
+    }), encoding="utf-8")
+    monkeypatch.setattr(ocr_cache, "_pdf_page_count", lambda _: 1)
+    monkeypatch.setattr(
+        ocr_cache,
+        "_render_page",
+        lambda _, __, destination, ___, ____: destination.write_bytes(b"png"),
+    )
+    monkeypatch.setattr(ocr_cache, "_run_ocr", lambda *_args, **_kwargs: _payload("ok"))
+
+    report = build_ocr_cache(pdf, cache, source_root=root)
+
+    assert report.processed_pages == 1

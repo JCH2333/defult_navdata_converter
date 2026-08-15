@@ -117,6 +117,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ocr_cache.add_argument("--timeout", type=int, default=180, help="每页 OCR 超时秒数")
     ocr_cache.add_argument("--render-scale", type=float, default=2.0, help="PDF 页面渲染比例")
+    ocr_cache.add_argument(
+        "--image-profile",
+        choices=("original", "autocontrast-grayscale"),
+        default="original",
+        help="渲染后的固定图像预处理；不同设置必须使用不同缓存目录",
+    )
     ocr_cache.add_argument("--first-page", type=int, help="可选的起始物理页")
     ocr_cache.add_argument("--last-page", type=int, help="可选的结束物理页")
     ocr_cache.add_argument("--force", action="store_true", help="重新识别已存在的有效页面")
@@ -252,6 +258,7 @@ def main(argv: list[str] | None = None) -> int:
             first_page=args.first_page,
             last_page=args.last_page,
             force=args.force,
+            image_profile=args.image_profile,
         )
         print(json.dumps(report.to_report(), ensure_ascii=False, indent=2))
         return 0
