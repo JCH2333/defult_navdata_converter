@@ -4,10 +4,11 @@
 先使用仓库脚本启动；脚本不会下载模型、修改 424 原始数据或写入候选包。
 
 ```powershell
-.\scripts\start_local_ocr_server.ps1 `
+$runtime = .\scripts\start_local_ocr_server.ps1 `
   -ServerPath "F:\AI项目\ocr\llama.cpp\llama-server.exe" `
   -ModelPath "F:\AI项目\ocr\models\DeepSeek-OCR-2\deepseek-ocr-2-q8_0.gguf" `
-  -MmprojPath "F:\AI项目\ocr\models\DeepSeek-OCR-2\mmproj-deepseek-ocr-2-q8_0.gguf"
+  -MmprojPath "F:\AI项目\ocr\models\DeepSeek-OCR-2\mmproj-deepseek-ocr-2-q8_0.gguf" |
+  ConvertFrom-Json
 ```
 
 默认配置为 `http://127.0.0.1:8090`、8192 上下文、单槽和全部 GPU 层。脚本会：
@@ -17,7 +18,9 @@
 3. 若健康服务已经存在，直接返回 `already_ready`，不会启动第二个进程。
 4. 若端口已被未知进程占用，拒绝覆盖。
 5. 将标准输出和错误日志写入 `%LOCALAPPDATA%\default_navdata_converter\ocr-server`。
-6. 等待 `/health` 成功后返回进程 ID 和日志路径。
+6. 等待 `/health` 成功后返回进程 ID、日志路径和完整运行时标识。
+7. 原子写入 `%LOCALAPPDATA%\default_navdata_converter\ocr-server\runtime-profile.json`，
+   其中包含 llama 构建号、模型与视觉投影 SHA-256、种子和温度。
 
 服务可用后，使用可复现的缓存入口，而不是直接对图页做一次性识别：
 
@@ -28,7 +31,8 @@ python -m fenix_default_navdata.cli iap-ocr-cache `
   --cache-root "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\ocr-3x" `
   --backend llamacpp `
   --mode ocr `
-  --render-scale 3
+  --render-scale 3 `
+  --runtime-profile-file $runtime.runtime_profile_file
 ```
 
 缓存按原始 PDF 相对路径、SHA-256、渲染比例、图像预处理和识别配置隔离。识别输出只用于

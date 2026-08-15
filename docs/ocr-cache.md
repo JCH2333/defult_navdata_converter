@@ -15,16 +15,20 @@ OCR 缓存必须位于 424 原始数据目录之外。源 PDF 指纹、相对路
 本机 DeepSeek-OCR-2 llama.cpp 服务应使用仓库中的启动脚本，并固定种子与温度。例如：
 
 ```powershell
-.\scripts\start_local_ocr_server.ps1 `
+$runtime = .\scripts\start_local_ocr_server.ps1 `
   -ServerPath "F:\AI项目\ocr\llama.cpp\llama-server.exe" `
   -ModelPath "F:\AI项目\ocr\models\DeepSeek-OCR-2\deepseek-ocr-2-q8_0.gguf" `
   -MmprojPath "F:\AI项目\ocr\models\DeepSeek-OCR-2\mmproj-deepseek-ocr-2-q8_0.gguf" `
   -Seed 2608 `
   -Temperature 0 `
-  -Restart
+  -Restart |
+  ConvertFrom-Json
 ```
 
-脚本会拒绝复用模型、种子或温度不一致的本地服务，并输出模型与 `mmproj` 的 SHA-256。将这些值组成稳定的 `--runtime-profile`，新建缓存和后续重跑必须使用完全相同的标识。
+脚本会拒绝复用模型、种子或温度不一致的本地服务，并原子写入包含 llama 构建号、模型与
+`mmproj` SHA-256、种子和温度的运行时描述文件。新建缓存和重跑应传入
+`--runtime-profile-file $runtime.runtime_profile_file`；CLI 会验证描述中的完整标识，避免人工
+拼写的简写标识混入严格共识。
 
 服务健康后，先验证单页：
 
@@ -33,7 +37,7 @@ python -m fenix_default_navdata.cli ocr-cache `
   --pdf "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608\GeneralDoc\航路_4.1无线电导航设施——航路.pdf" `
   --source-root "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
   --cache "$env:LOCALAPPDATA\default_navdata_converter\general-doc-ocr-cache-2608r1\enr-4.1-navaids" `
-  --runtime-profile "deepseek-ocr-2-q8_0-seed2608-temp0" `
+  --runtime-profile-file $runtime.runtime_profile_file `
   --first-page 1 --last-page 1
 ```
 

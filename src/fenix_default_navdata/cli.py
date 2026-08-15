@@ -18,6 +18,7 @@ from .iap_ocr_consensus import (
 )
 from .iap_ocr_recheck import audit_iap_ocr_role_recheck, write_iap_ocr_role_recheck
 from .ocr_cache import build_ocr_cache
+from .ocr_runtime import resolve_runtime_profile
 from .official_index import build_official_navaid_index
 from .package_reader import DEFAULT_READER_TIMEOUT_SECONDS, read_package
 from .paths import detect_paths
@@ -153,6 +154,10 @@ def build_parser() -> argparse.ArgumentParser:
         default="",
         help="可选的本地 OCR 运行时标识；不同标识不得复用同一缓存",
     )
+    ocr_cache.add_argument(
+        "--runtime-profile-file",
+        help="由本地 OCR 服务启动脚本生成的可验证运行时描述 JSON",
+    )
     ocr_cache.add_argument("--first-page", type=int, help="可选的起始物理页")
     ocr_cache.add_argument("--last-page", type=int, help="可选的结束物理页")
     ocr_cache.add_argument("--force", action="store_true", help="重新识别已存在的有效页面")
@@ -206,6 +211,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--runtime-profile",
         default="",
         help="可选的本地 OCR 运行时标识；不同标识不得复用同一缓存",
+    )
+    iap_ocr_cache.add_argument(
+        "--runtime-profile-file",
+        help="由本地 OCR 服务启动脚本生成的可验证运行时描述 JSON",
     )
     iap_ocr_cache.add_argument("--limit", type=int, help="只处理排序后的前 N 个源 PDF")
     iap_ocr_cache.add_argument("--force", action="store_true", help="重新识别已有有效页面")
@@ -437,7 +446,10 @@ def main(argv: list[str] | None = None) -> int:
             last_page=args.last_page,
             force=args.force,
             image_profile=args.image_profile,
-            runtime_profile=args.runtime_profile,
+            runtime_profile=resolve_runtime_profile(
+                args.runtime_profile,
+                _path(args.runtime_profile_file),
+            ),
             engine_timeout_seconds=args.engine_timeout,
             retries=args.retries,
         )
@@ -455,7 +467,10 @@ def main(argv: list[str] | None = None) -> int:
             timeout_seconds=args.timeout,
             render_scale=args.render_scale,
             image_profile=args.image_profile,
-            runtime_profile=args.runtime_profile,
+            runtime_profile=resolve_runtime_profile(
+                args.runtime_profile,
+                _path(args.runtime_profile_file),
+            ),
             engine_timeout_seconds=args.engine_timeout,
             force=args.force,
             limit=args.limit,

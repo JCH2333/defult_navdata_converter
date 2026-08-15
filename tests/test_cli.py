@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from fenix_default_navdata import cli
@@ -33,3 +34,44 @@ def test_ocr_audit_compares_available_rerun_pages_without_an_extra_flag(monkeypa
         "canonical_cache": Path("canonical"),
         "rerun_cache": Path("rerun"),
     }
+
+
+def test_iap_ocr_cache_reads_verified_runtime_profile_file(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    model_sha256 = "a" * 64
+    mmproj_sha256 = "b" * 64
+    profile = (
+        "deepseek-ocr-2-q8_0-llama-b10331-seed2608-temp0-"
+        f"{model_sha256}-{mmproj_sha256}"
+    )
+    descriptor = tmp_path / "runtime-profile.json"
+    descriptor.write_text(json.dumps({
+        "schema_version": 1,
+        "runtime_profile": profile,
+        "llama_build": "b10331",
+        "model_name": "deepseek-ocr-2-q8_0",
+        "model_sha256": model_sha256,
+        "mmproj_sha256": mmproj_sha256,
+        "seed": 2608,
+        "temperature": 0,
+    }), encoding="utf-8")
+    received: dict[str, object] = {}
+
+    def build(*_args, **kwargs) -> dict[str, object]:
+        received.update(kwargs)
+        return {"processed_pages": 0}
+
+    monkeypatch.setattr(cli, "build_iap_ocr_cache", build)
+
+    result = cli.main([
+        "iap-ocr-cache",
+        "--source-root", "raw",
+        "--cache-root", "cache",
+        "--runtime-profile-file", str(descriptor),
+        "--dry-run",
+    ])
+
+    assert result == 0
+    assert received["runtime_profile"] == profile

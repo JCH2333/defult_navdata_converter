@@ -89,6 +89,74 @@ function Test-OcrRuntime {
     )
 }
 
+function Get-OcrRuntimeDescriptor {
+    param(
+        [string]$Server,
+        [string]$Model,
+        [string]$Mmproj,
+        [int]$RuntimeSeed,
+        [double]$RuntimeTemperature,
+        [Uri]$Endpoint
+    )
+
+    $versionStart = [System.Diagnostics.ProcessStartInfo]::new()
+    $versionStart.FileName = $Server
+    $versionStart.Arguments = "--version"
+    $versionStart.UseShellExecute = $false
+    $versionStart.CreateNoWindow = $true
+    $versionStart.RedirectStandardOutput = $true
+    $versionStart.RedirectStandardError = $true
+    $versionProcess = [System.Diagnostics.Process]::Start($versionStart)
+    $versionText = (
+        $versionProcess.StandardOutput.ReadToEnd() +
+        [Environment]::NewLine +
+        $versionProcess.StandardError.ReadToEnd()
+    )
+    $versionProcess.WaitForExit()
+    $match = [regex]::Match($versionText, "version:\s*(?<build>\d+)")
+    if (-not $match.Success) {
+        throw "无法读取 llama-server 构建号"
+    }
+    $build = "b$($match.Groups["build"].Value)"
+    $modelName = [System.IO.Path]::GetFileNameWithoutExtension($Model).ToLowerInvariant()
+    $temperatureText = $RuntimeTemperature.ToString(
+        "0.################",
+        [System.Globalization.CultureInfo]::InvariantCulture
+    )
+    $modelSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $Model).Hash.ToLowerInvariant()
+    $mmprojSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $Mmproj).Hash.ToLowerInvariant()
+    $runtimeProfile = (
+        "$modelName-llama-$build-seed$RuntimeSeed-temp$temperatureText-" +
+        "$modelSha256-$mmprojSha256"
+    )
+    return [PSCustomObject]@{
+        schema_version = 1
+        runtime_profile = $runtimeProfile
+        llama_build = $build
+        model_name = $modelName
+        model_path = $Model
+        model_sha256 = $modelSha256
+        mmproj_path = $Mmproj
+        mmproj_sha256 = $mmprojSha256
+        seed = $RuntimeSeed
+        temperature = $RuntimeTemperature
+        url = $Endpoint.GetLeftPart([UriPartial]::Authority)
+    }
+}
+
+function Write-OcrRuntimeDescriptor {
+    param(
+        [string]$Root,
+        [object]$Descriptor
+    )
+
+    $path = Join-Path $Root "runtime-profile.json"
+    $temporary = "$path.tmp"
+    $Descriptor | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $temporary -Encoding utf8
+    Move-Item -LiteralPath $temporary -Destination $path -Force
+    return $path
+}
+
 foreach ($path in @($ServerPath, $ModelPath, $MmprojPath)) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
         throw "找不到 OCR 运行时或模型文件: $path"
@@ -103,10 +171,22 @@ if ($endpoint.Scheme -ne "http" -or $endpoint.Host -notin @("127.0.0.1", "localh
 $resolvedServer = (Resolve-Path -LiteralPath $ServerPath).Path
 $resolvedModel = (Resolve-Path -LiteralPath $ModelPath).Path
 $resolvedMmproj = (Resolve-Path -LiteralPath $MmprojPath).Path
+New-Item -ItemType Directory -Force -Path $LogRoot | Out-Null
+$runtimeDescriptor = Get-OcrRuntimeDescriptor `
+    -Server $resolvedServer `
+    -Model $resolvedModel `
+    -Mmproj $resolvedMmproj `
+    -RuntimeSeed $Seed `
+    -RuntimeTemperature $Temperature `
+    -Endpoint $endpoint
+$runtimeDescriptorPath = Join-Path $LogRoot "runtime-profile.json"
 $listener = Get-NetTCPConnection -LocalPort $endpoint.Port -State Listen -ErrorAction SilentlyContinue |
     Select-Object -First 1
 if (Test-OcrHealth $endpoint) {
     if (Test-OcrRuntime $endpoint $resolvedModel $Seed $Temperature) {
+        $runtimeDescriptorPath = Write-OcrRuntimeDescriptor `
+            -Root $LogRoot `
+            -Descriptor $runtimeDescriptor
         [PSCustomObject]@{
             status = "already_ready"
             url = $endpoint.GetLeftPart([UriPartial]::Authority)
@@ -114,6 +194,10 @@ if (Test-OcrHealth $endpoint) {
             seed = $Seed
             temperature = $Temperature
             model = $resolvedModel
+            runtime_profile = $runtimeDescriptor.runtime_profile
+            runtime_profile_file = $runtimeDescriptorPath
+            model_sha256 = $runtimeDescriptor.model_sha256
+            mmproj_sha256 = $runtimeDescriptor.mmproj_sha256
         } | ConvertTo-Json -Depth 3
         exit 0
     }
@@ -146,7 +230,6 @@ if ($listener) {
     throw "端口 $($endpoint.Port) 已被进程 $($listener[0].OwningProcess) 监听，但 /health 未通过；拒绝覆盖未知服务"
 }
 
-New-Item -ItemType Directory -Force -Path $LogRoot | Out-Null
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $stdout = Join-Path $LogRoot "llama-server-$timestamp.stdout.log"
 $stderr = Join-Path $LogRoot "llama-server-$timestamp.stderr.log"
@@ -179,6 +262,9 @@ while ((Get-Date) -lt $deadline) {
             Stop-Process -Id $process.Id -ErrorAction SilentlyContinue
             throw "OCR 服务已响应，但模型、随机种子或温度与请求不一致。日志: $stderr"
         }
+        $runtimeDescriptorPath = Write-OcrRuntimeDescriptor `
+            -Root $LogRoot `
+            -Descriptor $runtimeDescriptor
         [PSCustomObject]@{
             status = "ready"
             url = $endpoint.GetLeftPart([UriPartial]::Authority)
@@ -187,8 +273,10 @@ while ((Get-Date) -lt $deadline) {
             seed = $Seed
             temperature = $Temperature
             model = $resolvedModel
-            model_sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $resolvedModel).Hash.ToLowerInvariant()
-            mmproj_sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $resolvedMmproj).Hash.ToLowerInvariant()
+            runtime_profile = $runtimeDescriptor.runtime_profile
+            runtime_profile_file = $runtimeDescriptorPath
+            model_sha256 = $runtimeDescriptor.model_sha256
+            mmproj_sha256 = $runtimeDescriptor.mmproj_sha256
             stdout = $stdout
             stderr = $stderr
         } | ConvertTo-Json -Depth 3
