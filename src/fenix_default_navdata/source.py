@@ -12,7 +12,15 @@ from pypinyin import lazy_pinyin
 import pymupdf
 
 from .iap_coverage import analyze_iap_coverage
-from .general_docs import ENROUTE_NAVAID_CACHE_DIRECTORY, ENROUTE_NAVAID_DOCUMENT, GeneralDocumentCacheError, load_enroute_key_point_evidence, load_enroute_navaid_evidence
+from .general_docs import (
+    ENROUTE_KEY_POINT_CACHE_DIRECTORY,
+    ENROUTE_KEY_POINT_DOCUMENT,
+    ENROUTE_NAVAID_CACHE_DIRECTORY,
+    ENROUTE_NAVAID_DOCUMENT,
+    GeneralDocumentCacheError,
+    load_enroute_key_point_evidence,
+    load_enroute_navaid_evidence,
+)
 from .model import CN_PREFIXES, Airport, AirwayLeg, Holding, NavModel, Navaid, ProcedureSegment, RejectedProcedure, RejectedRecord, Runway, SourceRef, TerminalWaypoint, Waypoint, is_china_icao
 from .pdf_charts import (
     _is_instrument_approach_index_row,
@@ -686,6 +694,8 @@ def _load_general_document_waypoints(
     cache_root: Path | None,
     fir_polygons: tuple[_FirPolygon, ...],
     airway_endpoint_countries: dict[tuple[str, str, float, float], set[str]],
+    *,
+    cache_directory: str = ENROUTE_KEY_POINT_CACHE_DIRECTORY,
 ) -> None:
     """Add only OCR points whose region and logical identity are unambiguous."""
     if cache_root is None:
@@ -700,7 +710,11 @@ def _load_general_document_waypoints(
         }
         return
 
-    evidence, report = load_enroute_key_point_evidence(model.root, cache_root)
+    evidence, report = load_enroute_key_point_evidence(
+        model.root,
+        cache_root,
+        cache_directory=cache_directory,
+    )
     counts: Counter[str] = Counter()
     by_identity: dict[tuple[str, str], list[Waypoint]] = {}
     for point in model.waypoints:
@@ -942,11 +956,130 @@ def audit_enroute_navaid_ocr_source(
     }
 
 
+def _key_point_ocr_identity(item: object) -> tuple[object, ...]:
+    return (
+        getattr(item, "ident"),
+        getattr(item, "latitude"),
+        getattr(item, "longitude"),
+        getattr(getattr(item, "source"), "page"),
+    )
+
+
+def _key_point_fir_counts(
+    evidence: tuple[object, ...],
+    polygons: tuple[_FirPolygon, ...],
+) -> dict[str, int]:
+    return dict(sorted(Counter(
+        _match_source_fir_region(
+            polygons,
+            getattr(item, "latitude"),
+            getattr(item, "longitude"),
+        ).status
+        for item in evidence
+    ).items()))
+
+
+def audit_enroute_key_point_ocr_rerun(
+    root: Path,
+    canonical_cache: Path,
+    rerun_cache: Path,
+) -> dict[str, object]:
+    """Compare complete 4.4 OCR caches without promoting either cache."""
+    root = root.expanduser().resolve()
+    canonical_cache = _validate_pdf_cache(root, canonical_cache)
+    rerun_cache = _validate_pdf_cache(root, rerun_cache)
+    canonical, canonical_report = load_enroute_key_point_evidence(
+        root,
+        canonical_cache.parent,
+        cache_directory=canonical_cache.name,
+    )
+    rerun, rerun_report = load_enroute_key_point_evidence(
+        root,
+        rerun_cache.parent,
+        cache_directory=rerun_cache.name,
+    )
+    if canonical_report["source_sha256"] != rerun_report["source_sha256"]:
+        raise GeneralDocumentCacheError("OCR rerun cache source PDF SHA-256 does not match")
+    if canonical_report["pages"] != rerun_report["pages"]:
+        raise GeneralDocumentCacheError("OCR rerun cache page count does not match")
+
+    canonical_keys = {_key_point_ocr_identity(item) for item in canonical}
+    rerun_keys = {_key_point_ocr_identity(item) for item in rerun}
+    common = canonical_keys & rerun_keys
+    canonical_only = tuple(
+        item for item in canonical if _key_point_ocr_identity(item) not in rerun_keys
+    )
+    rerun_only = tuple(
+        item for item in rerun if _key_point_ocr_identity(item) not in canonical_keys
+    )
+    differences = [
+        {
+            "page": page,
+            "canonical_only": sum(
+                1
+                for item in canonical_only
+                if item.source.page == page
+            ),
+            "rerun_only": sum(
+                1
+                for item in rerun_only
+                if item.source.page == page
+            ),
+        }
+        for page in range(1, int(canonical_report["pages"]) + 1)
+        if any(
+            item.source.page == page
+            for item in canonical_only + rerun_only
+        )
+    ]
+    polygons, vertices = _load_fir_polygons(root)
+    union_count = len(canonical_keys | rerun_keys)
+    return {
+        "diagnostic": "enroute-key-point-ocr-rerun-audit-v1",
+        "evidence_only": True,
+        "document": ENROUTE_KEY_POINT_DOCUMENT,
+        "source_sha256": canonical_report["source_sha256"],
+        "canonical": {
+            **canonical_report,
+            "parsed_records": len(canonical),
+        },
+        "rerun": {
+            **rerun_report,
+            "parsed_records": len(rerun),
+        },
+        "comparison": {
+            "consistent": not canonical_only and not rerun_only,
+            "agreement_ratio": round(len(common) / union_count, 6) if union_count else 1.0,
+            "projection_allowed": False,
+            "reason": (
+                "OCR rerun is diagnostic evidence only; it must not replace the "
+                "canonical cache or enter a candidate build without a separate "
+                "source-backed acceptance decision"
+            ),
+        },
+        "records": {
+            "agreed": len(common),
+            "canonical_only": len(canonical_only),
+            "rerun_only": len(rerun_only),
+            "differences_by_page": differences,
+        },
+        "source_fir_region_resolution": {
+            "polygons_loaded": len(polygons),
+            "vertices_loaded": vertices,
+            "canonical": _key_point_fir_counts(canonical, polygons),
+            "rerun": _key_point_fir_counts(rerun, polygons),
+            "canonical_only": _key_point_fir_counts(canonical_only, polygons),
+            "rerun_only": _key_point_fir_counts(rerun_only, polygons),
+        },
+    }
+
+
 def load_naip(
     root: Path,
     pdf_cache: Path | None = None,
     *,
     general_doc_cache: Path | None = None,
+    general_doc_key_point_cache_directory: str = ENROUTE_KEY_POINT_CACHE_DIRECTORY,
     include_terminal_documents: bool = True,
 ) -> NavModel:
     """Load only structured data; PDFs are inspected separately and never guessed."""
@@ -1096,6 +1229,7 @@ def load_naip(
         general_doc_cache,
         fir_polygons,
         airway_endpoint_countries,
+        cache_directory=general_doc_key_point_cache_directory,
     )
     model.source_fir_region_resolution = SourceFirRegionResolution(
         polygons_loaded=len(fir_polygons),

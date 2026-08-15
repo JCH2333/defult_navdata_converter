@@ -15,6 +15,7 @@ from fenix_default_navdata.general_docs import (
     parse_enroute_key_points,
 )
 from fenix_default_navdata.model import SourceRef
+from fenix_default_navdata.source import audit_enroute_key_point_ocr_rerun
 
 
 def _payload(markdown: str) -> dict[str, object]:
@@ -29,11 +30,16 @@ def _payload(markdown: str) -> dict[str, object]:
     }
 
 
-def _cache(root: Path, pages: dict[int, str]) -> Path:
+def _cache(
+    root: Path,
+    pages: dict[int, str],
+    *,
+    directory: str = "enr-4.4",
+) -> Path:
     source = root / ENROUTE_KEY_POINT_DOCUMENT
-    source.parent.mkdir(parents=True)
+    source.parent.mkdir(parents=True, exist_ok=True)
     source.write_bytes(b"source-pdf")
-    cache = root.parent / "ocr-cache" / "enr-4.4"
+    cache = root.parent / "ocr-cache" / directory
     cache.mkdir(parents=True)
     manifest = {
         "schema_version": 1,
@@ -106,6 +112,43 @@ def test_parse_enroute_key_points_accepts_adjacent_two_column_ocr_cells() -> Non
     ] == [
         ("ABTUD", pytest.approx(27.964722), pytest.approx(112.136944), source),
         ("ABVIL", pytest.approx(29.641667), pytest.approx(119.315000), source),
+    ]
+
+
+def test_parse_enroute_key_points_accepts_local_ocr_dms_separator_damage() -> None:
+    source = SourceRef(ENROUTE_KEY_POINT_DOCUMENT, page=1, sha256="source")
+
+    records = parse_enroute_key_points(
+        "ABTUBN36锟斤拷00'02\"E117锟斤拷22'04\"A593W568",
+        source,
+    )
+
+    assert [
+        (record.ident, record.latitude, record.longitude, record.source)
+        for record in records
+    ] == [
+        ("ABTUB", pytest.approx(36.000556), pytest.approx(117.367778), source),
+    ]
+
+
+def test_parse_enroute_key_points_uses_geometry_for_local_ocr_cells() -> None:
+    source = SourceRef(ENROUTE_KEY_POINT_DOCUMENT, page=1, sha256="source")
+
+    records = parse_enroute_key_points(
+        "\n".join((
+            "ABTUB[[102, 150, 162, 168]]",
+            "N36\ufffd\ufffd00'02\"[[216, 140, 298, 158]]",
+            "E117\ufffd\ufffd22'04\"[[216, 159, 298, 174]]",
+            "A593W568[[362, 150, 449, 168]]",
+        )),
+        source,
+    )
+
+    assert [
+        (record.ident, record.latitude, record.longitude, record.source)
+        for record in records
+    ] == [
+        ("ABTUB", pytest.approx(36.000556), pytest.approx(117.367778), source),
     ]
 
 
@@ -185,6 +228,70 @@ def test_load_enroute_key_point_evidence_rejects_stale_source_hash(
 
     with pytest.raises(GeneralDocumentCacheError, match="SHA-256"):
         load_enroute_key_point_evidence(root, cache)
+
+
+def test_load_enroute_key_point_evidence_accepts_explicit_cache_directory(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "raw"
+    cache = _cache(
+        root,
+        {1: "ABTUDN27\u00b057\u203253\u2033E112\u00b008\u203213\u2033"},
+        directory="enr-4.4-rerun",
+    )
+
+    records, report = load_enroute_key_point_evidence(
+        root,
+        cache,
+        cache_directory="enr-4.4-rerun",
+    )
+
+    assert [(record.ident, record.source.page) for record in records] == [
+        ("ABTUD", 1),
+    ]
+    assert report["parsed_records"] == 1
+
+
+def test_audit_enroute_key_point_ocr_rerun_reports_cache_agreement(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "raw"
+    cache_root = _cache(
+        root,
+        {1: "ABTUDN27\u00b057\u203253\u2033E112\u00b008\u203213\u2033"},
+    )
+    _cache(
+        root,
+        {1: "ABTUDN27\u00b057\u203253\u2033E112\u00b008\u203213\u2033"},
+        directory="enr-4.4-rerun",
+    )
+
+    report = audit_enroute_key_point_ocr_rerun(
+        root,
+        cache_root / "enr-4.4",
+        cache_root / "enr-4.4-rerun",
+    )
+
+    assert report["diagnostic"] == "enroute-key-point-ocr-rerun-audit-v1"
+    assert report["evidence_only"] is True
+    assert report["comparison"] == {
+        "consistent": True,
+        "agreement_ratio": 1.0,
+        "projection_allowed": False,
+        "reason": (
+            "OCR rerun is diagnostic evidence only; it must not replace the "
+            "canonical cache or enter a candidate build without a separate "
+            "source-backed acceptance decision"
+        ),
+    }
+    assert report["records"] == {
+        "agreed": 1,
+        "canonical_only": 0,
+        "rerun_only": 0,
+        "differences_by_page": [],
+    }
+    assert report["source_fir_region_resolution"]["polygons_loaded"] == 0
+    assert report["source_fir_region_resolution"]["rerun"] == {"outside": 1}
 
 
 def test_load_enroute_navaid_evidence_requires_complete_hashed_cache(

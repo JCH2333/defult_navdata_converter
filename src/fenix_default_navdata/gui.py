@@ -37,6 +37,7 @@ class App:
         self.jepp = tk.StringVar()
         self.baseline = tk.StringVar()
         self.general_doc_cache = tk.StringVar()
+        self.general_doc_keypoint_cache_directory = tk.StringVar(value="enr-4.4")
         self.reference = tk.StringVar()
         self.output = tk.StringVar(value=str(Path.cwd() / "output" / "candidate-2608-default"))
         self.target = tk.StringVar()
@@ -64,6 +65,7 @@ class App:
             ("官方 nav-jepp", self.jepp, "dir"),
             ("官方设施索引", self.baseline, "file"),
             ("航路 OCR 缓存", self.general_doc_cache, "dir"),
+            ("重要点 OCR 子目录", self.general_doc_keypoint_cache_directory, "text"),
             ("参考成品（只读）", self.reference, "dir"),
             ("隔离候选输出", self.output, "dir"),
             ("Community 目标", self.target, "dir"),
@@ -71,15 +73,22 @@ class App:
         for row, (label, variable, kind) in enumerate(rows):
             tk.Label(paths, text=label, bg=PANEL, fg=MUTED, width=18, anchor=tk.E, font=("Microsoft YaHei UI", 9)).grid(row=row, column=0, sticky=tk.E, pady=5)
             tk.Entry(paths, textvariable=variable, bg="#0b1118", fg=TEXT, insertbackground=TEXT, relief=tk.FLAT, highlightthickness=1, highlightbackground="#314657").grid(row=row, column=1, sticky=tk.EW, padx=10, pady=5)
-            tk.Button(
-                paths,
-                text="浏览",
-                command=lambda v=variable, k=kind: self._browse(v, k),
-                bg="#203447",
-                fg=TEXT,
-                relief=tk.FLAT,
-                padx=12,
-            ).grid(row=row, column=2, pady=5)
+            if kind == "text":
+                tk.Label(paths, text="", bg=PANEL, width=7).grid(
+                    row=row,
+                    column=2,
+                    pady=5,
+                )
+            else:
+                tk.Button(
+                    paths,
+                    text="浏览",
+                    command=lambda v=variable, k=kind: self._browse(v, k),
+                    bg="#203447",
+                    fg=TEXT,
+                    relief=tk.FLAT,
+                    padx=12,
+                ).grid(row=row, column=2, pady=5)
         paths.columnconfigure(1, weight=1)
         actions = tk.Frame(self.root, bg=BG, padx=26, pady=4)
         actions.pack(fill=tk.X)
@@ -199,6 +208,10 @@ class App:
                 Path(self.general_doc_cache.get())
                 if Path(self.general_doc_cache.get()).is_dir()
                 else None
+            ),
+            general_doc_key_point_cache_directory=(
+                self.general_doc_keypoint_cache_directory.get().strip()
+                or "enr-4.4"
             ),
         ))
 

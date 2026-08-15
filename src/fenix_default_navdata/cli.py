@@ -16,7 +16,11 @@ from .package_reader import DEFAULT_READER_TIMEOUT_SECONDS, read_package
 from .paths import detect_paths
 from .profile import DEFAULT_CYCLE
 from .semantic_diff import SUPPORTED_TABLES, semantic_diff, write_semantic_diff
-from .source import audit_enroute_navaid_ocr_source, load_naip
+from .source import (
+    audit_enroute_key_point_ocr_rerun,
+    audit_enroute_navaid_ocr_source,
+    load_naip,
+)
 from .source_gap import audit_source_gaps, load_semantic_diff, write_source_gap_audit
 from .validation import validate_candidate
 
@@ -50,6 +54,11 @@ def build_parser() -> argparse.ArgumentParser:
     build.add_argument(
         "--general-doc-cache",
         help="航路 GeneralDoc 的 OCR 缓存目录；必须含已校验 SHA-256 的完整清单",
+    )
+    build.add_argument(
+        "--general-doc-keypoint-cache-directory",
+        default="enr-4.4",
+        help="GeneralDoc 4.4 重要点 OCR 缓存子目录；默认 enr-4.4",
     )
     build.add_argument(
         "--baseline-db",
@@ -143,6 +152,19 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="重跑记录与主缓存不完全一致时返回非零，便于自动化门禁",
     )
+    keypoint_ocr_audit = sub.add_parser(
+        "keypoint-ocr-audit",
+        help="比较同一 4.4 原始 PDF 的两份完整 OCR 缓存，并统计源 FIR 投影安全性",
+    )
+    keypoint_ocr_audit.add_argument("--source-root", required=True, help="2608 原始数据根目录")
+    keypoint_ocr_audit.add_argument("--canonical-cache", required=True, help="完整的主 OCR 缓存目录")
+    keypoint_ocr_audit.add_argument("--rerun-cache", required=True, help="同源完整 OCR 重跑缓存目录")
+    keypoint_ocr_audit.add_argument("--output", help="可选的本地审计 JSON 输出路径")
+    keypoint_ocr_audit.add_argument(
+        "--require-agreement",
+        action="store_true",
+        help="重跑记录与主缓存不完全一致时返回非零，便于自动化门禁",
+    )
     ocr_source_audit = sub.add_parser(
         "ocr-source-audit",
         help="逐条审计一个完整 OCR 缓存是否能唯一回链到直接 424 导航台",
@@ -207,6 +229,7 @@ def main(argv: list[str] | None = None) -> int:
             compiler=_path(args.bglcomp),
             pdf_cache=_path(args.pdf_cache),
             general_doc_cache=_path(args.general_doc_cache),
+            general_doc_key_point_cache_directory=args.general_doc_keypoint_cache_directory,
             baseline_db=_path(args.baseline_db),
             baseline_tolerance_nm=args.baseline_tolerance_nm,
         )
@@ -276,6 +299,18 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "ocr-audit":
         report = audit_enroute_navaid_ocr_rerun(
+            Path(args.source_root),
+            Path(args.canonical_cache),
+            Path(args.rerun_cache),
+        )
+        if args.output:
+            output = Path(args.output).expanduser().resolve()
+            write_enroute_navaid_ocr_rerun_audit(output, report)
+            report["output"] = str(output)
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0 if report["comparison"]["consistent"] or not args.require_agreement else 1
+    if args.command == "keypoint-ocr-audit":
+        report = audit_enroute_key_point_ocr_rerun(
             Path(args.source_root),
             Path(args.canonical_cache),
             Path(args.rerun_cache),

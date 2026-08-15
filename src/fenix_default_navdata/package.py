@@ -190,6 +190,7 @@ def build_candidate(
     reference: Path | None = None,
     pdf_cache: Path | None = None,
     general_doc_cache: Path | None = None,
+    general_doc_key_point_cache_directory: str = "enr-4.4",
     baseline_db: Path | None = None,
     baseline_tolerance_nm: float = 0.25,
 ) -> dict[str, object]:
@@ -212,6 +213,7 @@ def build_candidate(
         raw_root,
         pdf_cache=pdf_cache,
         general_doc_cache=general_doc_cache,
+        general_doc_key_point_cache_directory=general_doc_key_point_cache_directory,
         include_terminal_documents=True,
     )
     navaid_diff: NavaidDiff | None = None
@@ -286,6 +288,7 @@ def build_candidate(
         "source": {"raw_424": str(raw_root)},
         "pdf_cache": str(pdf_cache),
         "general_doc_cache": str(general_doc_cache) if general_doc_cache else None,
+        "general_doc_key_point_cache_directory": general_doc_key_point_cache_directory,
         "official_baseline": {
             "base": str(nav_base),
             "jepp": str(nav_jepp),

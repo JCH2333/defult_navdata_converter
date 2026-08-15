@@ -24,12 +24,22 @@ ENROUTE_NAVAID_CACHE_DIRECTORY = "enr-4.1-navaids"
 _CACHE_SCHEMA_VERSION = 1
 _POINT = re.compile(
     r"(?P<ident>[A-Z0-9]{2,5})\s*"
-    r"N\s*(?P<latitude_degrees>\d{2})\s*[\N{DEGREE SIGN}\N{MASCULINE ORDINAL INDICATOR}]\s*"
-    r"(?P<latitude_minutes>\d{2})\s*[\N{PRIME}\N{APOSTROPHE}]\s*"
-    r"(?P<latitude_seconds>\d{2})\s*[\N{DOUBLE PRIME}\N{QUOTATION MARK}]\s*"
-    r"E\s*(?P<longitude_degrees>\d{3})\s*[\N{DEGREE SIGN}\N{MASCULINE ORDINAL INDICATOR}]\s*"
-    r"(?P<longitude_minutes>\d{2})\s*[\N{PRIME}\N{APOSTROPHE}]\s*"
-    r"(?P<longitude_seconds>\d{2})\s*[\N{DOUBLE PRIME}\N{QUOTATION MARK}]"
+    r"N\s*(?P<latitude_degrees>\d{2})\s*[^\dA-Z]{1,8}\s*"
+    r"(?P<latitude_minutes>\d{2})\s*[^\dA-Z]{1,8}\s*"
+    r"(?P<latitude_seconds>\d{2})\s*[^\dA-Z]{1,8}\s*"
+    r"E\s*(?P<longitude_degrees>\d{3})\s*[^\dA-Z]{1,8}\s*"
+    r"(?P<longitude_minutes>\d{2})\s*[^\dA-Z]{1,8}\s*"
+    r"(?P<longitude_seconds>\d{2})"
+)
+_KEY_POINT_LATITUDE = re.compile(
+    r"^N\s*(?P<degrees>\d{2})\s*[^\dA-Z]{1,8}\s*"
+    r"(?P<minutes>\d{2})\s*[^\dA-Z]{1,8}\s*"
+    r"(?P<seconds>\d{2})\s*[^\dA-Z]*$"
+)
+_KEY_POINT_LONGITUDE = re.compile(
+    r"^E\s*(?P<degrees>\d{3})\s*[^\dA-Z]{1,8}\s*"
+    r"(?P<minutes>\d{2})\s*[^\dA-Z]{1,8}\s*"
+    r"(?P<seconds>\d{2})\s*[^\dA-Z]*$"
 )
 _CELL = re.compile(
     r"(?P<text>.*?)\[\["
@@ -202,26 +212,71 @@ def parse_enroute_key_points(
     source: SourceRef,
 ) -> tuple[EnrouteKeyPointEvidence, ...]:
     """Parse explicitly printed 4.4 name-code coordinate table records."""
-    records = []
+    records: list[EnrouteKeyPointEvidence] = []
+    identities: set[tuple[str, float, float]] = set()
     for match in _POINT.finditer(text.upper()):
-        records.append(
-            EnrouteKeyPointEvidence(
-                ident=match["ident"],
-                latitude=_coordinate(
-                    match["latitude_degrees"],
-                    match["latitude_minutes"],
-                    match["latitude_seconds"],
-                    maximum_degrees=89,
-                ),
-                longitude=_coordinate(
-                    match["longitude_degrees"],
-                    match["longitude_minutes"],
-                    match["longitude_seconds"],
-                    maximum_degrees=179,
-                ),
-                source=source,
-            )
+        item = EnrouteKeyPointEvidence(
+            ident=match["ident"],
+            latitude=_coordinate(
+                match["latitude_degrees"],
+                match["latitude_minutes"],
+                match["latitude_seconds"],
+                maximum_degrees=89,
+            ),
+            longitude=_coordinate(
+                match["longitude_degrees"],
+                match["longitude_minutes"],
+                match["longitude_seconds"],
+                maximum_degrees=179,
+            ),
+            source=source,
         )
+        records.append(item)
+        identities.add((item.ident, item.latitude, item.longitude))
+
+    cells = _ocr_cells(text.upper())
+    for latitude_cell in cells:
+        latitude_match = _KEY_POINT_LATITUDE.fullmatch(latitude_cell.text)
+        if latitude_match is None:
+            continue
+        nearby = tuple(
+            cell
+            for cell in cells
+            if latitude_cell.y0 - 12 <= cell.y0 <= latitude_cell.y0 + 34
+        )
+        idents = tuple(
+            cell
+            for cell in nearby
+            if latitude_cell.x0 - 180 <= cell.x0 <= latitude_cell.x0 - 35
+            and _NAVAID_IDENT.fullmatch(cell.text) is not None
+        )
+        longitudes = tuple(
+            cell
+            for cell in nearby
+            if abs(cell.x0 - latitude_cell.x0) <= 45
+            and _KEY_POINT_LONGITUDE.fullmatch(cell.text) is not None
+        )
+        if len(idents) != 1 or len(longitudes) != 1:
+            continue
+        longitude_match = _KEY_POINT_LONGITUDE.fullmatch(longitudes[0].text)
+        if longitude_match is None:
+            continue
+        item = EnrouteKeyPointEvidence(
+            ident=idents[0].text,
+            latitude=_parse_navaid_coordinate(
+                latitude_match,
+                maximum_degrees=89,
+            ),
+            longitude=_parse_navaid_coordinate(
+                longitude_match,
+                maximum_degrees=179,
+            ),
+            source=source,
+        )
+        identity = (item.ident, item.latitude, item.longitude)
+        if identity not in identities:
+            records.append(item)
+            identities.add(identity)
     return tuple(records)
 
 
@@ -547,13 +602,15 @@ def write_enroute_navaid_ocr_rerun_audit(
 def load_enroute_key_point_evidence(
     root: Path,
     cache_root: Path,
+    *,
+    cache_directory: str = ENROUTE_KEY_POINT_CACHE_DIRECTORY,
 ) -> tuple[tuple[EnrouteKeyPointEvidence, ...], dict[str, object]]:
     """Load complete 4.4 OCR cache without trusting cache-provided source fields."""
     pages, _, source_hash, report = _load_complete_document(
         root,
         cache_root,
         document=ENROUTE_KEY_POINT_DOCUMENT,
-        cache_directory=ENROUTE_KEY_POINT_CACHE_DIRECTORY,
+        cache_directory=cache_directory,
     )
     records: list[EnrouteKeyPointEvidence] = []
     for page_number, markdown in pages:
