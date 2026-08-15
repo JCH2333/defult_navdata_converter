@@ -36,8 +36,13 @@ def test_run_ocr_retries_transient_failure(monkeypatch: pytest.MonkeyPatch, tmp_
         SimpleNamespace(returncode=1, stdout="", stderr="connection refused"),
         SimpleNamespace(returncode=0, stdout=json.dumps(_payload("ok")), stderr=""),
     ])
+    environments: list[dict[str, str]] = []
 
-    monkeypatch.setattr(ocr_cache.subprocess, "run", lambda *_args, **_kwargs: next(responses))
+    def run(*_args, **kwargs):
+        environments.append(kwargs["env"])
+        return next(responses)
+
+    monkeypatch.setattr(ocr_cache.subprocess, "run", run)
     monkeypatch.setattr(ocr_cache.time, "sleep", lambda _: None)
 
     payload = ocr_cache._run_ocr(
@@ -50,6 +55,10 @@ def test_run_ocr_retries_transient_failure(monkeypatch: pytest.MonkeyPatch, tmp_
     )
 
     assert payload == _payload("ok")
+    assert [environment["PYTHONIOENCODING"] for environment in environments] == [
+        "utf-8",
+        "utf-8",
+    ]
 
 
 def test_build_ocr_cache_is_resumable_and_uses_source_relative_identity(

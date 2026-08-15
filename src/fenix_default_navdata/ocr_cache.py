@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 import time
 from dataclasses import dataclass
@@ -158,6 +159,7 @@ def _run_ocr(
                 check=False,
                 encoding="utf-8",
                 errors="replace",
+                env={**os.environ, "PYTHONIOENCODING": "utf-8"},
                 timeout=timeout_seconds,
             )
         except FileNotFoundError as error:
