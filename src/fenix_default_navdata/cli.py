@@ -139,6 +139,11 @@ def build_parser() -> argparse.ArgumentParser:
         default="original",
         help="渲染后的固定图像预处理；不同设置必须使用不同缓存目录",
     )
+    ocr_cache.add_argument(
+        "--runtime-profile",
+        default="",
+        help="可选的本地 OCR 运行时标识；不同标识不得复用同一缓存",
+    )
     ocr_cache.add_argument("--first-page", type=int, help="可选的起始物理页")
     ocr_cache.add_argument("--last-page", type=int, help="可选的结束物理页")
     ocr_cache.add_argument("--force", action="store_true", help="重新识别已存在的有效页面")
@@ -182,6 +187,11 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("original", "autocontrast-grayscale"),
         default="original",
         help="渲染后的固定图像预处理；不同设置必须使用不同缓存根目录",
+    )
+    iap_ocr_cache.add_argument(
+        "--runtime-profile",
+        default="",
+        help="可选的本地 OCR 运行时标识；不同标识不得复用同一缓存",
     )
     iap_ocr_cache.add_argument("--limit", type=int, help="只处理排序后的前 N 个源 PDF")
     iap_ocr_cache.add_argument("--force", action="store_true", help="重新识别已有有效页面")
@@ -388,6 +398,7 @@ def main(argv: list[str] | None = None) -> int:
             last_page=args.last_page,
             force=args.force,
             image_profile=args.image_profile,
+            runtime_profile=args.runtime_profile,
             retries=args.retries,
         )
         print(json.dumps(report.to_report(), ensure_ascii=False, indent=2))
@@ -404,6 +415,7 @@ def main(argv: list[str] | None = None) -> int:
             timeout_seconds=args.timeout,
             render_scale=args.render_scale,
             image_profile=args.image_profile,
+            runtime_profile=args.runtime_profile,
             force=args.force,
             limit=args.limit,
             retries=args.retries,

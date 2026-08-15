@@ -168,6 +168,7 @@ def build_iap_ocr_cache(
     timeout_seconds: int = 240,
     render_scale: float = 3.0,
     image_profile: str = "original",
+    runtime_profile: str = "",
     force: bool = False,
     limit: int | None = None,
     retries: int = 2,
@@ -219,6 +220,7 @@ def build_iap_ocr_cache(
                 render_scale=render_scale,
                 force=force,
                 image_profile=image_profile,
+                runtime_profile=runtime_profile,
                 retries=retries,
             )
         except OcrCacheError as error:

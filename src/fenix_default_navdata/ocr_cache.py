@@ -221,6 +221,7 @@ def _prepare_manifest(
     backend: str,
     mode: str,
     image_profile: str,
+    runtime_profile: str,
 ) -> None:
     manifest_path = cache / "manifest.json"
     expected = {
@@ -235,6 +236,8 @@ def _prepare_manifest(
         "mode": mode,
         "image_profile": image_profile,
     }
+    if runtime_profile:
+        recognition["runtime_profile"] = runtime_profile
     if manifest_path.is_file():
         try:
             current = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
@@ -298,6 +301,7 @@ def build_ocr_cache(
     last_page: int | None = None,
     force: bool = False,
     image_profile: str = _DEFAULT_IMAGE_PROFILE,
+    runtime_profile: str = "",
     retries: int = 0,
 ) -> OcrCacheBuild:
     """Render physical PDF pages, OCR each page, and retain resumable evidence."""
@@ -318,6 +322,8 @@ def build_ocr_cache(
         raise OcrCacheError("渲染比例必须大于零")
     if image_profile not in _IMAGE_PROFILES:
         raise OcrCacheError(f"不支持的 OCR 图像预处理: {image_profile}")
+    if runtime_profile and not runtime_profile.strip():
+        raise OcrCacheError("OCR 运行时标识不能只包含空白字符")
 
     source_file = _source_file(source_pdf, source_root)
     source_sha256 = _sha256(source_pdf)
@@ -337,6 +343,7 @@ def build_ocr_cache(
         backend=backend,
         mode=mode,
         image_profile=image_profile,
+        runtime_profile=runtime_profile,
     )
     image_cache = cache / ".images"
     image_cache.mkdir(exist_ok=True)

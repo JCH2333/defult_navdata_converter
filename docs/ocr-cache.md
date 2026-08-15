@@ -12,13 +12,28 @@
 
 OCR 缓存必须位于 424 原始数据目录之外。源 PDF 指纹、相对路径或页数变化时，命令会拒绝复用旧缓存；不能把上一 AIRAC 的 OCR 结果混入新周期。
 
-本机 DeepSeek-OCR-2 llama.cpp 服务健康后，先验证单页：
+本机 DeepSeek-OCR-2 llama.cpp 服务应使用仓库中的启动脚本，并固定种子与温度。例如：
+
+```powershell
+.\scripts\start_local_ocr_server.ps1 `
+  -ServerPath "F:\AI项目\ocr\llama.cpp\llama-server.exe" `
+  -ModelPath "F:\AI项目\ocr\models\DeepSeek-OCR-2\deepseek-ocr-2-q8_0.gguf" `
+  -MmprojPath "F:\AI项目\ocr\models\DeepSeek-OCR-2\mmproj-deepseek-ocr-2-q8_0.gguf" `
+  -Seed 2608 `
+  -Temperature 0 `
+  -Restart
+```
+
+脚本会拒绝复用模型、种子或温度不一致的本地服务，并输出模型与 `mmproj` 的 SHA-256。将这些值组成稳定的 `--runtime-profile`，新建缓存和后续重跑必须使用完全相同的标识。
+
+服务健康后，先验证单页：
 
 ```powershell
 python -m fenix_default_navdata.cli ocr-cache `
   --pdf "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608\GeneralDoc\航路_4.1无线电导航设施——航路.pdf" `
   --source-root "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
   --cache "$env:LOCALAPPDATA\default_navdata_converter\general-doc-ocr-cache-2608r1\enr-4.1-navaids" `
+  --runtime-profile "deepseek-ocr-2-q8_0-seed2608-temp0" `
   --first-page 1 --last-page 1
 ```
 

@@ -169,6 +169,41 @@ def test_build_ocr_cache_rejects_recognition_setting_mismatch(
         )
 
 
+def test_build_ocr_cache_records_and_gates_runtime_profile(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root, pdf = _source(tmp_path)
+    monkeypatch.setattr(ocr_cache, "_pdf_page_count", lambda _: 1)
+    monkeypatch.setattr(
+        ocr_cache,
+        "_render_page",
+        lambda _, __, destination, ___, ____: destination.write_bytes(b"png"),
+    )
+    monkeypatch.setattr(ocr_cache, "_run_ocr", lambda *_args, **_kwargs: _payload("ok"))
+
+    cache = tmp_path / "cache" / "enr-4.1"
+    build_ocr_cache(
+        pdf,
+        cache,
+        source_root=root,
+        runtime_profile="deepseek-ocr-2-q8_0-seed2608-temp0",
+    )
+
+    manifest = json.loads((cache / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["recognition"]["runtime_profile"] == (
+        "deepseek-ocr-2-q8_0-seed2608-temp0"
+    )
+
+    with pytest.raises(OcrCacheError, match="识别设置"):
+        build_ocr_cache(
+            pdf,
+            cache,
+            source_root=root,
+            runtime_profile="deepseek-ocr-2-q8_0-seed2609-temp0",
+        )
+
+
 def test_build_ocr_cache_accepts_legacy_default_recognition_settings(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

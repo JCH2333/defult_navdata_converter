@@ -180,6 +180,7 @@ def test_cli_iap_ocr_cache_passes_evidence_only_options(monkeypatch) -> None:
         "timeout_seconds": 240,
         "render_scale": 3.0,
         "image_profile": "original",
+        "runtime_profile": "",
         "force": False,
         "limit": 3,
         "retries": 2,
