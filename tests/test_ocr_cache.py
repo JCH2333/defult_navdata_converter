@@ -1,6 +1,7 @@
 import hashlib
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -26,6 +27,29 @@ def _source(tmp_path: Path) -> tuple[Path, Path]:
     pdf.parent.mkdir(parents=True)
     pdf.write_bytes(b"pdf-source")
     return root, pdf
+
+
+def test_run_ocr_retries_transient_failure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    image = tmp_path / "page-0001.png"
+    image.write_bytes(b"png")
+    responses = iter([
+        SimpleNamespace(returncode=1, stdout="", stderr="connection refused"),
+        SimpleNamespace(returncode=0, stdout=json.dumps(_payload("ok")), stderr=""),
+    ])
+
+    monkeypatch.setattr(ocr_cache.subprocess, "run", lambda *_args, **_kwargs: next(responses))
+    monkeypatch.setattr(ocr_cache.time, "sleep", lambda _: None)
+
+    payload = ocr_cache._run_ocr(
+        image=image,
+        command="ocr-skill",
+        backend="llamacpp",
+        mode="markdown",
+        timeout_seconds=1,
+        retries=1,
+    )
+
+    assert payload == _payload("ok")
 
 
 def test_build_ocr_cache_is_resumable_and_uses_source_relative_identity(

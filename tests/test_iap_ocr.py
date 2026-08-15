@@ -118,9 +118,11 @@ def test_build_iap_ocr_cache_builds_deterministic_source_hashed_jobs(
         else [],
     )
     builds: list[tuple[Path, Path]] = []
+    retries: list[int] = []
 
     def fake_build(source_pdf: Path, cache: Path, **kwargs) -> OcrCacheBuild:
         builds.append((source_pdf, cache))
+        retries.append(kwargs["retries"])
         return OcrCacheBuild(
             cache=cache,
             source_file=source_pdf.relative_to(root).as_posix(),
@@ -141,6 +143,7 @@ def test_build_iap_ocr_cache_builds_deterministic_source_hashed_jobs(
     assert report["complete_pdfs"] == 2
     assert all(cache_root in cache.parents for _, cache in builds)
     assert all(len(cache.name) == 16 for _, cache in builds)
+    assert retries == [2, 2]
 
 
 def test_cli_iap_ocr_cache_passes_evidence_only_options(monkeypatch) -> None:
@@ -179,5 +182,6 @@ def test_cli_iap_ocr_cache_passes_evidence_only_options(monkeypatch) -> None:
         "image_profile": "original",
         "force": False,
         "limit": 3,
+        "retries": 2,
         "dry_run": True,
     }

@@ -140,6 +140,12 @@ def build_parser() -> argparse.ArgumentParser:
     ocr_cache.add_argument("--first-page", type=int, help="可选的起始物理页")
     ocr_cache.add_argument("--last-page", type=int, help="可选的结束物理页")
     ocr_cache.add_argument("--force", action="store_true", help="重新识别已存在的有效页面")
+    ocr_cache.add_argument(
+        "--retries",
+        type=int,
+        default=0,
+        help="单页 OCR 失败后的重试次数（默认 0）",
+    )
     iap_ocr_cache = sub.add_parser(
         "iap-ocr-cache",
         help="对阻塞 IAP 图页匹配的源 PDF 建立本地 OCR 证据缓存，不修改投影",
@@ -177,6 +183,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     iap_ocr_cache.add_argument("--limit", type=int, help="只处理排序后的前 N 个源 PDF")
     iap_ocr_cache.add_argument("--force", action="store_true", help="重新识别已有有效页面")
+    iap_ocr_cache.add_argument(
+        "--retries",
+        type=int,
+        default=2,
+        help="单页 OCR 失败后的重试次数（默认 2）",
+    )
     iap_ocr_cache.add_argument("--dry-run", action="store_true", help="只输出计划，不调用 OCR")
     ocr_audit = sub.add_parser(
         "ocr-audit",
@@ -338,6 +350,7 @@ def main(argv: list[str] | None = None) -> int:
             last_page=args.last_page,
             force=args.force,
             image_profile=args.image_profile,
+            retries=args.retries,
         )
         print(json.dumps(report.to_report(), ensure_ascii=False, indent=2))
         return 0
@@ -355,6 +368,7 @@ def main(argv: list[str] | None = None) -> int:
             image_profile=args.image_profile,
             force=args.force,
             limit=args.limit,
+            retries=args.retries,
             dry_run=args.dry_run,
         )
         print(json.dumps(report, ensure_ascii=False, indent=2))

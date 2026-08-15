@@ -170,6 +170,7 @@ def build_iap_ocr_cache(
     image_profile: str = "original",
     force: bool = False,
     limit: int | None = None,
+    retries: int = 2,
     dry_run: bool = False,
 ) -> dict[str, object]:
     """Build source-hashed OCR caches for the IAP chart-evidence gap only."""
@@ -218,6 +219,7 @@ def build_iap_ocr_cache(
                 render_scale=render_scale,
                 force=force,
                 image_profile=image_profile,
+                retries=retries,
             )
         except OcrCacheError as error:
             raise IapOcrError(f"IAP OCR 失败: {job.source_file}: {error}") from error

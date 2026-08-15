@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -134,7 +135,10 @@ def _run_ocr(
     backend: str,
     mode: str,
     timeout_seconds: int,
+    retries: int = 0,
 ) -> dict[str, object]:
+    if retries < 0:
+        raise OcrCacheError("OCR 重试次数不能为负数")
     arguments = [
         command,
         "extract",
@@ -145,35 +149,40 @@ def _run_ocr(
         mode,
         "--json",
     ]
-    try:
-        result = subprocess.run(
-            arguments,
-            capture_output=True,
-            check=False,
-            encoding="utf-8",
-            errors="replace",
-            timeout=timeout_seconds,
-        )
-    except FileNotFoundError as error:
-        raise OcrCacheError(f"找不到 OCR 命令: {command}") from error
-    except subprocess.TimeoutExpired as error:
-        raise OcrCacheError(
-            f"OCR 单页超时（{timeout_seconds} 秒）: {image.name}"
-        ) from error
-    if result.returncode != 0:
-        detail = (result.stderr or result.stdout).strip().replace("\r", " ")
-        raise OcrCacheError(
-            f"OCR 失败（退出代码 {result.returncode}）: {image.name}; {detail[:400]}"
-        )
-    try:
-        payload = json.loads(result.stdout)
-    except json.JSONDecodeError as error:
-        raise OcrCacheError(
-            f"OCR 未返回 JSON: {image.name}"
-        ) from error
-    if not isinstance(payload, dict) or _read_payload(payload) is None:
-        raise OcrCacheError(f"OCR 页面无有效 Markdown: {image.name}")
-    return payload
+    last_error = ""
+    for attempt in range(retries + 1):
+        try:
+            result = subprocess.run(
+                arguments,
+                capture_output=True,
+                check=False,
+                encoding="utf-8",
+                errors="replace",
+                timeout=timeout_seconds,
+            )
+        except FileNotFoundError as error:
+            raise OcrCacheError(f"找不到 OCR 命令: {command}") from error
+        except subprocess.TimeoutExpired:
+            last_error = f"OCR 单页超时（{timeout_seconds} 秒）: {image.name}"
+        else:
+            if result.returncode != 0:
+                detail = (result.stderr or result.stdout).strip().replace("\r", " ")
+                last_error = (
+                    f"OCR 失败（退出代码 {result.returncode}）: "
+                    f"{image.name}; {detail[:400]}"
+                )
+            else:
+                try:
+                    payload = json.loads(result.stdout)
+                except json.JSONDecodeError:
+                    last_error = f"OCR 未返回 JSON: {image.name}"
+                else:
+                    if isinstance(payload, dict) and _read_payload(payload) is not None:
+                        return payload
+                    last_error = f"OCR 页面无有效 Markdown: {image.name}"
+        if attempt < retries:
+            time.sleep(2 ** attempt)
+    raise OcrCacheError(f"{last_error}（已尝试 {retries + 1} 次）")
 
 
 def _write_json(path: Path, payload: dict[str, object]) -> None:
@@ -287,6 +296,7 @@ def build_ocr_cache(
     last_page: int | None = None,
     force: bool = False,
     image_profile: str = _DEFAULT_IMAGE_PROFILE,
+    retries: int = 0,
 ) -> OcrCacheBuild:
     """Render physical PDF pages, OCR each page, and retain resumable evidence."""
     source_pdf = source_pdf.expanduser().resolve()
@@ -300,6 +310,8 @@ def build_ocr_cache(
         raise OcrCacheError("OCR 缓存不得写入 424 原始数据目录")
     if timeout_seconds < 1:
         raise OcrCacheError("OCR 超时必须为正整数秒")
+    if retries < 0:
+        raise OcrCacheError("OCR 重试次数不能为负数")
     if render_scale <= 0:
         raise OcrCacheError("渲染比例必须大于零")
     if image_profile not in _IMAGE_PROFILES:
@@ -349,6 +361,7 @@ def build_ocr_cache(
             backend=backend,
             mode=mode,
             timeout_seconds=timeout_seconds,
+            retries=retries,
         )
         _write_json(page_path, payload)
         processed += 1
