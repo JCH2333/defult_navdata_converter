@@ -87,9 +87,82 @@ def test_source_gap_audit_classifies_only_against_424_model(tmp_path: Path) -> N
         "same_source_airway_and_sequence": 1,
         "source_airway_name_with_different_sequence": 1,
     }
+    assert result["candidate_airway_projection"] == {"available": False}
     serialized = json.dumps(result)
     assert "DIRECT" not in serialized
     assert "A1" not in serialized
+
+
+def test_source_gap_audit_distinguishes_projected_source_pairs(
+    tmp_path: Path,
+) -> None:
+    model = _model(tmp_path)
+    model.airway_legs[0] = AirwayLeg(
+        "A1",
+        1,
+        "ENDPOINT",
+        "TAIL",
+        model.airway_legs[0].source,
+        start_country="ZU",
+        end_country="ZB",
+    )
+    model.airway_legs[1] = AirwayLeg(
+        "A1",
+        2,
+        "TAIL",
+        "UNRESOLVED",
+        model.airway_legs[1].source,
+        start_country="ZB",
+        end_country="",
+    )
+    candidate_xml = tmp_path / "candidate.xml"
+    candidate_xml.write_text(
+        "\n".join((
+            "<FSData>",
+            '  <Waypoint waypointRegion="ZU" waypointIdent="ENDPOINT">',
+            '    <Route name="A1"><Next waypointRegion="ZB" waypointIdent="TAIL" /></Route>',
+            "  </Waypoint>",
+            "</FSData>",
+        )),
+        encoding="utf-8",
+    )
+    report = _semantic_report(
+        waypoint_samples=[],
+        airway_samples=[
+            {"logical_key": {
+                "airway_name": "A1", "airway_type": "B", "route_type": None,
+                "airway_fragment_no": 2, "sequence_no": 1,
+            }},
+            {"logical_key": {
+                "airway_name": "A1", "airway_type": "B", "route_type": None,
+                "airway_fragment_no": 2, "sequence_no": 2,
+            }},
+            {"logical_key": {
+                "airway_name": "A1", "airway_type": "B", "route_type": None,
+                "airway_fragment_no": 2, "sequence_no": 9,
+            }},
+            {"logical_key": {
+                "airway_name": "A2", "airway_type": "B", "route_type": None,
+                "airway_fragment_no": 1, "sequence_no": 1,
+            }},
+        ],
+    )
+
+    result = audit_source_gaps(model, report, candidate_xml=candidate_xml)
+
+    assert result["airway_source_categories"] == {
+        "absent_from_rte_seg": 1,
+        "same_source_airway_and_sequence_candidate_pair_projected": 1,
+        "same_source_airway_and_sequence_unprojected_missing_endpoint_region": 1,
+        "source_airway_name_with_different_sequence": 1,
+    }
+    assert result["candidate_airway_projection"] == {
+        "available": True,
+        "candidate_xml": str(candidate_xml.resolve()),
+        "route_links": 1,
+        "unique_route_pairs": 1,
+        "skipped": {},
+    }
 
 
 def test_source_gap_audit_rejects_truncated_reference_gap_samples(tmp_path: Path) -> None:
@@ -215,5 +288,5 @@ def test_cli_writes_source_gap_audit_without_loading_terminal_documents(
 
     assert exit_code == 0
     assert observed["include_terminal_documents"] is False
-    assert json.loads(output.read_text(encoding="utf-8"))["diagnostic"] == "source-gap-audit-v3"
+    assert json.loads(output.read_text(encoding="utf-8"))["diagnostic"] == "source-gap-audit-v4"
     assert json.loads(capsys.readouterr().out)["read_only"] is True

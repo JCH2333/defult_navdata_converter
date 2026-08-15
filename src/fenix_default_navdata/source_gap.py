@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import xml.etree.ElementTree as ET
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Mapping
@@ -114,23 +115,113 @@ def _waypoint_categories(
 def _airway_categories(
     model: NavModel,
     keys: tuple[dict[str, object], ...],
+    candidate_pairs: set[tuple[str, str, str, str, str]] | None = None,
 ) -> dict[str, int]:
-    source_sequences = {
-        (_normalized(leg.airway), int(leg.sequence))
-        for leg in model.airway_legs
-    }
+    source_sequences: dict[
+        tuple[str, int],
+        set[tuple[str, str, str, str, str]],
+    ] = defaultdict(set)
+    for leg in model.airway_legs:
+        source_sequences[(_normalized(leg.airway), int(leg.sequence))].add((
+            _normalized(leg.airway),
+            _normalized(leg.start_country),
+            _normalized(leg.start_ident),
+            _normalized(leg.end_country),
+            _normalized(leg.end_ident),
+        ))
     source_airways = {_normalized(leg.airway) for leg in model.airway_legs}
     categories: Counter[str] = Counter()
     for key in keys:
         airway = _normalized(key["airway_name"])
         sequence = int(key["sequence_no"])
-        if (airway, sequence) in source_sequences:
-            categories["same_source_airway_and_sequence"] += 1
+        source_pairs = source_sequences.get((airway, sequence))
+        if source_pairs:
+            if candidate_pairs is None:
+                categories["same_source_airway_and_sequence"] += 1
+            elif source_pairs & candidate_pairs:
+                categories[
+                    "same_source_airway_and_sequence_candidate_pair_projected"
+                ] += 1
+            elif any(not pair[1] or not pair[3] for pair in source_pairs):
+                categories[
+                    "same_source_airway_and_sequence_unprojected_missing_endpoint_region"
+                ] += 1
+            else:
+                categories[
+                    "same_source_airway_and_sequence_unprojected_from_candidate_xml"
+                ] += 1
         elif airway in source_airways:
             categories["source_airway_name_with_different_sequence"] += 1
         else:
             categories["absent_from_rte_seg"] += 1
     return dict(sorted(categories.items()))
+
+
+def _xml_tag(element: ET.Element) -> str:
+    return element.tag.rsplit("}", 1)[-1]
+
+
+def _candidate_airway_pairs(
+    candidate_xml: Path,
+) -> tuple[set[tuple[str, str, str, str, str]], dict[str, object]]:
+    """Read only candidate Route edges and keep no reference-side identities."""
+    candidate_xml = candidate_xml.expanduser().resolve()
+    if not candidate_xml.is_file():
+        raise SourceGapAuditError(f"candidate XML does not exist: {candidate_xml}")
+    try:
+        root = ET.parse(candidate_xml).getroot()
+    except ET.ParseError as error:
+        raise SourceGapAuditError(
+            f"candidate XML is not well formed: {candidate_xml}"
+        ) from error
+
+    pairs: set[tuple[str, str, str, str, str]] = set()
+    skipped: Counter[str] = Counter()
+    route_links = 0
+    for facility in root.iter():
+        parent_ident = _normalized(facility.get("waypointIdent"))
+        parent_region = _normalized(facility.get("waypointRegion"))
+        if not parent_ident or not parent_region:
+            continue
+        for route in facility:
+            if _xml_tag(route) != "Route":
+                continue
+            airway = _normalized(route.get("name"))
+            if not airway:
+                skipped["route_without_name"] += 1
+                continue
+            for link in route:
+                link_tag = _xml_tag(link)
+                if link_tag not in {"Next", "Previous"}:
+                    continue
+                adjacent_ident = _normalized(link.get("waypointIdent"))
+                adjacent_region = _normalized(link.get("waypointRegion"))
+                if not adjacent_ident or not adjacent_region:
+                    skipped["link_without_complete_identity"] += 1
+                    continue
+                route_links += 1
+                if link_tag == "Next":
+                    pairs.add((
+                        airway,
+                        parent_region,
+                        parent_ident,
+                        adjacent_region,
+                        adjacent_ident,
+                    ))
+                else:
+                    pairs.add((
+                        airway,
+                        adjacent_region,
+                        adjacent_ident,
+                        parent_region,
+                        parent_ident,
+                    ))
+    return pairs, {
+        "candidate_xml": str(candidate_xml),
+        "route_links": route_links,
+        "unique_route_pairs": len(pairs),
+        "skipped": dict(sorted(skipped.items())),
+    }
 
 
 def _flight_airline_point_evidence(
@@ -240,6 +331,7 @@ def _route_holding_evidence(model: NavModel) -> dict[str, object]:
 def audit_source_gaps(
     model: NavModel,
     semantic_report: Mapping[str, object],
+    candidate_xml: Path | None = None,
 ) -> dict[str, object]:
     """Classify redacted reference gaps using only normalized 424 records.
 
@@ -252,13 +344,22 @@ def audit_source_gaps(
     )
     airway_keys = _reference_only_keys(semantic_report, "airway", _AIRWAY_FIELDS)
     waypoint_categories = _waypoint_categories(model, waypoint_keys)
-    airway_categories = _airway_categories(model, airway_keys)
+    candidate_pairs: set[tuple[str, str, str, str, str]] | None = None
+    candidate_projection: dict[str, object] = {"available": False}
+    if candidate_xml is not None:
+        candidate_pairs, projection_report = _candidate_airway_pairs(candidate_xml)
+        candidate_projection = {"available": True, **projection_report}
+    airway_categories = _airway_categories(
+        model,
+        airway_keys,
+        candidate_pairs=candidate_pairs,
+    )
     if sum(waypoint_categories.values()) != len(waypoint_keys):
         raise SourceGapAuditError("航点来源分类未覆盖全部参考缺失逻辑身份")
     if sum(airway_categories.values()) != len(airway_keys):
         raise SourceGapAuditError("航路来源分类未覆盖全部参考缺失逻辑身份")
     return {
-        "diagnostic": "source-gap-audit-v3",
+        "diagnostic": "source-gap-audit-v4",
         "read_only": True,
         "reference_values_redacted": True,
         "source": {
@@ -269,6 +370,7 @@ def audit_source_gaps(
         "waypoint_source_categories": waypoint_categories,
         "airway_reference_only_total": len(airway_keys),
         "airway_source_categories": airway_categories,
+        "candidate_airway_projection": candidate_projection,
         "flight_airline_point_evidence": _flight_airline_point_evidence(
             model, airway_keys
         ),
