@@ -194,6 +194,17 @@ class AirwayLeg:
 
 
 @dataclass(frozen=True)
+class EnrouteAirwayMinimumAltitudeEvidence:
+    """One printed enroute-table minimum altitude tied to adjacent fixes."""
+
+    airway: str
+    start_ident: str
+    end_ident: str
+    minimum_altitude_meters: int
+    source: SourceRef
+
+
+@dataclass(frozen=True)
 class RejectedProcedure:
     airport: str
     chart: str
@@ -353,6 +364,7 @@ class NavModel:
     ilses: list[Ils] = field(default_factory=list)
     ad219_vors: list[Ad219Vor] = field(default_factory=list)
     enroute_navaid_evidence: list[EnrouteNavaidEvidence] = field(default_factory=list)
+    enroute_airway_minimum_altitude_evidence: list[EnrouteAirwayMinimumAltitudeEvidence] = field(default_factory=list)
     waypoints: list[Waypoint] = field(default_factory=list)
     terminal_waypoints: list[TerminalWaypoint] = field(default_factory=list)
     airway_legs: list[AirwayLeg] = field(default_factory=list)

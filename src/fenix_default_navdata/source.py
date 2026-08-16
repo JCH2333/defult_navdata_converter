@@ -18,6 +18,7 @@ from .general_docs import (
     ENROUTE_NAVAID_CACHE_DIRECTORY,
     ENROUTE_NAVAID_DOCUMENT,
     GeneralDocumentCacheError,
+    load_enroute_airway_minimum_altitude_evidence,
     load_enroute_key_point_evidence,
     load_enroute_navaid_evidence,
     load_selected_enroute_key_point_evidence,
@@ -921,6 +922,128 @@ def _load_general_document_navaids(
     }
 
 
+def _load_general_document_airway_minimum_altitudes(
+    model: NavModel,
+    cache_root: Path | None,
+    *,
+    cache_directories: tuple[str, ...],
+) -> None:
+    """Project only uniquely matched 3.2 table altitudes onto direct 424 legs."""
+    if not cache_directories:
+        model.general_document_evidence = {
+            **model.general_document_evidence,
+            "airway_minimum_altitudes": {
+                "available": False,
+                "reason": "no 3.2 airway OCR cache directories were requested",
+            },
+        }
+        return
+    if cache_root is None:
+        raise ValueError("3.2 airway OCR caches require a general document cache root")
+
+    by_identity: dict[tuple[str, str, str], list[int]] = {}
+    for index, leg in enumerate(model.airway_legs):
+        by_identity.setdefault((
+            leg.airway.upper(),
+            leg.start_ident.upper(),
+            leg.end_ident.upper(),
+        ), []).append(index)
+
+    evidence_by_identity: dict[tuple[str, str, str], list[object]] = {}
+    document_reports: list[dict[str, object]] = []
+    counts: Counter[str] = Counter()
+    for cache_directory in cache_directories:
+        try:
+            evidence, report = load_enroute_airway_minimum_altitude_evidence(
+                model.root,
+                cache_root,
+                cache_directory=cache_directory,
+            )
+        except GeneralDocumentCacheError as error:
+            document_reports.append({
+                "cache_directory": cache_directory,
+                "available": False,
+                "reason": str(error),
+            })
+            counts["unavailable_cache"] += 1
+            continue
+        document_reports.append({
+            **report,
+            "cache_directory": cache_directory,
+        })
+        for item in evidence:
+            model.enroute_airway_minimum_altitude_evidence.append(item)
+            evidence_by_identity.setdefault((
+                item.airway.upper(),
+                item.start_ident.upper(),
+                item.end_ident.upper(),
+            ), []).append(item)
+
+    for identity, evidence in sorted(evidence_by_identity.items()):
+        altitudes = {item.minimum_altitude_meters for item in evidence}
+        if len(altitudes) != 1:
+            counts["conflicting_evidence"] += 1
+            for item in evidence:
+                model.rejected_records.append(RejectedRecord(
+                    "general-document-airway-minimum-altitude",
+                    ":".join(identity),
+                    "3.2 airway table gives conflicting minimum altitudes",
+                    item.source,
+                ))
+            continue
+        matches = by_identity.get(identity, [])
+        if len(matches) == 0:
+            counts["direct_424_leg_missing"] += 1
+            continue
+        if len(matches) != 1:
+            counts["direct_424_leg_ambiguous"] += 1
+            for item in evidence:
+                model.rejected_records.append(RejectedRecord(
+                    "general-document-airway-minimum-altitude",
+                    ":".join(identity),
+                    "3.2 airway table identity is ambiguous in direct 424 legs",
+                    item.source,
+                ))
+            continue
+        index = matches[0]
+        altitude_ft = _feet(str(next(iter(altitudes))))
+        leg = model.airway_legs[index]
+        if leg.minimum_altitude_ft is not None and leg.minimum_altitude_ft != altitude_ft:
+            counts["direct_424_conflict"] += 1
+            for item in evidence:
+                model.rejected_records.append(RejectedRecord(
+                    "general-document-airway-minimum-altitude",
+                    ":".join(identity),
+                    "3.2 airway table conflicts with populated direct 424 altitude",
+                    item.source,
+                ))
+            continue
+        if leg.minimum_altitude_ft == altitude_ft:
+            counts["already_projected"] += 1
+            continue
+        model.airway_legs[index] = replace(
+            leg,
+            minimum_altitude_ft=altitude_ft,
+        )
+        counts["projected"] += 1
+
+    model.general_document_evidence = {
+        **model.general_document_evidence,
+        "airway_minimum_altitudes": {
+            "available": bool(document_reports) and not counts["unavailable_cache"],
+            "documents": document_reports,
+            "parsed_records": len(model.enroute_airway_minimum_altitude_evidence),
+            "projected": counts["projected"],
+            "already_projected": counts["already_projected"],
+            "direct_424_leg_missing": counts["direct_424_leg_missing"],
+            "direct_424_leg_ambiguous": counts["direct_424_leg_ambiguous"],
+            "direct_424_conflict": counts["direct_424_conflict"],
+            "conflicting_evidence": counts["conflicting_evidence"],
+            "unavailable_cache": counts["unavailable_cache"],
+        },
+    }
+
+
 def audit_enroute_navaid_ocr_source(
     root: Path,
     cache: Path,
@@ -1101,6 +1224,7 @@ def load_naip(
     *,
     general_doc_cache: Path | None = None,
     general_doc_key_point_cache_directory: str = ENROUTE_KEY_POINT_CACHE_DIRECTORY,
+    general_doc_airway_cache_directories: tuple[str, ...] = (),
     include_terminal_documents: bool = True,
 ) -> NavModel:
     """Load only structured data; PDFs are inspected separately and never guessed."""
@@ -1328,6 +1452,11 @@ def load_naip(
                 source=SourceRef("RTE_SEG.csv", row_number),
             ))
     _restore_airway_endpoint_countries(model, airway_endpoint_countries)
+    _load_general_document_airway_minimum_altitudes(
+        model,
+        general_doc_cache,
+        cache_directories=general_doc_airway_cache_directories,
+    )
     if include_terminal_documents:
         _load_terminal_coordinate_pages(model, pdf_cache)
         _load_terminal_landing_aids(model)

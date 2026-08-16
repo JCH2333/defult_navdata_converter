@@ -8,7 +8,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from .model import EnrouteNavaidEvidence, SourceRef
+from .model import EnrouteAirwayMinimumAltitudeEvidence, EnrouteNavaidEvidence, SourceRef
 
 
 ENROUTE_KEY_POINT_DOCUMENT = (
@@ -21,6 +21,17 @@ ENROUTE_NAVAID_DOCUMENT = (
     "\u822a\u8def_4.1\u65e0\u7ebf\u7535\u5bfc\u822a\u8bbe\u65bd\u2014\u2014\u822a\u8def.pdf"
 )
 ENROUTE_NAVAID_CACHE_DIRECTORY = "enr-4.1-navaids"
+ENROUTE_AIRWAY_MINIMUM_ALTITUDE_DOCUMENTS = {
+    "GeneralDoc/\u822a\u8def_3.2.1A\u7cfb\u5217\u822a\u8def.pdf": "A",
+    "GeneralDoc/\u822a\u8def_3.2.2B\u7cfb\u5217\u822a\u8def.pdf": "B",
+    "GeneralDoc/\u822a\u8def_3.2.3G\u7cfb\u5217\u822a\u8def.pdf": "G",
+    "GeneralDoc/\u822a\u8def_3.2.4H\u7cfb\u5217\u822a\u8def.pdf": "H",
+    "GeneralDoc/\u822a\u8def_3.2.5J\u7cfb\u5217\u822a\u8def.pdf": "J",
+    "GeneralDoc/\u822a\u8def_3.2.6R\u7cfb\u5217\u822a\u8def.pdf": "R",
+    "GeneralDoc/\u822a\u8def_3.2.7V\u7cfb\u5217\u822a\u8def.pdf": "V",
+    "GeneralDoc/\u822a\u8def_3.2.8W\u7cfb\u5217\u822a\u8def.pdf": "W",
+    "GeneralDoc/\u822a\u8def_3.2.9X\u7cfb\u5217\u822a\u8def.pdf": "X",
+}
 _CACHE_SCHEMA_VERSION = 1
 _POINT = re.compile(
     r"(?P<ident>[A-Z0-9]{2,5})\s*"
@@ -60,6 +71,11 @@ _NAVAID_FREQUENCY = re.compile(
     re.IGNORECASE,
 )
 _NAVAID_ELEVATION = re.compile(r"^\d+(?:\.\d+)?$")
+_AIRWAY_ROUTE = re.compile(r"^[A-Z]\d{1,3}$")
+_AIRWAY_IDENT = re.compile(r"^[A-Z0-9]{2,5}$")
+_AIRWAY_PARENTHESIZED_IDENT = re.compile(r"[\(（]([A-Z0-9]{2,5})[\)）]")
+_AIRWAY_COORDINATE = re.compile(r"N\s*\d{2}.*E\s*\d{3}", re.IGNORECASE)
+_AIRWAY_MINIMUM_ALTITUDE = re.compile(r"^\d(?:[\d\s])*$")
 
 
 class GeneralDocumentCacheError(ValueError):
@@ -81,6 +97,13 @@ class _OcrCell:
     y0: float
     x1: float
     y1: float
+
+
+@dataclass
+class _AirwayTableState:
+    airway: str = ""
+    current_ident: str = ""
+    pending_altitude: int | None = None
 
 
 def _coordinate(
@@ -109,6 +132,136 @@ def _ocr_cells(text: str) -> tuple[_OcrCell, ...]:
         )
         for match in _CELL.finditer(text)
         if match["text"].strip()
+    )
+
+
+def _airway_point_ident(
+    cell: _OcrCell,
+    cells: tuple[_OcrCell, ...],
+) -> str | None:
+    if not 70 <= cell.x0 <= 270 or cell.y0 >= 900:
+        return None
+    text = cell.text.upper()
+    has_coordinate = any(
+        450 <= coordinate.x0 <= 660
+        and abs(coordinate.y0 - cell.y0) <= 8
+        and _AIRWAY_COORDINATE.search(coordinate.text) is not None
+        for coordinate in cells
+    )
+    if not has_coordinate:
+        return None
+    parenthesized = _AIRWAY_PARENTHESIZED_IDENT.search(text)
+    if parenthesized is not None:
+        return parenthesized[1]
+    normalized = re.sub(r"^[^A-Z0-9]+", "", text)
+    return normalized if _AIRWAY_IDENT.fullmatch(normalized) is not None else None
+
+
+def _airway_route_code(
+    cell: _OcrCell,
+    *,
+    route_prefix: str,
+) -> str | None:
+    if not 70 <= cell.x0 <= 170 or cell.y0 >= 900:
+        return None
+    value = cell.text.strip().upper()
+    if (
+        _AIRWAY_ROUTE.fullmatch(value) is not None
+        and value.startswith(route_prefix)
+    ):
+        return value
+    return None
+
+
+def _airway_minimum_altitude(cell: _OcrCell) -> int | None:
+    if not 360 <= cell.x0 <= 455 or cell.y0 >= 900:
+        return None
+    if _AIRWAY_MINIMUM_ALTITUDE.fullmatch(cell.text) is None:
+        return None
+    value = int(re.sub(r"\s+", "", cell.text))
+    return value if 0 < value <= 20_000 else None
+
+
+def _parse_enroute_airway_minimum_altitude_page(
+    text: str,
+    source: SourceRef,
+    *,
+    route_prefix: str,
+    state: _AirwayTableState,
+) -> tuple[EnrouteAirwayMinimumAltitudeEvidence, ...]:
+    """Parse one 3.2 table page while preserving cross-page route state."""
+    cells = tuple(sorted(_ocr_cells(text), key=lambda cell: (cell.y0, cell.x0)))
+    rows: dict[float, list[_OcrCell]] = {}
+    for cell in cells:
+        if cell.y0 < 900:
+            rows.setdefault(cell.y0, []).append(cell)
+
+    records: list[EnrouteAirwayMinimumAltitudeEvidence] = []
+    for y0 in sorted(rows):
+        row = rows[y0]
+        routes = tuple(
+            route
+            for cell in row
+            if (route := _airway_route_code(cell, route_prefix=route_prefix)) is not None
+        )
+        if len(routes) == 1:
+            state.airway = routes[0]
+            state.current_ident = ""
+            state.pending_altitude = None
+            continue
+        if len(routes) > 1:
+            state.airway = ""
+            state.current_ident = ""
+            state.pending_altitude = None
+            continue
+
+        altitudes = tuple(
+            altitude
+            for cell in row
+            if (altitude := _airway_minimum_altitude(cell)) is not None
+        )
+        if len(altitudes) == 1:
+            state.pending_altitude = altitudes[0]
+        elif len(altitudes) > 1:
+            state.pending_altitude = None
+
+        points = tuple(
+            ident
+            for cell in row
+            if (ident := _airway_point_ident(cell, cells)) is not None
+        )
+        if len(points) != 1:
+            continue
+        next_ident = points[0]
+        if (
+            state.airway
+            and state.current_ident
+            and state.pending_altitude is not None
+        ):
+            records.append(EnrouteAirwayMinimumAltitudeEvidence(
+                airway=state.airway,
+                start_ident=state.current_ident,
+                end_ident=next_ident,
+                minimum_altitude_meters=state.pending_altitude,
+                source=source,
+            ))
+        state.current_ident = next_ident
+        state.pending_altitude = None
+    return tuple(records)
+
+
+def parse_enroute_airway_minimum_altitudes(
+    text: str,
+    source: SourceRef,
+    *,
+    route_prefix: str,
+) -> tuple[EnrouteAirwayMinimumAltitudeEvidence, ...]:
+    """Parse a self-contained 3.2 airway table page for testing and auditing."""
+    return _parse_enroute_airway_minimum_altitude_page(
+        text,
+        source,
+        route_prefix=route_prefix,
+        state=_AirwayTableState(),
     )
 
 
@@ -692,5 +845,54 @@ def load_enroute_navaid_evidence(
         )
     return tuple(records), {
         **report,
+        "parsed_records": len(records),
+    }
+
+
+def load_enroute_airway_minimum_altitude_evidence(
+    root: Path,
+    cache_root: Path,
+    *,
+    cache_directory: str,
+) -> tuple[tuple[EnrouteAirwayMinimumAltitudeEvidence, ...], dict[str, object]]:
+    """Load one complete, whitelisted 3.2 OCR cache as source-only evidence."""
+    cache = cache_root / cache_directory
+    manifest_path = cache / "manifest.json"
+    if not manifest_path.is_file():
+        raise GeneralDocumentCacheError(
+            f"missing OCR cache manifest: {manifest_path}"
+        )
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
+    except json.JSONDecodeError as error:
+        raise GeneralDocumentCacheError(
+            f"invalid OCR cache manifest: {manifest_path}"
+        ) from error
+    document = manifest.get("source_file") if isinstance(manifest, dict) else None
+    if not isinstance(document, str):
+        raise GeneralDocumentCacheError("OCR cache manifest names an invalid source PDF")
+    route_prefix = ENROUTE_AIRWAY_MINIMUM_ALTITUDE_DOCUMENTS.get(document)
+    if route_prefix is None:
+        raise GeneralDocumentCacheError(
+            "OCR cache source PDF is not a supported 3.2 airway table"
+        )
+    pages, _, source_hash, report = _load_complete_document(
+        root,
+        cache_root,
+        document=document,
+        cache_directory=cache_directory,
+    )
+    state = _AirwayTableState()
+    records: list[EnrouteAirwayMinimumAltitudeEvidence] = []
+    for page_number, markdown in pages:
+        records.extend(_parse_enroute_airway_minimum_altitude_page(
+            markdown,
+            SourceRef(document, page=page_number, sha256=source_hash),
+            route_prefix=route_prefix,
+            state=state,
+        ))
+    return tuple(records), {
+        **report,
+        "route_prefix": route_prefix,
         "parsed_records": len(records),
     }

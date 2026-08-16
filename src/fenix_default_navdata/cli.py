@@ -69,6 +69,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="GeneralDoc 4.4 重要点 OCR 缓存子目录；默认 enr-4.4",
     )
     build.add_argument(
+        "--general-doc-airway-cache-directories",
+        nargs="*",
+        default=[],
+        help="要投影最低飞行高度的完整 3.2 航路表 OCR 缓存子目录",
+    )
+    build.add_argument(
         "--baseline-db",
         help="已验证的官方 VOR/NDB 设施索引 SQLite；未提供时只能生成不可部署的诊断候选",
     )
@@ -382,6 +388,9 @@ def main(argv: list[str] | None = None) -> int:
             pdf_cache=_path(args.pdf_cache),
             general_doc_cache=_path(args.general_doc_cache),
             general_doc_key_point_cache_directory=args.general_doc_keypoint_cache_directory,
+            general_doc_airway_cache_directories=tuple(
+                args.general_doc_airway_cache_directories
+            ),
             baseline_db=_path(args.baseline_db),
             baseline_tolerance_nm=args.baseline_tolerance_nm,
         )

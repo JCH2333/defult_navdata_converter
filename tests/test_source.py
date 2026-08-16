@@ -5,6 +5,7 @@ import json
 import pytest
 
 from fenix_default_navdata.source import (
+    _load_general_document_airway_minimum_altitudes,
     _load_terminal_landing_aids,
     _surface,
     audit_enroute_navaid_ocr_source,
@@ -14,10 +15,90 @@ from fenix_default_navdata.source import (
     waypoint_country,
 )
 from fenix_default_navdata.general_docs import (
+    ENROUTE_AIRWAY_MINIMUM_ALTITUDE_DOCUMENTS,
     ENROUTE_KEY_POINT_DOCUMENT,
     ENROUTE_NAVAID_DOCUMENT,
 )
-from fenix_default_navdata.model import Ad219Vor, NavModel, SourceRef
+from fenix_default_navdata.model import Ad219Vor, AirwayLeg, NavModel, SourceRef
+
+
+def test_general_document_airway_minimum_altitude_projects_only_unique_424_leg(
+    tmp_path: Path,
+) -> None:
+    document = next(
+        value
+        for value, prefix in ENROUTE_AIRWAY_MINIMUM_ALTITUDE_DOCUMENTS.items()
+        if prefix == "H"
+    )
+    root = tmp_path / "raw"
+    source_pdf = root / document
+    source_pdf.parent.mkdir(parents=True)
+    source_pdf.write_bytes(b"source-pdf")
+    cache = tmp_path / "general-doc-cache" / "enr-3.2.4-h"
+    cache.mkdir(parents=True)
+    (cache / "manifest.json").write_text(json.dumps({
+        "schema_version": 1,
+        "source_file": document,
+        "source_sha256": hashlib.sha256(source_pdf.read_bytes()).hexdigest(),
+        "page_count": 1,
+    }), encoding="utf-8")
+    (cache / "page-0001.json").write_text(json.dumps({
+        "ok": True,
+        "data": {"documents": [{"markdown": "\n".join((
+            "H2[[83, 218, 111, 231]]",
+            "HFE[[83, 236, 156, 250]]",
+            'N31°46\'34"E117°18\'01"[[471, 236, 626, 250]]',
+            "1200[[392, 262, 435, 279]]",
+            "VILID[[83, 293, 156, 308]]",
+            'N31°33\'27"E117°17\'23"[[471, 293, 626, 308]]',
+        ))}]},
+    }), encoding="utf-8")
+    model = NavModel(root=root)
+    model.airway_legs.append(AirwayLeg(
+        "H2",
+        1,
+        "HFE",
+        "VILID",
+        SourceRef("RTE_SEG.csv", 2),
+    ))
+
+    _load_general_document_airway_minimum_altitudes(
+        model,
+        cache.parent,
+        cache_directories=(cache.name,),
+    )
+
+    assert model.airway_legs[0].minimum_altitude_ft == 3937
+    assert [
+        (
+            item.airway,
+            item.start_ident,
+            item.end_ident,
+            item.minimum_altitude_meters,
+        )
+        for item in model.enroute_airway_minimum_altitude_evidence
+    ] == [("H2", "HFE", "VILID", 1200)]
+    assert model.general_document_evidence["airway_minimum_altitudes"] == {
+        "available": True,
+        "documents": [{
+            "available": True,
+            "cache": str(cache),
+            "document": document,
+            "source_sha256": hashlib.sha256(source_pdf.read_bytes()).hexdigest(),
+            "pages": 1,
+            "route_prefix": "H",
+            "parsed_records": 1,
+            "cache_directory": "enr-3.2.4-h",
+        }],
+        "parsed_records": 1,
+        "projected": 1,
+        "already_projected": 0,
+        "direct_424_leg_missing": 0,
+        "direct_424_leg_ambiguous": 0,
+        "direct_424_conflict": 0,
+        "conflicting_evidence": 0,
+        "unavailable_cache": 0,
+    }
 
 
 def test_load_naip_keeps_ad219_vor_evidence_separate_from_direct_vor(

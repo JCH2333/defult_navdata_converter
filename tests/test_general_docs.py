@@ -5,12 +5,15 @@ from pathlib import Path
 import pytest
 
 from fenix_default_navdata.general_docs import (
+    ENROUTE_AIRWAY_MINIMUM_ALTITUDE_DOCUMENTS,
     ENROUTE_NAVAID_DOCUMENT,
     ENROUTE_KEY_POINT_DOCUMENT,
     GeneralDocumentCacheError,
     audit_enroute_navaid_ocr_rerun,
+    load_enroute_airway_minimum_altitude_evidence,
     load_enroute_navaid_evidence,
     load_enroute_key_point_evidence,
+    parse_enroute_airway_minimum_altitudes,
     parse_enroute_navaids,
     parse_enroute_key_points,
 )
@@ -97,6 +100,156 @@ def _navaid_markdown(ident: str) -> str:
         "VOR/DME[[92, 317, 167, 331]]",
         "E080\ufffd\ufffd19'34\"[[433, 317, 514, 331]]",
     ))
+
+
+def _airway_document() -> str:
+    return next(
+        value
+        for value, prefix in ENROUTE_AIRWAY_MINIMUM_ALTITUDE_DOCUMENTS.items()
+        if prefix == "H"
+    )
+
+
+def _airway_markdown(
+    *,
+    route: str,
+    start: str,
+    end: str,
+    altitude: str,
+) -> str:
+    return "\n".join((
+        f"{route}[[83, 218, 111, 231]]",
+        f"{start}[[83, 236, 156, 250]]",
+        'N31°46\'34"E117°18\'01"[[471, 236, 626, 250]]',
+        f"{altitude}[[392, 262, 435, 279]]",
+        f"{end}[[83, 293, 156, 308]]",
+        'N31°33\'27"E117°17\'23"[[471, 293, 626, 308]]',
+    ))
+
+
+def _airway_cache(
+    root: Path,
+    name: str,
+    pages: dict[int, str],
+    *,
+    page_count: int,
+) -> Path:
+    source = root / _airway_document()
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_bytes(b"source-pdf")
+    cache = root.parent / "ocr-cache" / name
+    cache.mkdir(parents=True)
+    (cache / "manifest.json").write_text(json.dumps({
+        "schema_version": 1,
+        "source_file": _airway_document(),
+        "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+        "page_count": page_count,
+    }), encoding="utf-8")
+    for page, markdown in pages.items():
+        (cache / f"page-{page:04d}.json").write_text(
+            json.dumps(_payload(markdown)),
+            encoding="utf-8",
+        )
+    return cache
+
+
+def test_parse_enroute_airway_minimum_altitudes_uses_adjacent_table_points() -> None:
+    source = SourceRef(_airway_document(), page=1, sha256="source")
+
+    records = parse_enroute_airway_minimum_altitudes(
+        _airway_markdown(route="H2", start="HFE", end="VILID", altitude="1 200"),
+        source,
+        route_prefix="H",
+    )
+
+    assert [
+        (
+            item.airway,
+            item.start_ident,
+            item.end_ident,
+            item.minimum_altitude_meters,
+            item.source,
+        )
+        for item in records
+    ] == [("H2", "HFE", "VILID", 1200, source)]
+
+
+def test_parse_enroute_airway_minimum_altitudes_accepts_fullwidth_parentheses() -> None:
+    source = SourceRef(_airway_document(), page=1, sha256="source")
+    markdown = "\n".join((
+        "H2[[83, 218, 111, 231]]",
+        "△景德镇VOR/DME（JDZ)[[83, 236, 264, 250]]",
+        'N29°20\'32"E117°10\'34"[[471, 236, 626, 250]]',
+        "1470[[392, 262, 435, 279]]",
+        "P395[[83, 293, 156, 308]]",
+        'N29°00\'47"E117°16\'21"[[471, 293, 626, 308]]',
+    ))
+
+    records = parse_enroute_airway_minimum_altitudes(
+        markdown,
+        source,
+        route_prefix="H",
+    )
+
+    assert [
+        (item.start_ident, item.end_ident, item.minimum_altitude_meters)
+        for item in records
+    ] == [("JDZ", "P395", 1470)]
+
+
+def test_load_enroute_airway_minimum_altitude_evidence_requires_complete_hashed_cache(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "raw"
+    cache = _airway_cache(
+        root,
+        "enr-3.2.4-h",
+        {1: _airway_markdown(route="H2", start="HFE", end="VILID", altitude="1200")},
+        page_count=2,
+    )
+
+    with pytest.raises(GeneralDocumentCacheError, match="incomplete"):
+        load_enroute_airway_minimum_altitude_evidence(
+            root,
+            cache.parent,
+            cache_directory=cache.name,
+        )
+
+
+def test_load_enroute_airway_minimum_altitude_evidence_preserves_page_state(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "raw"
+    cache = _airway_cache(
+        root,
+        "enr-3.2.4-h",
+        {
+            1: "\n".join((
+                "H2[[83, 218, 111, 231]]",
+                "HFE[[83, 236, 156, 250]]",
+                'N31°46\'34"E117°18\'01"[[471, 236, 626, 250]]',
+                "1200[[392, 262, 435, 279]]",
+            )),
+            2: "\n".join((
+                "VILID[[83, 187, 156, 201]]",
+                'N31°33\'27"E117°17\'23"[[471, 187, 626, 201]]',
+            )),
+        },
+        page_count=2,
+    )
+
+    records, report = load_enroute_airway_minimum_altitude_evidence(
+        root,
+        cache.parent,
+        cache_directory=cache.name,
+    )
+
+    assert [
+        (item.airway, item.start_ident, item.end_ident, item.minimum_altitude_meters)
+        for item in records
+    ] == [("H2", "HFE", "VILID", 1200)]
+    assert report["route_prefix"] == "H"
+    assert report["parsed_records"] == 1
 
 
 def test_parse_enroute_key_points_accepts_adjacent_two_column_ocr_cells() -> None:
