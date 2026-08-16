@@ -128,6 +128,41 @@ def test_rejects_reader_output_without_registered_bgl_source(
     assert not output.exists()
 
 
+def test_preserves_reader_failure_artifacts_for_reproducible_diagnosis(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    package = _write_package(tmp_path)
+    reader = tmp_path / "navdatareader.exe"
+    reader.write_bytes(b"reader-fixture")
+    output = tmp_path / "candidate.sqlite"
+    artifacts = tmp_path / "reader-failure"
+
+    def fake_reader(command: list[str], *, cwd: Path, timeout_seconds: int):
+        (cwd / "abarthel-navdatareader.log").write_text(
+            "reproducible failure\n",
+            encoding="utf-8",
+        )
+        raise PackageReaderError("日志超过 16 MiB，已停止本次诊断")
+
+    monkeypatch.setattr("fenix_default_navdata.package_reader._run_reader", fake_reader)
+
+    with pytest.raises(PackageReaderError, match="日志超过"):
+        read_package(
+            package,
+            output,
+            reader=reader,
+            cache_root=tmp_path / "cache",
+            failure_artifacts=artifacts,
+        )
+
+    assert (artifacts / "package-reader.cfg").is_file()
+    assert (artifacts / "abarthel-navdatareader.log").read_text(
+        encoding="utf-8"
+    ) == "reproducible failure\n"
+    assert not output.exists()
+
+
 def test_reader_log_limit_stops_an_unbounded_external_reader(tmp_path: Path) -> None:
     script = tmp_path / "unbounded_reader.py"
     script.write_text(

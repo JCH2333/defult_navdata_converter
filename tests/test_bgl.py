@@ -4,11 +4,14 @@ import xml.etree.ElementTree as ET
 
 from fenix_default_navdata.bgl import (
     CompilerInfo,
+    HoldingBglGroup,
     PackageToolProcessTrace,
     _iap_chart_roles,
     compile_package,
     find_compiler,
+    holding_bgl_groups,
     write_bglcomp_xml,
+    write_holding_group_bglcomp_xml,
     write_package_project,
 )
 from fenix_default_navdata.model import (
@@ -288,6 +291,83 @@ def test_airport_projection_emits_source_backed_holding_pattern(tmp_path: Path):
         "time": "1.5",
         "altitudeMinimum": "19685F",
     }
+
+
+def test_zyjm_holding_groups_preserve_source_pairs_in_isolated_bgls(tmp_path: Path):
+    model = NavModel(Path("source"))
+    source = SourceRef("ZYJM-4Z03.pdf", page=1)
+    model.airports["zyjm"] = Airport(
+        "zyjm", "ZYJM", "ZYJM", 46.8, 130.4, 100, 18000, 180, source,
+    )
+    holdings = (
+        ("JM405", 46.908333, 130.373889, 59, "L"),
+        ("JM505", 46.716389, 130.455556, 239, "L"),
+        ("JM506", 46.635278, 130.129167, 59, "R"),
+        ("JM603", 47.04, 130.786389, 239, "R"),
+    )
+    for ident, latitude, longitude, course, turn in holdings:
+        model.terminal_waypoints.append(TerminalWaypoint(
+            f"holding:{ident}", "ZYJM", ident, latitude, longitude, source, "ZY",
+        ))
+        model.holdings.append(Holding(
+            ident, ident, "ZYJM", latitude, longitude, course, turn, None, 1.0,
+            4199, None, 210, source,
+        ))
+
+    groups = holding_bgl_groups(model)
+    assert groups == (
+        HoldingBglGroup("ZYJM", ("JM505", "JM506")),
+        HoldingBglGroup("ZYJM", ("JM405", "JM603")),
+    )
+    excluded = frozenset(
+        (group.airport_icao, ident)
+        for group in groups
+        for ident in group.holding_idents
+    )
+    main_xml = tmp_path / "ZY_airports.xml"
+    write_bglcomp_xml(
+        model,
+        DEFAULT_CYCLE,
+        main_xml,
+        scope="airports",
+        airport_prefix="ZY",
+        excluded_holding_identities=excluded,
+    )
+    first_xml = tmp_path / "ZYJM_holdings_01.xml"
+    projection = write_holding_group_bglcomp_xml(
+        model,
+        DEFAULT_CYCLE,
+        first_xml,
+        group=groups[0],
+    )
+
+    assert not ET.parse(main_xml).getroot().findall("Airport/HoldingPattern")
+    isolated = ET.parse(first_xml).getroot().find("Airport")
+    assert isolated is not None
+    assert [child.tag for child in isolated] == [
+        "Waypoint", "Waypoint", "HoldingPattern", "HoldingPattern",
+    ]
+    assert [
+        holding.attrib["fixIdent"]
+        for holding in isolated.findall("HoldingPattern")
+    ] == ["JM505", "JM506"]
+    assert projection.runways == 0
+    assert projection.procedure_segments == 0
+
+
+def test_zyjm_holding_groups_reject_partial_source_records():
+    model = NavModel(Path("source"))
+    model.holdings.append(Holding(
+        "JM505", "JM505", "ZYJM", 46.716389, 130.455556, 239, "L", None,
+        1.0, 4199, None, 250, SourceRef("ZYJM-4Z03.pdf", page=1),
+    ))
+
+    try:
+        holding_bgl_groups(model)
+    except ValueError as error:
+        assert "不一致" in str(error)
+    else:
+        raise AssertionError("缺失来源等待航线必须拒绝隔离分包")
 
 
 def test_airport_projection_filters_prefix_and_emits_ils_and_procedure(tmp_path: Path):

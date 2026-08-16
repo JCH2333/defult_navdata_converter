@@ -320,8 +320,13 @@ def read_package(
     filename_patterns: Iterable[str] = ("*.bgl",),
     object_filter: Iterable[str] = (),
     timeout_seconds: int = DEFAULT_READER_TIMEOUT_SECONDS,
+    failure_artifacts: Path | None = None,
 ) -> PackageReaderResult:
-    """镜像完整 Community 包并生成可用于只读差分的 Navdatareader SQLite。"""
+    """镜像完整 Community 包并生成可用于只读差分的 Navdatareader SQLite。
+
+    ``failure_artifacts`` 仅在读取失败时保存 ASCII 暂存区的运行目录，便于保留
+    读取器配置、日志和可能生成的 ``_BROKEN.sqlite``，不会复制原始 Community 包。
+    """
 
     if timeout_seconds <= 0:
         raise ValueError("读取器超时必须为正数")
@@ -329,6 +334,13 @@ def read_package(
     target = output.expanduser().resolve()
     if target.exists():
         raise FileExistsError(f"读取器输出已存在: {target}")
+    failure_destination = (
+        failure_artifacts.expanduser().resolve()
+        if failure_artifacts is not None
+        else None
+    )
+    if failure_destination is not None and failure_destination.exists():
+        raise FileExistsError(f"读取器失败诊断目录已存在: {failure_destination}")
     patterns = _normalize_patterns(filename_patterns)
     objects = tuple(dict.fromkeys(
         item.strip().upper() for item in object_filter if item and item.strip()
@@ -342,6 +354,7 @@ def read_package(
         )
     stage_parent = _cache_root(cache_root)
     stage = Path(tempfile.mkdtemp(prefix="package-reader-stage-", dir=stage_parent))
+    run: Path | None = None
     try:
         stage_root = stage / "root"
         community = stage_root / "Community"
@@ -384,9 +397,17 @@ def read_package(
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(produced_database, target)
     except subprocess.TimeoutExpired as error:
+        if failure_destination is not None and run is not None and run.is_dir():
+            failure_destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(run, failure_destination)
         raise PackageReaderError(
             f"Navdatareader 在 {timeout_seconds} 秒内未完成"
         ) from error
+    except PackageReaderError:
+        if failure_destination is not None and run is not None and run.is_dir():
+            failure_destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(run, failure_destination)
+        raise
     finally:
         shutil.rmtree(stage, ignore_errors=True)
 
