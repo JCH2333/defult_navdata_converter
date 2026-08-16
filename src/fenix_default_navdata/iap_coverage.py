@@ -216,6 +216,20 @@ def _group_source(primary: list[Any], selected: list[Any]) -> dict[str, object]:
     return {"file": None, "row": None, "page": None, "sha256": None}
 
 
+def _matching_leg_roles(segment: Any, roles: dict[str, set[str]]) -> list[dict[str, object]]:
+    """Return the selected chart roles that can prove this source segment."""
+    leg_idents = {
+        leg.fix_ident.strip().upper()
+        for leg in segment.legs
+        if leg.fix_ident and leg.fix_ident.strip()
+    }
+    return [
+        {"ident": ident, "roles": sorted(role_set & _CHART_ROLE_EVIDENCE)}
+        for ident, role_set in sorted(roles.items())
+        if ident in leg_idents and role_set & _CHART_ROLE_EVIDENCE
+    ]
+
+
 def _shared_section_group_keys(
     groups: dict[tuple[str, str, str], list[Any]],
 ) -> set[tuple[str, str, str]]:
@@ -275,6 +289,7 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
     status_counts: Counter[str] = Counter()
     role_counts: Counter[str] = Counter()
     unresolved: list[dict[str, object]] = []
+    ocr_role_selections: list[dict[str, object]] = []
     selected_role_pages: set[tuple[str, str, int]] = set()
     matched_pages: set[tuple[str, str, int]] = set()
     complete_primary_groups = 0
@@ -345,6 +360,17 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
                 selected_role_pages.add(
                     (selected_chart.airport, selected_chart.filename, selected_chart.page)
                 )
+                if selection and selection.startswith("ocr_"):
+                    ocr_role_selections.append({
+                        "airport": airport,
+                        "label": label,
+                        "runway": runway,
+                        "selection": selection,
+                        "matching_charts": len(matching),
+                        "chart_name": selected_chart.chart_name,
+                        "source": _source_report(selected_chart.source),
+                        "matching_leg_roles": _matching_leg_roles(primary[0], roles),
+                    })
                 for role_set in roles.values():
                     role_counts.update(role_set)
             elif not matching:
@@ -370,7 +396,7 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
     role_evidence_pages = sum(bool(chart.route_fixes) for chart in charts)
     missed_evidence_pages = sum(bool(chart.has_missed_approach) for chart in charts)
     return {
-        "version": 5,
+        "version": 6,
         "chart_pages": {
             "total": len(charts),
             "with_route_role_evidence": role_evidence_pages,
@@ -388,5 +414,6 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
             "unresolved": len(unresolved),
         },
         "role_evidence_counts": dict(sorted(role_counts.items())),
+        "ocr_role_selections": ocr_role_selections,
         "unresolved_groups": unresolved,
     }

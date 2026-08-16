@@ -56,7 +56,7 @@ def test_iap_coverage_counts_unique_map_disambiguation():
 
     report = analyze_iap_coverage(model)
 
-    assert report["version"] == 5
+    assert report["version"] == 6
     assert report["chart_pages"]["total"] == 2
     assert report["chart_pages"]["matched_to_primary_group"] == 2
     assert report["chart_pages"]["selected_for_role_projection"] == 1
@@ -66,6 +66,7 @@ def test_iap_coverage_counts_unique_map_disambiguation():
         "roles_final_mapt_disambiguated": 1,
     }
     assert report["role_evidence_counts"] == {"MAPT": 1}
+    assert report["ocr_role_selections"] == []
     assert report["unresolved_groups"] == []
 
 
@@ -243,6 +244,21 @@ def test_iap_coverage_uses_consensus_ocr_mapt_only_for_one_matching_chart():
         "roles_ocr_final_mapt_disambiguated": 1,
     }
     assert report["role_evidence_counts"] == {"MAPT": 1}
+    assert report["ocr_role_selections"] == [{
+        "airport": "ZBCF",
+        "label": "R03",
+        "runway": "03",
+        "selection": "ocr_final_mapt",
+        "matching_charts": 2,
+        "chart_name": "RNP RWY03",
+        "source": {
+            "file": "Terminal/ZBCF/selected.pdf",
+            "row": 1,
+            "page": 1,
+            "sha256": "selected-sha256",
+        },
+        "matching_leg_roles": [{"ident": "FINAL", "roles": ["MAPT"]}],
+    }]
     assert report["unresolved_groups"] == []
 
 
