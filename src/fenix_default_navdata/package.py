@@ -36,6 +36,8 @@ BASE_PACKAGE = "navigraph-nav-base"
 JEPP_PACKAGE = "navigraph-nav-jepp"
 NAV_PACKAGE = "zzz-pmdg-china-navdata"
 AIRPORT_PACKAGE = "zzz-pmdg-china-navdata-airport-patch"
+_TARGET_MINIMUM_GAME_VERSION = "1.7.35"
+_TARGET_MINIMUM_COMPATIBILITY_VERSION = "7.26.0.214"
 
 
 def sha256(path: Path) -> str:
@@ -57,6 +59,17 @@ def _write_json(path: Path, payload: object) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def _normalize_package_tool_manifest(package_root: Path) -> None:
+    """Restore the 2608R1 package compatibility contract after SDK compilation."""
+    path = package_root / "manifest.json"
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"Package Tool manifest is not an object: {path}")
+    payload["minimum_game_version"] = _TARGET_MINIMUM_GAME_VERSION
+    payload["minimum_compatibility_version"] = _TARGET_MINIMUM_COMPATIBILITY_VERSION
+    _write_json(path, payload)
+
+
 def _manifest(name: str, title: str, dependencies: list[dict[str, str]], size: int = 0) -> dict[str, object]:
     return {
         "dependencies": dependencies,
@@ -65,8 +78,8 @@ def _manifest(name: str, title: str, dependencies: list[dict[str, str]], size: i
         "manufacturer": "User NavData",
         "creator": "PMDG DFD v2 converter",
         "package_version": "0.1.0",
-        "minimum_game_version": "1.7.35",
-        "minimum_compatibility_version": "7.26.0.214",
+        "minimum_game_version": _TARGET_MINIMUM_GAME_VERSION,
+        "minimum_compatibility_version": _TARGET_MINIMUM_COMPATIBILITY_VERSION,
         "export_type": "Community",
         "builder": "Microsoft Flight Simulator 2024",
         "package_order_hint": "CUSTOM_NAVDATA_PATCH",
@@ -154,6 +167,7 @@ def _compile_xml_package(
         )
         built_root = Path(str(compile_report["package_root"]))
         shutil.copytree(built_root, package_root, dirs_exist_ok=True)
+        _normalize_package_tool_manifest(package_root)
     else:
         compile_reports = []
         for xml_path in xml_paths:

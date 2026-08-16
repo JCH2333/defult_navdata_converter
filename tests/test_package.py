@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -13,8 +14,35 @@ from fenix_default_navdata.model import (
     Waypoint,
 )
 from fenix_default_navdata.official_index import OfficialNavaidIndex, OfficialWaypoint
-from fenix_default_navdata.package import AIRPORT_PACKAGE, NAV_PACKAGE, build_candidate
+from fenix_default_navdata.package import (
+    AIRPORT_PACKAGE,
+    NAV_PACKAGE,
+    _normalize_package_tool_manifest,
+    build_candidate,
+)
 from fenix_default_navdata.profile import DEFAULT_CYCLE
+
+
+def test_package_tool_manifest_restores_2608r1_compatibility_contract(
+    tmp_path: Path,
+):
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(json.dumps({
+        "title": "China NavData AIRAC 2608",
+        "minimum_game_version": "1.8.14",
+        "minimum_compatibility_version": "8.11.0.236",
+        "total_package_size": "123",
+    }), encoding="utf-8")
+
+    _normalize_package_tool_manifest(tmp_path)
+
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    assert payload == {
+        "title": "China NavData AIRAC 2608",
+        "minimum_game_version": "1.7.35",
+        "minimum_compatibility_version": "7.26.0.214",
+        "total_package_size": "123",
+    }
 
 
 def test_missing_compiler_blocks_both_overlay_packages(tmp_path: Path, monkeypatch):
