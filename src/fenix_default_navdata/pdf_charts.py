@@ -19,7 +19,7 @@ from typing import Callable
 import pymupdf
 from pypdf import PdfReader
 
-from .model import Ad219Vor, ChartFixCoordinate, ChartHoldingEvidence, ChartRouteFix, ChartStandardProcedureRoute, ChartTerminalLeg, Ils, ProcedureChart, SourceRef
+from .model import Ad219NdbEvidence, Ad219Vor, ChartFixCoordinate, ChartHoldingEvidence, ChartRouteFix, ChartStandardProcedureRoute, ChartTerminalLeg, Ils, ProcedureChart, SourceRef
 
 
 _EVIDENCE_CACHE_VERSION = 35
@@ -121,6 +121,12 @@ _AIP_VOR_DME = re.compile(
     r"(?:\s*CH\s*\d+[XY]?)?"
     r".{0,320}?(?P<coordinate>N\s*\d{6}(?:\.\d+)?\s*E\s*\d{7}(?:\.\d+)?)"
     r"(?P<tail>.{0,240}?)(?=\b(?:VOR\s*/\s*DME|NDB|LOC|GP|LM|LO)\b|\Z)",
+    re.IGNORECASE | re.DOTALL,
+)
+_AIP_NDB = re.compile(
+    r"(?<![A-Z0-9])NDB(?:\s*/\s*DME)?\s*(?P<ident>[A-Z0-9]{2,5}?)\s*"
+    r"(?P<frequency>\d{3,4}(?:\.\d+)?)\s*kHz"
+    r"(?P<body>.{0,480}?)(?=\b(?:VOR\s*/\s*DME|NDB(?:\s*/\s*DME)?|LOC|GP|LM|LO)\b|\Z)",
     re.IGNORECASE | re.DOTALL,
 )
 
@@ -242,6 +248,39 @@ def extract_ad219_vors(text: str, airport: str, source: SourceRef) -> tuple[Ad21
             latitude=latitude,
             longitude=longitude,
             dme_elevation_meters=elevation,
+            source=source,
+        ))
+    return tuple(result)
+
+
+def extract_ad219_ndbs(
+    text: str,
+    airport: str,
+    source: SourceRef,
+) -> tuple[Ad219NdbEvidence, ...]:
+    """Extract direct AD 2.19 NDB facts without inventing target-only fields."""
+    result: list[Ad219NdbEvidence] = []
+    seen: set[tuple[str, float, float, float]] = set()
+    for match in _AIP_NDB.finditer(text):
+        coordinate = _AIP_DMS_COORDINATE.search(match["body"])
+        if coordinate is None:
+            continue
+        latitude, longitude = _parse_aip_dms_coordinate(coordinate.group(0))
+        identity = (
+            match["ident"].upper(),
+            float(match["frequency"]),
+            latitude,
+            longitude,
+        )
+        if identity in seen:
+            continue
+        seen.add(identity)
+        result.append(Ad219NdbEvidence(
+            airport=airport.upper(),
+            ident=match["ident"].upper(),
+            frequency_khz=float(match["frequency"]),
+            latitude=latitude,
+            longitude=longitude,
             source=source,
         ))
     return tuple(result)

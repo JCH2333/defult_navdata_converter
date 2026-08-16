@@ -72,6 +72,15 @@ python -m fenix_default_navdata.cli ocr-source-audit `
   --source-root "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
   --cache "C:\Users\Administrator\AppData\Local\default_navdata_converter\general-doc-ocr-cache-2608r1\enr-4.1-navaids-rerun" `
   --output diagnostics\ocr-source-audit.json
+python -m fenix_default_navdata.cli ad219-ndb-ocr-cache `
+  --source-root "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
+  --cache-root "$env:LOCALAPPDATA\default_navdata_converter\ad219-ndb-ocr-cache-2608r1" `
+  --airports ZBCZ
+python -m fenix_default_navdata.cli ad219-ndb-ocr-audit `
+  --source-root "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
+  --cache-root "$env:LOCALAPPDATA\default_navdata_converter\ad219-ndb-ocr-cache-2608r1" `
+  --airports ZBCZ `
+  --output diagnostics\ad219-ndb-ocr-zbcz.json
 python -m fenix_default_navdata.cli iap-ocr-cache `
   --source-root "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
   --pdf-cache "$env:LOCALAPPDATA\default_navdata_converter\pdf-evidence-cache-2608r1-r35" `
@@ -94,6 +103,8 @@ python -m fenix_default_navdata.gui
 `ocr-audit` 的主缓存必须完整，并且两份缓存必须绑定同一份原始 PDF SHA-256。它只比较重跑所含的物理页；`--require-agreement` 适合用于自动化任务，发现任何主缓存独有或重跑独有记录时返回退出代码 `1`。
 
 `ocr-source-audit` 只审计 OCR 证据是否能按类型、频率和坐标唯一回链到直接 424 导航台；它会报告完全匹配、唯一 OCR 标识纠正和未决页码，但不会新增、修改或投影导航台。
+
+`ad219-ndb-ocr-cache` 只缓存各机场未列入 `Charts.csv` 的原始 PDF；`ad219-ndb-ocr-audit` 只在 OCR 文本中定位 AD 2.19 到 AD 2.20 之间的 NDB 条目，并与直接 `NDB.csv` 对账。它会显式记录 OCR 自身缺失的显示名、磁差、高程和区域，以及直接 CSV 是否仍有空字段；任何结果均固定为 `projection_allowed=false`，不能作为默认 BGL NDB 的新增或修订来源。
 
 `iap-ocr-cache` 会从现有 IAP 覆盖审计中自动筛出仅可能受图页识别影响的 `ambiguous_chart` 与 `no_matching_chart`，把对应的原始仪表进近 PDF 按相对路径和源 SHA-256 缓存到本机。它不会处理“没有唯一数据库主进近段”的分组，也不会因识别完成就解除任何 IAP 拒绝；必须另行新增可验证的图页解析规则和回归测试。
 

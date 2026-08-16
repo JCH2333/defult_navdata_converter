@@ -114,6 +114,23 @@ class Ad219Vor:
 
 
 @dataclass(frozen=True)
+class Ad219NdbEvidence:
+    """An NDB fact explicitly printed in an airport AD 2.19 table.
+
+    The table does not establish the display name, magnetic variation,
+    elevation, or target region required for a default BGL NDB.  It remains
+    OCR audit evidence until direct 424 records prove those fields.
+    """
+
+    airport: str
+    ident: str
+    frequency_khz: float
+    latitude: float
+    longitude: float
+    source: SourceRef
+
+
+@dataclass(frozen=True)
 class EnrouteNavaidEvidence:
     """A GeneralDoc 4.1 fact that lacks the complete target navaid contract.
 

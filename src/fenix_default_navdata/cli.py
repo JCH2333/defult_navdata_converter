@@ -4,6 +4,11 @@ import argparse
 import json
 from pathlib import Path
 
+from .ad219_ndb import (
+    audit_ad219_ndb_ocr,
+    build_ad219_ndb_ocr_cache,
+    write_ad219_ndb_ocr_audit,
+)
 from .convert import convert
 from .deployment import deploy, restore
 from .general_docs import (
@@ -179,6 +184,72 @@ def build_parser() -> argparse.ArgumentParser:
         default=0,
         help="单页 OCR 失败后的重试次数（默认 0）",
     )
+    ad219_ndb_cache = sub.add_parser(
+        "ad219-ndb-ocr-cache",
+        help="为机场非索引 PDF 建立带 SHA-256 的 AD 2.19 NDB OCR 证据缓存",
+    )
+    ad219_ndb_cache.add_argument("--source-root", required=True, help="424 原始数据根目录")
+    ad219_ndb_cache.add_argument("--cache-root", required=True, help="本地 AD 2.19 NDB OCR 缓存根目录")
+    ad219_ndb_cache.add_argument(
+        "--airports",
+        nargs="*",
+        default=[],
+        help="可选：仅识别指定 ICAO 机场目录",
+    )
+    ad219_ndb_cache.add_argument("--ocr-command", default="ocr-skill", help="本地 OCR CLI 命令")
+    ad219_ndb_cache.add_argument(
+        "--backend",
+        choices=("llamacpp", "deepseek"),
+        default="llamacpp",
+        help="OCR 后端；默认使用本地 llama.cpp 服务",
+    )
+    ad219_ndb_cache.add_argument(
+        "--mode",
+        choices=("markdown", "free", "figure", "ocr"),
+        default="ocr",
+        help="传给 OCR 引擎的识别模式",
+    )
+    ad219_ndb_cache.add_argument("--timeout", type=int, default=240, help="每页 OCR 超时秒数")
+    ad219_ndb_cache.add_argument("--engine-timeout", type=int, help="可选：本地 OCR 引擎单页等待秒数")
+    ad219_ndb_cache.add_argument("--render-scale", type=float, default=3.0, help="PDF 页面渲染比例")
+    ad219_ndb_cache.add_argument(
+        "--image-profile",
+        choices=("original", "autocontrast-grayscale"),
+        default="original",
+        help="渲染后的固定图像预处理",
+    )
+    ad219_ndb_cache.add_argument(
+        "--runtime-profile",
+        default="",
+        help="可选的本地 OCR 运行时标识",
+    )
+    ad219_ndb_cache.add_argument(
+        "--runtime-profile-file",
+        help="由本地 OCR 服务启动脚本生成的可验证运行时描述 JSON",
+    )
+    ad219_ndb_cache.add_argument("--limit", type=int, help="只处理排序后的前 N 个 PDF")
+    ad219_ndb_cache.add_argument("--force", action="store_true", help="重新识别已有有效页面")
+    ad219_ndb_cache.add_argument("--retries", type=int, default=2, help="单页 OCR 失败后的重试次数")
+    ad219_ndb_cache.add_argument("--dry-run", action="store_true", help="只输出计划，不调用 OCR")
+    ad219_ndb_audit = sub.add_parser(
+        "ad219-ndb-ocr-audit",
+        help="只读对账 AD 2.19 NDB OCR 缓存与直接 424 NDB.csv",
+    )
+    ad219_ndb_audit.add_argument("--source-root", required=True, help="424 原始数据根目录")
+    ad219_ndb_audit.add_argument("--cache-root", required=True, help="本地 AD 2.19 NDB OCR 缓存根目录")
+    ad219_ndb_audit.add_argument(
+        "--airports",
+        nargs="*",
+        default=[],
+        help="可选：只审计指定 ICAO 机场目录",
+    )
+    ad219_ndb_audit.add_argument(
+        "--coordinate-tolerance-nm",
+        type=float,
+        default=0.02,
+        help="与直接 424 NDB.csv 对账的坐标阈值（海里）",
+    )
+    ad219_ndb_audit.add_argument("--output", help="可选的本地 JSON 审计输出路径")
     iap_ocr_cache = sub.add_parser(
         "iap-ocr-cache",
         help="对阻塞 IAP 图页匹配的源 PDF 建立本地 OCR 证据缓存，不修改投影",
@@ -472,6 +543,42 @@ def main(argv: list[str] | None = None) -> int:
             retries=args.retries,
         )
         print(json.dumps(report.to_report(), ensure_ascii=False, indent=2))
+        return 0
+    if args.command == "ad219-ndb-ocr-cache":
+        report = build_ad219_ndb_ocr_cache(
+            Path(args.source_root),
+            Path(args.cache_root),
+            airports=args.airports,
+            command=args.ocr_command,
+            backend=args.backend,
+            mode=args.mode,
+            timeout_seconds=args.timeout,
+            render_scale=args.render_scale,
+            image_profile=args.image_profile,
+            runtime_profile=resolve_runtime_profile(
+                args.runtime_profile,
+                _path(args.runtime_profile_file),
+            ),
+            engine_timeout_seconds=args.engine_timeout,
+            force=args.force,
+            limit=args.limit,
+            retries=args.retries,
+            dry_run=args.dry_run,
+        )
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0
+    if args.command == "ad219-ndb-ocr-audit":
+        report = audit_ad219_ndb_ocr(
+            Path(args.source_root),
+            Path(args.cache_root),
+            airports=args.airports,
+            coordinate_tolerance_nm=args.coordinate_tolerance_nm,
+        )
+        if args.output:
+            output = Path(args.output).expanduser().resolve()
+            write_ad219_ndb_ocr_audit(output, report)
+            report["output"] = str(output)
+        print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0
     if args.command == "iap-ocr-cache":
         report = build_iap_ocr_cache(
