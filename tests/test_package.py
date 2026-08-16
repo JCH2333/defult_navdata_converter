@@ -10,6 +10,8 @@ from fenix_default_navdata.model import (
     IapOcrRoleEvidence,
     NavModel,
     Navaid,
+    RejectedProcedure,
+    RejectedRecord,
     SourceRef,
     Waypoint,
 )
@@ -99,6 +101,113 @@ def test_missing_navaid_baseline_keeps_candidate_non_deployable(
     assert report["navaid_diff"]["navaid_diff_verified"] is False
     assert report["deployable"] is False
     assert report["model"]["selected_navaids"] == 0
+
+
+def test_candidate_reports_source_rejection_audit_deterministically(
+    tmp_path: Path,
+    monkeypatch,
+):
+    raw = tmp_path / "raw"
+    base = tmp_path / "base"
+    jepp = tmp_path / "jepp"
+    output = tmp_path / "candidate"
+    for path in (raw, base, jepp):
+        path.mkdir()
+    model = NavModel(raw)
+    model.rejected_records.extend((
+        RejectedRecord(
+            "terminal-waypoint",
+            "B",
+            "missing coordinate",
+            SourceRef("Terminal/ZBBB/Charts.csv", 7),
+        ),
+        RejectedRecord(
+            "terminal-waypoint",
+            "A",
+            "missing coordinate",
+            SourceRef("Terminal/ZBAA/Charts.csv", 3),
+        ),
+        RejectedRecord(
+            "airway-leg",
+            "R1",
+            "missing endpoint region",
+            SourceRef("RTE_SEG.csv", 9),
+        ),
+    ))
+    model.rejected_procedures.extend((
+        RejectedProcedure(
+            "ZBBB",
+            "R01",
+            "ambiguous chart",
+            SourceRef("Terminal/ZBBB/Charts.csv", 4, 2),
+        ),
+        RejectedProcedure(
+            "ZBAA",
+            "R02",
+            "no matching chart",
+            SourceRef("Terminal/ZBAA/Charts.csv", 6, 3),
+        ),
+    ))
+    monkeypatch.setattr(
+        "fenix_default_navdata.package.load_naip",
+        lambda root, **kwargs: model,
+    )
+
+    report = build_candidate(
+        raw_root=raw,
+        nav_base=base,
+        nav_jepp=jepp,
+        output=output,
+        cycle=DEFAULT_CYCLE,
+        compiler=CompilerInfo(None, "none", "missing"),
+    )
+
+    assert report["rejection_audit"] == {
+        "records": {
+            "total": 3,
+            "by_kind": {"airway-leg": 1, "terminal-waypoint": 2},
+            "by_kind_and_reason": [
+                {
+                    "kind": "airway-leg",
+                    "reason": "missing endpoint region",
+                    "count": 1,
+                },
+                {
+                    "kind": "terminal-waypoint",
+                    "reason": "missing coordinate",
+                    "count": 2,
+                },
+            ],
+        },
+        "procedures": {
+            "total": 2,
+            "by_reason": {"ambiguous chart": 1, "no matching chart": 1},
+            "items": [
+                {
+                    "airport": "ZBAA",
+                    "chart": "R02",
+                    "reason": "no matching chart",
+                    "source": {
+                        "file": "Terminal/ZBAA/Charts.csv",
+                        "row": 6,
+                        "page": 3,
+                        "sha256": None,
+                    },
+                },
+                {
+                    "airport": "ZBBB",
+                    "chart": "R01",
+                    "reason": "ambiguous chart",
+                    "source": {
+                        "file": "Terminal/ZBBB/Charts.csv",
+                        "row": 4,
+                        "page": 2,
+                        "sha256": None,
+                    },
+                },
+            ],
+        },
+    }
 
 
 def test_candidate_passes_accepted_iap_ocr_consensus_to_source_loader(

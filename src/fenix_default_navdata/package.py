@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import shutil
+from collections import Counter
 from pathlib import Path
 
 from .bgl import (
@@ -46,6 +47,59 @@ def sha256(path: Path) -> str:
         for block in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def _source_ref_report(source) -> dict[str, object]:
+    return {
+        "file": source.file,
+        "row": source.row,
+        "page": source.page,
+        "sha256": source.sha256,
+    }
+
+
+def _rejection_audit(model: NavModel) -> dict[str, object]:
+    record_kinds = Counter(record.kind for record in model.rejected_records)
+    record_reasons = Counter(
+        (record.kind, record.reason) for record in model.rejected_records
+    )
+    procedure_reasons = Counter(
+        procedure.reason for procedure in model.rejected_procedures
+    )
+    procedures = sorted(
+        model.rejected_procedures,
+        key=lambda procedure: (
+            procedure.airport,
+            procedure.chart,
+            procedure.reason,
+            procedure.source.file,
+            procedure.source.row or 0,
+            procedure.source.page or 0,
+        ),
+    )
+    return {
+        "records": {
+            "total": len(model.rejected_records),
+            "by_kind": dict(sorted(record_kinds.items())),
+            "by_kind_and_reason": [
+                {"kind": kind, "reason": reason, "count": count}
+                for (kind, reason), count in sorted(record_reasons.items())
+            ],
+        },
+        "procedures": {
+            "total": len(model.rejected_procedures),
+            "by_reason": dict(sorted(procedure_reasons.items())),
+            "items": [
+                {
+                    "airport": procedure.airport,
+                    "chart": procedure.chart,
+                    "reason": procedure.reason,
+                    "source": _source_ref_report(procedure.source),
+                }
+                for procedure in procedures
+            ],
+        },
+    }
 
 
 def _copy_tree(source: Path, target: Path) -> None:
@@ -350,6 +404,7 @@ def build_candidate(
                 }
             ),
         },
+        "rejection_audit": _rejection_audit(model),
         "airway_source": summarize_airway_source_metadata(model),
         "terminal_navaid_evidence": {
             "ad219_vor_dme_records": len(model.ad219_vors),
