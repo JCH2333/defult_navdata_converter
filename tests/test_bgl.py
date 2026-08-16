@@ -64,6 +64,51 @@ def test_bgl_xml_is_deterministic(tmp_path: Path):
     }
 
 
+def test_enroute_projection_does_not_reduce_links_from_raw_424_code_dir(
+    tmp_path: Path,
+):
+    """CODE_DIR remains source provenance until an SDK direction contract exists."""
+    model = NavModel(Path("source"))
+    source = SourceRef("RTE_SEG.csv", 2)
+    legs = (
+        AirwayLeg(
+            "F1", 1, "FSTART", "FEND", source, direction="F",
+            start_latitude=35.0, start_longitude=105.0,
+            end_latitude=35.1, end_longitude=105.1,
+            start_country="ZB", end_country="ZB",
+        ),
+        AirwayLeg(
+            "B1", 1, "BSTART", "BEND", source, direction="B",
+            start_latitude=36.0, start_longitude=106.0,
+            end_latitude=36.1, end_longitude=106.1,
+            start_country="ZB", end_country="ZB",
+        ),
+        AirwayLeg(
+            "X1", 1, "XSTART", "XEND", source, direction="X",
+            start_latitude=37.0, start_longitude=107.0,
+            end_latitude=37.1, end_longitude=107.1,
+            start_country="ZB", end_country="ZB",
+        ),
+    )
+    model.airway_legs.extend(legs)
+
+    output = tmp_path / "raw-code-dir.xml"
+    write_bglcomp_xml(model, DEFAULT_CYCLE, output, scope="enroute")
+
+    root = ET.parse(output).getroot()
+    for leg in legs:
+        start_route = root.find(
+            f"./Waypoint[@waypointIdent='{leg.start_ident}']/Route[@name='{leg.airway}']"
+        )
+        end_route = root.find(
+            f"./Waypoint[@waypointIdent='{leg.end_ident}']/Route[@name='{leg.airway}']"
+        )
+        assert start_route is not None
+        assert end_route is not None
+        assert [child.tag for child in start_route] == ["Next"]
+        assert [child.tag for child in end_route] == ["Previous"]
+
+
 def test_enroute_projection_romanizes_chinese_navaid_names(tmp_path: Path):
     model = NavModel(Path("source"))
     source = SourceRef("VOR.csv", 2)

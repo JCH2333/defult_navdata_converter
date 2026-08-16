@@ -63,3 +63,4 @@
 - 来源限定为 `GeneralDoc/航路_3.2.1A系列航路.pdf` 至 `航路_3.2.9X系列航路.pdf`。缓存必须逐页完整、PDF SHA-256 匹配且运行时描述与本地 OCR 服务一致；不完整缓存仅可续跑，不得投影。
 - 解析器只接受同页坐标列确认的航点、航路前缀和最低飞行高度表列；跨页时保留航路、前序航点与待配对高度状态。OCR 标识必须精确命中唯一的 `RTE_SEG.csv` “航路 + 起点 + 终点”身份；多/少字符、冲突、缺失或多重命中一律计入审计而不写入候选。
 - 当前仅可把唯一回链的发布高度（米）换算并写入 `AirwayLeg.minimum_altitude_ft`；`RTE_SEG.CODE_TYPE` 仍是 PBN 语义，绝不可据此或根据航路名称推断 SDK `routeType`。
+- 航路 `CODE_DIR` 简单方向映射否决（默认通用数据、2608R1，证据：2026-08-16 r61 候选的隔离 SDK 构建 `diagnostics/route-direction-probe-20260816`、`00_enroute.xml`、Package Tool 产物与 Navdatareader 受控读取）：把 1,302 个 `F` 段裁剪为仅 `Next`、152 个 `B` 段裁剪为仅 `Previous`、`X` 保持双向后，SDK 仍生成 BGL，但读取器持续输出边界记录并触发 16 MiB 日志保护。编译成功不构成加载契约成立。不得把 `F -> Next`、`B -> Previous`、`X -> 双向` 写入默认投影；在取得 424 来源语义和独立加载验证前，`AirwayLeg.direction` 仅保留为来源字段，已解析端点仍由 `_append_enroute` 同时写出 `Next` 与 `Previous`。自动化测试：`test_enroute_projection_does_not_reduce_links_from_raw_424_code_dir`。
