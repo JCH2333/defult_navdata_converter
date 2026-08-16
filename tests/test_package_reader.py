@@ -130,6 +130,36 @@ def test_rejects_reader_output_without_registered_bgl_source(
     assert not output.exists()
 
 
+def test_rejects_reader_output_when_not_every_requested_bgl_is_registered(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    package = _write_package(tmp_path)
+    reader = tmp_path / "navdatareader.exe"
+    reader.write_bytes(b"reader-fixture")
+    output = tmp_path / "candidate.sqlite"
+
+    def fake_reader(command: list[str], *, cwd: Path, timeout_seconds: int):
+        _write_reader_database(
+            Path(command[command.index("-o") + 1]),
+            bgl_rows=1,
+            vor_rows=1,
+        )
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr("fenix_default_navdata.package_reader._run_reader", fake_reader)
+
+    with pytest.raises(PackageReaderError, match="仅登记了 1/2 个请求的 BGL"):
+        read_package(
+            package,
+            output,
+            reader=reader,
+            cache_root=tmp_path / "cache",
+        )
+
+    assert not output.exists()
+
+
 def test_preserves_reader_failure_artifacts_for_reproducible_diagnosis(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

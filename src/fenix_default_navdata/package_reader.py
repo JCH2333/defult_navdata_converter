@@ -261,7 +261,11 @@ def _produced_database(requested: Path) -> Path | None:
     return next((path for path in candidates if path.is_file()), None)
 
 
-def _scan_database(path: Path) -> dict[str, object]:
+def _scan_database(
+    path: Path,
+    *,
+    expected_bgl_count: int | None = None,
+) -> dict[str, object]:
     path = path.expanduser().resolve()
     try:
         connection = sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True)
@@ -288,6 +292,15 @@ def _scan_database(path: Path) -> dict[str, object]:
         if bgl_file_rows == 0:
             raise PackageReaderError(
                 f"读取器没有登记任何 BGL 来源，拒绝空扫描: {path}"
+            )
+        if (
+            expected_bgl_count is not None
+            and bgl_file_rows != expected_bgl_count
+        ):
+            raise PackageReaderError(
+                "读取器仅登记了 "
+                f"{bgl_file_rows}/{expected_bgl_count} 个请求的 BGL，"
+                f"拒绝不完整扫描: {path}"
             )
         table_rows = {
             table: (
@@ -395,7 +408,10 @@ def read_package(
             raise PackageReaderError(
                 f"Navdatareader 未生成 SQLite，退出代码={result.returncode}: {details}"
             )
-        scan = _scan_database(produced_database)
+        scan = _scan_database(
+            produced_database,
+            expected_bgl_count=len(selected_bgls),
+        )
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(produced_database, target)
     except subprocess.TimeoutExpired as error:
