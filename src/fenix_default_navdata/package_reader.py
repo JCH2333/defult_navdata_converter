@@ -378,7 +378,9 @@ def read_package(
         command = [
             str(reader_path),
             "-f",
-            "MSFS24",
+            # Navdatareader's MSFS24 mode requires a running simulator and
+            # SimConnect. This diagnostic reads offline BGL packages instead.
+            "MSFS",
             "-b",
             str(stage_root),
             "-o",

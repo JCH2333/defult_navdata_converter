@@ -71,7 +71,7 @@ def test_reads_complete_package_from_ascii_stage_and_preserves_output(
         assert staged.joinpath("scenery", "reader-fixture", "ZB_airports.bgl").read_bytes() == b"airports"
         assert "IncludeFilenames=00_enroute.bgl" in config.read_text(encoding="utf-8")
         assert "ExcludeBglObjectFilter=APRON2,BOUNDARY" in config.read_text(encoding="utf-8")
-        assert command[command.index("-f") + 1] == "MSFS24"
+        assert command[command.index("-f") + 1] == "MSFS"
         _write_reader_database(
             Path(command[command.index("-o") + 1]).with_stem("package-reader_BROKEN"),
             bgl_rows=1,
