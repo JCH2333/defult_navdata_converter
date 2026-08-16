@@ -183,7 +183,7 @@ def _reader_config(
         "IncludeAirportIcaoFilter=",
         "ExcludeAirportIcaoFilter=",
         f"IncludeBglObjectFilter={','.join(object_filter)}",
-        "ExcludeBglObjectFilter=APRON2",
+        "ExcludeBglObjectFilter=APRON2,BOUNDARY",
         "IncludeAddonPathFilter=",
         "ExcludeAddonPathFilter=",
         "",
@@ -378,7 +378,7 @@ def read_package(
         command = [
             str(reader_path),
             "-f",
-            "MSFS",
+            "MSFS24",
             "-b",
             str(stage_root),
             "-o",
