@@ -70,14 +70,6 @@ class XmlProjection:
 
 
 @dataclass(frozen=True)
-class HoldingBglGroup:
-    """一组需要隔离到独立 BGL 的同机场等待航线。"""
-
-    airport_icao: str
-    holding_idents: tuple[str, ...]
-
-
-@dataclass(frozen=True)
 class _PhysicalRunway:
     primary: Runway | None
     secondary: Runway | None
@@ -121,15 +113,6 @@ _DEFAULT_NAVAID_NAME_OVERRIDES = {
     "昌都": "CHANGDU",
 }
 
-# ZYJM-4Z03.pdf 明确按跑道分为两张 1 分钟等待表。将四条记录写在同一
-# BGL 时，MSFS 2024 SDK 1.5.7 的产物会被 Navdatareader 读至文件末尾；
-# 两组隔离 BGL 则可稳定读取。分组只改变 BGL 布局，不改变任何 424 字段。
-_KNOWN_HOLDING_BGL_GROUPS = (
-    HoldingBglGroup("ZYJM", ("JM505", "JM506")),
-    HoldingBglGroup("ZYJM", ("JM405", "JM603")),
-)
-
-
 def _procedure_kind(kind: str) -> str:
     return _PROCEDURE_KIND_MAP.get((kind or "").strip(), "")
 
@@ -140,43 +123,6 @@ def _default_navaid_name(value: str) -> str:
     if name.isascii():
         return name
     return _DEFAULT_NAVAID_NAME_OVERRIDES.get(name, romanize_name(name))
-
-
-def holding_bgl_groups(model: NavModel) -> tuple[HoldingBglGroup, ...]:
-    """Return only source-complete airport holding groups requiring isolation."""
-
-    expected_by_airport: dict[str, tuple[HoldingBglGroup, ...]] = {}
-    for group in _KNOWN_HOLDING_BGL_GROUPS:
-        expected_by_airport.setdefault(group.airport_icao, ())
-        expected_by_airport[group.airport_icao] += (group,)
-
-    selected: list[HoldingBglGroup] = []
-    for airport, groups in expected_by_airport.items():
-        holdings = [
-            holding for holding in model.holdings
-            if holding.fix_region.upper() == airport
-        ]
-        if not holdings:
-            continue
-        actual_idents = tuple(
-            (holding.fix_ident or "").upper()
-            for holding in holdings
-        )
-        expected_idents = tuple(
-            ident
-            for group in groups
-            for ident in group.holding_idents
-        )
-        if (
-            len(actual_idents) != len(expected_idents)
-            or len(set(actual_idents)) != len(actual_idents)
-            or set(actual_idents) != set(expected_idents)
-        ):
-            raise ValueError(
-                f"{airport} 等待航线与已验证的隔离分组不一致，拒绝静默改变 BGL 布局"
-            )
-        selected.extend(groups)
-    return tuple(selected)
 
 
 def _airport_bgl_attrs(airport) -> dict[str, str]:
@@ -1903,7 +1849,6 @@ def write_bglcomp_xml(
     airport_prefix: str | None = None,
     duplicate_terminal_waypoints: bool = False,
     selected_navaids: tuple[Navaid, ...] | None = None,
-    excluded_holding_identities: frozenset[tuple[str, str]] = frozenset(),
 ) -> XmlProjection:
     """把统一中间模型投影为官方 XSD 约束下的 BglComp XML。
 
@@ -1943,10 +1888,6 @@ def write_bglcomp_xml(
     terminal_identities, terminal_representatives = _terminal_waypoint_identities(
         model.terminal_waypoints
     )
-    excluded_holdings = {
-        (airport.upper(), ident.upper())
-        for airport, ident in excluded_holding_identities
-    }
     projected_procedures = 0
     for airport in projected_airports:
         airport_element = ET.SubElement(
@@ -2023,8 +1964,6 @@ def write_bglcomp_xml(
         airport_holdings = [
             holding for holding in model.holdings
             if holding.fix_region == airport.icao
-            and (airport.icao.upper(), holding.fix_ident.upper())
-            not in excluded_holdings
         ]
         for holding in sorted(airport_holdings, key=lambda item: (item.fix_ident, item.name)):
             _append_holding_pattern(
@@ -2109,98 +2048,6 @@ def write_bglcomp_xml(
         skipped_airway_legs=skipped_airway_legs,
         skipped_airway_leg_details=skipped_airway_leg_details,
         procedure_segments=projected_procedures,
-        rejected_records=len(model.rejected_records),
-        rejected_procedures=len(model.rejected_procedures),
-    )
-
-
-def write_holding_group_bglcomp_xml(
-    model: NavModel,
-    cycle: Cycle,
-    output: Path,
-    *,
-    group: HoldingBglGroup,
-) -> XmlProjection:
-    """Write one isolated airport-holding BglComp XML without airport features."""
-
-    output.parent.mkdir(parents=True, exist_ok=True)
-    _resolve_terminal_procedure_legs(model)
-    airport = next(
-        (
-            item for item in model.airports.values()
-            if item.icao.upper() == group.airport_icao
-        ),
-        None,
-    )
-    if airport is None:
-        raise ValueError(f"等待航线分组缺少机场: {group.airport_icao}")
-    requested = tuple(ident.upper() for ident in group.holding_idents)
-    if len(set(requested)) != len(requested):
-        raise ValueError(f"{group.airport_icao} 等待航线分组包含重复固定点")
-    candidates = [
-        holding for holding in model.holdings
-        if holding.fix_region.upper() == group.airport_icao
-        and holding.fix_ident.upper() in set(requested)
-    ]
-    by_ident = {
-        holding.fix_ident.upper(): holding
-        for holding in candidates
-    }
-    if len(candidates) != len(by_ident) or set(by_ident) != set(requested):
-        raise ValueError(
-            f"{group.airport_icao} 等待航线分组无法按来源唯一解析: "
-            + ", ".join(requested)
-        )
-    selected = tuple(by_ident[ident] for ident in requested)
-    terminal_identities, _ = _terminal_waypoint_identities(model.terminal_waypoints)
-
-    ET.register_namespace("xsi", "http://www.w3.org/2001/XMLSchema-instance")
-    root = ET.Element("FSData", {
-        "version": "9.0",
-        "source": "default_navdata_converter",
-    })
-    ET.SubElement(root, "AiracCycle", {
-        "cycleBegin": cycle.begin,
-        "cycleEnd": cycle.end,
-        "cycleNumber": cycle.number[-2:],
-    })
-    airport_element = ET.SubElement(root, "Airport", _airport_bgl_attrs(airport))
-    for holding in selected:
-        ET.SubElement(airport_element, "Waypoint", _attrs(
-            lat=_float(holding.latitude),
-            lon=_float(holding.longitude),
-            waypointType="NAMED",
-            waypointRegion=holding.fix_region[:2],
-            waypointIdent=_terminal_waypoint_ident(
-                terminal_identities,
-                airport.icao,
-                holding.fix_ident,
-                holding.fix_region,
-                holding.latitude,
-                holding.longitude,
-            ),
-        ))
-    for holding in selected:
-        _append_holding_pattern(
-            airport_element,
-            holding,
-            terminal_identities=terminal_identities,
-        )
-
-    ET.indent(root, space="  ")
-    ET.ElementTree(root).write(output, encoding="utf-8", xml_declaration=True)
-    return XmlProjection(
-        path=output,
-        airports=1,
-        runways=0,
-        waypoints=len(selected),
-        shared_terminal_enroute_waypoints=0,
-        navaids=0,
-        airway_routes=0,
-        skipped_enroute_waypoints=0,
-        skipped_airway_legs=0,
-        skipped_airway_leg_details=(),
-        procedure_segments=0,
         rejected_records=len(model.rejected_records),
         rejected_procedures=len(model.rejected_procedures),
     )

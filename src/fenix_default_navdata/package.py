@@ -11,9 +11,7 @@ from .bgl import (
     CompilerUnavailable,
     compile_bgl,
     compile_package,
-    holding_bgl_groups,
     write_bglcomp_xml,
-    write_holding_group_bglcomp_xml,
     write_package_project,
 )
 from .baseline import NavaidDiff
@@ -116,12 +114,6 @@ def _compile_xml_package(
     input_dir.mkdir(parents=True, exist_ok=True)
     xml_paths: list[Path] = []
     projections = []
-    isolated_holding_groups = holding_bgl_groups(model)
-    excluded_holding_identities = frozenset(
-        (group.airport_icao, ident)
-        for group in isolated_holding_groups
-        for ident in group.holding_idents
-    )
     if include_enroute:
         xml_path = input_dir / "00_enroute.xml"
         projections.append(write_bglcomp_xml(
@@ -142,20 +134,6 @@ def _compile_xml_package(
             airport_prefix=prefix,
             duplicate_terminal_waypoints=duplicate_terminal_waypoints,
             selected_navaids=selected_navaids,
-            excluded_holding_identities=excluded_holding_identities,
-        ))
-        xml_paths.append(xml_path)
-    group_counts: dict[str, int] = {}
-    for group in isolated_holding_groups:
-        group_counts[group.airport_icao] = group_counts.get(group.airport_icao, 0) + 1
-        xml_path = input_dir / (
-            f"{group.airport_icao}_holdings_{group_counts[group.airport_icao]:02d}.xml"
-        )
-        projections.append(write_holding_group_bglcomp_xml(
-            model,
-            cycle,
-            xml_path,
-            group=group,
         ))
         xml_paths.append(xml_path)
     if compiler.kind == "PackageTool":
@@ -198,13 +176,6 @@ def _compile_xml_package(
         ],
         "compile": compile_report,
         "prefixes": airport_prefixes,
-        "isolated_holding_groups": [
-            {
-                "airport": group.airport_icao,
-                "holding_idents": list(group.holding_idents),
-            }
-            for group in isolated_holding_groups
-        ],
     }
 
 
