@@ -94,6 +94,7 @@ python -m fenix_default_navdata.cli iap-ocr-cache `
   --source-root "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
   --pdf-cache "$env:LOCALAPPDATA\default_navdata_converter\pdf-evidence-cache-2608r1-r35" `
   --cache-root "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\markdown-3x" `
+  --mode ocr `
   --runtime-profile "deepseek-ocr-2-q8_0-seed2608-temp0" `
   --statuses ambiguous_chart no_matching_chart `
   --dry-run

@@ -298,8 +298,8 @@ def build_parser() -> argparse.ArgumentParser:
     iap_ocr_cache.add_argument(
         "--mode",
         choices=("markdown", "free", "figure", "ocr"),
-        default="markdown",
-        help="传给 OCR 引擎的识别模式",
+        default="ocr",
+        help="传给 OCR 引擎的识别模式；IAP 角色识别默认 ocr",
     )
     iap_ocr_cache.add_argument("--timeout", type=int, default=240, help="每页 OCR 超时秒数")
     iap_ocr_cache.add_argument(

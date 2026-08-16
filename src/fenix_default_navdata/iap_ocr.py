@@ -165,7 +165,7 @@ def build_iap_ocr_cache(
     statuses: Iterable[str] = IAP_OCR_ELIGIBLE_STATUSES,
     command: str = "ocr-skill",
     backend: str = DIRECT_BACKEND,
-    mode: str = "markdown",
+    mode: str = "ocr",
     timeout_seconds: int = 240,
     render_scale: float = 3.0,
     image_profile: str = "original",

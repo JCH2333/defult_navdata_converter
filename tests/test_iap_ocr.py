@@ -179,7 +179,7 @@ def test_cli_iap_ocr_cache_passes_evidence_only_options(monkeypatch) -> None:
         "statuses": ["ambiguous_chart"],
         "command": "ocr-skill",
         "backend": "llamacpp-direct",
-        "mode": "markdown",
+        "mode": "ocr",
         "timeout_seconds": 240,
         "engine_timeout_seconds": None,
         "max_tokens": 4096,
