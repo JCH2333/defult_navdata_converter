@@ -39,3 +39,14 @@ python -m fenix_default_navdata.cli ad219-ndb-ocr-audit `
 2026-08-16 使用 `markdown`、`autocontrast-grayscale`、3 倍渲染建立 `Terminal/ZBCZ/长治王村.pdf` 的完整缓存。源 PDF SHA-256 为 `9be71e6f79601cdc9253d1995c9019b610709593a0637078c61e32c5755e446a`。
 
 第 14 页的 `SQ`、398 kHz 与坐标唯一匹配当期 `NDB.csv` 第 26 行，但直接 CSV 未提供 `VAL_ELEV`。因此审计状态为 `matched_direct_424_with_target_gaps`，剩余缺口为 `elevation_ft`，不得据此新增或修订默认 BGL NDB。该结果由 `test_ad219_ndb_audit_keeps_csv_match_with_missing_target_field_nonprojectable` 约束。
+
+## 首批 20 份文档审计
+
+2026-08-16 的 `markdown`、`autocontrast-grayscale`、3 倍渲染缓存覆盖了按路径排序的前 20 份候选 PDF，共 410 页；其中 18 份包含 AD 2.19 区段，解析出 4 条完整的 NDB 证据行。审计结果始终为 `projection_allowed=false`：
+
+1. `ZBAA/CDY` 唯一匹配 `NDB.csv` 第 77 行，但仍缺 `elevation_ft`。
+2. `ZBCZ/SQ` 唯一匹配 `NDB.csv` 第 26 行，但仍缺 `elevation_ft`。
+3. `ZBCF/YL` 不存在于直接 `NDB.csv`，缺少 `name`、`magnetic_variation`、`elevation_ft`、`country`。
+4. `ZBER/BN` 不存在于直接 `NDB.csv`，缺少 `name`、`magnetic_variation`、`elevation_ft`、`country`。
+
+AD 2.19 的打印字段不能补齐这些目标契约字段。后续批次可以继续扩大来源缺口审计，但不得因识别到相同的标识、频率和坐标而新增或修订默认 BGL NDB。
