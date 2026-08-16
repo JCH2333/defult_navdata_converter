@@ -24,6 +24,24 @@ _AIRWAY_FIELDS = (
 )
 
 
+def _require_complete_reader_output(report: Mapping[str, object]) -> None:
+    reader_output = report.get("reader_output")
+    if not isinstance(reader_output, Mapping):
+        raise SourceGapAuditError("语义差分缺少读取器完整性证明")
+    for label in ("candidate", "reference"):
+        output = reader_output.get(label)
+        if not isinstance(output, Mapping):
+            raise SourceGapAuditError(f"语义差分缺少 {label} 读取器完整性证明")
+        expected = output.get("expected_bgl_count")
+        actual = output.get("bgl_file_rows")
+        if not isinstance(expected, int) or expected <= 0:
+            raise SourceGapAuditError(f"{label} 读取器缺少有效的预期 BGL 数")
+        if actual != expected:
+            raise SourceGapAuditError(
+                f"{label} 读取器仅登记 {actual}/{expected} 个请求的 BGL，拒绝不完整扫描"
+            )
+
+
 def _normalized(value: object) -> str:
     return str(value or "").strip().upper()
 
@@ -339,6 +357,7 @@ def audit_source_gaps(
     It returns source-category totals, so it can guide new source research
     without becoming a reference-field backfill channel.
     """
+    _require_complete_reader_output(semantic_report)
     waypoint_keys = _reference_only_keys(
         semantic_report, "waypoint", _WAYPOINT_FIELDS
     )

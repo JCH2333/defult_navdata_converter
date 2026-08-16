@@ -110,6 +110,18 @@ def build_parser() -> argparse.ArgumentParser:
     semantic.add_argument("--candidate-db", required=True, help="候选包的 Navdatareader SQLite")
     semantic.add_argument("--reference-db", required=True, help="参考包的 Navdatareader SQLite")
     semantic.add_argument(
+        "--candidate-bgl-count",
+        required=True,
+        type=int,
+        help="候选读取器请求且必须登记的 BGL 数",
+    )
+    semantic.add_argument(
+        "--reference-bgl-count",
+        required=True,
+        type=int,
+        help="参考读取器请求且必须登记的 BGL 数",
+    )
+    semantic.add_argument(
         "--tables",
         nargs="+",
         choices=SUPPORTED_TABLES,
@@ -497,6 +509,8 @@ def main(argv: list[str] | None = None) -> int:
         report = semantic_diff(
             Path(args.candidate_db),
             Path(args.reference_db),
+            expected_candidate_bgl_count=args.candidate_bgl_count,
+            expected_reference_bgl_count=args.reference_bgl_count,
             tables=args.tables,
             sample_limit=args.sample_limit,
         )

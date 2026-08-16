@@ -20,6 +20,10 @@ def _semantic_report(
         "diagnostic": "navdatareader-semantic-diff-v1",
         "read_only": True,
         "reference_values_redacted": True,
+        "reader_output": {
+            "candidate": {"bgl_file_rows": 1, "expected_bgl_count": 1},
+            "reference": {"bgl_file_rows": 1, "expected_bgl_count": 1},
+        },
         "tables": {
             "waypoint": {
                 "reference_only_logical_keys": len(waypoint_samples),
@@ -91,6 +95,14 @@ def test_source_gap_audit_classifies_only_against_424_model(tmp_path: Path) -> N
     serialized = json.dumps(result)
     assert "DIRECT" not in serialized
     assert "A1" not in serialized
+
+
+def test_source_gap_audit_rejects_partial_reader_scan(tmp_path: Path) -> None:
+    report = _semantic_report(waypoint_samples=[], airway_samples=[])
+    report["reader_output"]["candidate"]["bgl_file_rows"] = 0
+
+    with pytest.raises(SourceGapAuditError, match="candidate.*0/1"):
+        audit_source_gaps(_model(tmp_path), report)
 
 
 def test_source_gap_audit_distinguishes_projected_source_pairs(

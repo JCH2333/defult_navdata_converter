@@ -45,6 +45,8 @@ python -m fenix_default_navdata.cli validate `
 python -m fenix_default_navdata.cli semantic-diff `
   --candidate-db "C:\诊断目录\candidate.sqlite" `
   --reference-db "C:\诊断目录\reference.sqlite" `
+  --candidate-bgl-count 21 `
+  --reference-bgl-count 21 `
   --output diagnostics\navdatareader\semantic-diff.json
 python -m fenix_default_navdata.cli read-package `
   --package output\candidate-2608-default\zzz-pmdg-china-navdata `
@@ -145,8 +147,8 @@ python -m fenix_default_navdata.cli build `
 - 原始 CSV/PDF、官方 Community 包、参考 BGL、备份、日志和生成包均不进入仓库。
 - Fenix `nd.db3` 不参与本工具转换；Fenix 相关代码仅保留为历史适配器回归材料。
 - 参考成品只用于只读差分，绝不复制参考 BGL 冒充转换结果。
-- `semantic-diff` 不返回参考 SQLite 的坐标、频率、磁差、高程、名称或航路端点字段值，不能作为候选内容的反向来源。
-- `source-gap-audit` 只接受完整、只读且已脱敏的 `semantic-diff` 报告；它只输出 424 来源分类计数，不导出或保存参考逻辑身份。它还会核验 `ROUTE_HOLDING.csv` 是否只回链既有点；无区域键或复用位置标签的记录不得当作新 enroute 航点。
+- `semantic-diff` 不返回参考 SQLite 的坐标、频率、磁差、高程、名称或航路端点字段值，不能作为候选内容的反向来源。调用时必须显式提供候选和参考各自的预期 BGL 数；`bgl_file` 登记数不精确相等即拒绝生成报告。
+- `source-gap-audit` 只接受完整、只读且已脱敏、并已证明 BGL 登记数完整的 `semantic-diff` 报告；它只输出 424 来源分类计数，不导出或保存参考逻辑身份。它还会核验 `ROUTE_HOLDING.csv` 是否只回链既有点；无区域键或复用位置标签的记录不得当作新 enroute 航点。
 - Package Tool 构建和 Community 覆盖前都要求 `FlightSimulator2024.exe` 已完全退出。
 - 覆盖前自动备份四个相关包；测试候选、不完整候选、未完成字节比对或实机验证的候选都会拒绝部署。
 - 只有 `status=release`、参考覆盖包逐文件字节一致，并已登记 ZBCF、ZUNZ、ZUUU 与退出稳定性实机验证的候选才可覆盖 Community。

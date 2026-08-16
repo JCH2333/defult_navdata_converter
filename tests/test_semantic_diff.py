@@ -122,7 +122,14 @@ def test_semantic_diff_reports_field_names_and_redacts_reference_values(tmp_path
     before = _digest(candidate)
     reference_before = _digest(reference)
 
-    report = semantic_diff(candidate, reference, tables=("vor",), sample_limit=10)
+    report = semantic_diff(
+        candidate,
+        reference,
+        expected_candidate_bgl_count=1,
+        expected_reference_bgl_count=1,
+        tables=("vor",),
+        sample_limit=10,
+    )
 
     assert _digest(candidate) == before
     assert _digest(reference) == reference_before
@@ -163,7 +170,14 @@ def test_semantic_diff_samples_are_stable_and_limited(tmp_path: Path):
         {"vor": [], "ndb": [{"ident": "REFERENCE-SEED"}]},
     )
 
-    report = semantic_diff(candidate, reference, tables=("vor",), sample_limit=2)
+    report = semantic_diff(
+        candidate,
+        reference,
+        expected_candidate_bgl_count=1,
+        expected_reference_bgl_count=1,
+        tables=("vor",),
+        sample_limit=2,
+    )
 
     table = report["tables"]["vor"]
     assert [item["logical_key"]["ident"] for item in table["candidate_only_samples"]] == [
@@ -187,7 +201,14 @@ def test_semantic_diff_sorts_nullable_logical_keys_deterministically(tmp_path: P
         {"vor": [], "ndb": [{"ident": "REFERENCE-SEED"}]},
     )
 
-    report = semantic_diff(candidate, reference, tables=("vor",), sample_limit=10)
+    report = semantic_diff(
+        candidate,
+        reference,
+        expected_candidate_bgl_count=1,
+        expected_reference_bgl_count=1,
+        tables=("vor",),
+        sample_limit=10,
+    )
 
     assert [item["logical_key"]["airport_ident"] for item in report["tables"]["vor"]["candidate_only_samples"]] == [
         None,
@@ -210,7 +231,13 @@ def test_semantic_diff_reports_ambiguous_logical_keys_without_pairing_rows(tmp_p
         {"waypoint": [{"ident": "DUP", "lonx": 100.5}]},
     )
 
-    report = semantic_diff(candidate, reference, tables=("waypoint",))
+    report = semantic_diff(
+        candidate,
+        reference,
+        expected_candidate_bgl_count=1,
+        expected_reference_bgl_count=1,
+        tables=("waypoint",),
+    )
 
     table = report["tables"]["waypoint"]
     assert table["ambiguous_logical_keys"] == 1
@@ -234,7 +261,13 @@ def test_semantic_diff_requires_the_selected_reader_table_contract(tmp_path: Pat
         connection.close()
 
     with pytest.raises(SemanticDiffError, match="vor"):
-        semantic_diff(candidate, reference, tables=("vor",))
+        semantic_diff(
+            candidate,
+            reference,
+            expected_candidate_bgl_count=1,
+            expected_reference_bgl_count=1,
+            tables=("vor",),
+        )
 
 
 def test_semantic_diff_rejects_empty_bgl_file_output(tmp_path: Path):
@@ -249,7 +282,13 @@ def test_semantic_diff_rejects_empty_bgl_file_output(tmp_path: Path):
     )
 
     with pytest.raises(SemanticDiffError, match="bgl_file.*为空"):
-        semantic_diff(candidate, reference, tables=("vor",))
+        semantic_diff(
+            candidate,
+            reference,
+            expected_candidate_bgl_count=1,
+            expected_reference_bgl_count=1,
+            tables=("vor",),
+        )
 
 
 def test_semantic_diff_rejects_reader_output_without_any_target_records(tmp_path: Path):
@@ -260,7 +299,12 @@ def test_semantic_diff_rejects_reader_output_without_any_target_records(tmp_path
     )
 
     with pytest.raises(SemanticDiffError, match="目标设施表均为空"):
-        semantic_diff(candidate, reference)
+        semantic_diff(
+            candidate,
+            reference,
+            expected_candidate_bgl_count=1,
+            expected_reference_bgl_count=1,
+        )
 
 
 def test_cli_writes_semantic_diff_report(tmp_path: Path, capsys):
@@ -272,6 +316,8 @@ def test_cli_writes_semantic_diff_report(tmp_path: Path, capsys):
         "semantic-diff",
         "--candidate-db", str(candidate),
         "--reference-db", str(reference),
+        "--candidate-bgl-count", "1",
+        "--reference-bgl-count", "1",
         "--tables", "ndb",
         "--sample-limit", "1",
         "--output", str(output),
@@ -283,5 +329,20 @@ def test_cli_writes_semantic_diff_report(tmp_path: Path, capsys):
     assert saved["read_only"] is True
     assert saved["output"] == str(output.resolve())
     assert saved["reader_output"]["candidate"]["bgl_file_rows"] == 1
+    assert saved["reader_output"]["candidate"]["expected_bgl_count"] == 1
     assert saved["reader_output"]["reference"]["target_rows"]["ndb"] == 1
     assert json.loads(capsys.readouterr().out)["summary"]["candidate_only_logical_keys"] == 1
+
+
+def test_semantic_diff_rejects_partial_requested_bgl_scan(tmp_path: Path):
+    candidate = _write_database(tmp_path / "candidate.sqlite", {"vor": [{"ident": "A"}]})
+    reference = _write_database(tmp_path / "reference.sqlite", {"vor": [{"ident": "B"}]})
+
+    with pytest.raises(SemanticDiffError, match="候选 SQLite 仅登记了 1/2 个请求的 BGL"):
+        semantic_diff(
+            candidate,
+            reference,
+            expected_candidate_bgl_count=2,
+            expected_reference_bgl_count=1,
+            tables=("vor",),
+        )

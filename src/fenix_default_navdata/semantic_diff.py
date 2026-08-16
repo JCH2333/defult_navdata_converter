@@ -189,6 +189,8 @@ def _reader_output_summary(
     connection: sqlite3.Connection,
     path: Path,
     label: str,
+    *,
+    expected_bgl_count: int,
 ) -> dict[str, object]:
     """确认 SQLite 确实是有读取结果的 Navdatareader 输出。
 
@@ -230,11 +232,17 @@ def _reader_output_summary(
 
     if bgl_file_rows == 0:
         raise SemanticDiffError(f"{label} SQLite 的 bgl_file 表为空，读取器没有输出 BGL 来源: {path}")
+    if bgl_file_rows != expected_bgl_count:
+        raise SemanticDiffError(
+            f"{label} SQLite 仅登记了 {bgl_file_rows}/{expected_bgl_count} 个请求的 BGL，"
+            f"拒绝不完整扫描: {path}"
+        )
     if not any(target_rows.values()):
         raise SemanticDiffError(
             f"{label} SQLite 的目标设施表均为空，读取器没有输出有效设施: {path}"
         )
     return {
+        "expected_bgl_count": expected_bgl_count,
         "bgl_file_rows": bgl_file_rows,
         "target_rows": target_rows,
     }
@@ -445,6 +453,8 @@ def semantic_diff(
     candidate_db: Path,
     reference_db: Path,
     *,
+    expected_candidate_bgl_count: int,
+    expected_reference_bgl_count: int,
     tables: Sequence[str] | None = None,
     sample_limit: int = 50,
 ) -> dict[str, object]:
@@ -455,18 +465,26 @@ def semantic_diff(
     """
     if sample_limit <= 0:
         raise ValueError("样本上限必须为正整数")
+    if expected_candidate_bgl_count <= 0 or expected_reference_bgl_count <= 0:
+        raise ValueError("预期 BGL 数必须为正整数")
     specs = _resolve_specs(tables)
     candidate_path = candidate_db.expanduser().resolve()
     reference_path = reference_db.expanduser().resolve()
     candidate_connection = _open_readonly(candidate_path, "候选")
     try:
         candidate_reader_output = _reader_output_summary(
-            candidate_connection, candidate_path, "候选"
+            candidate_connection,
+            candidate_path,
+            "候选",
+            expected_bgl_count=expected_candidate_bgl_count,
         )
         reference_connection = _open_readonly(reference_path, "参考")
         try:
             reference_reader_output = _reader_output_summary(
-                reference_connection, reference_path, "参考"
+                reference_connection,
+                reference_path,
+                "参考",
+                expected_bgl_count=expected_reference_bgl_count,
             )
             reports = {
                 spec.table: _table_report(
