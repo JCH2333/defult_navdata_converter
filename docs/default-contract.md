@@ -187,7 +187,7 @@ PDF 缓存载荷带有提取器版本。修改可影响证据解释的规则时�
 `_EVIDENCE_CACHE_VERSION`，并以新缓存进行冷读与热读一致性复核；不得依据旧缓存
 中的统计或程序分类作出发布、部署或数据覆盖决定。
 
-IAP 覆盖报告由 `iap_coverage.version=4` 标记。所有角色投影必须满足：数据库编码页
+IAP 覆盖报告由 `iap_coverage.version=5` 标记。所有角色投影必须满足：数据库编码页
 提供有序腿，仪表进近图页提供明确角色，且同一机场、跑道、程序标签的图页唯一；多图
 时优先要求主进近最后定位点在恰好一张图上明确为 `MAP/MAPT`。若该定位点不能消歧，
 仅当恰好一张候选图页对至少两个不同数据库腿给出 `IAF`、`IF`、`FAF`、`MAP` 或
@@ -196,6 +196,16 @@ IAP 覆盖报告由 `iap_coverage.version=4` 标记。所有角色投影必须�
 不同数据库腿角色数量严格高于每一张其他候选图页时才允许消歧；相同数量一律拒绝。
 其余分组仍可保留已解析的来源腿，但必须在
 `unresolved_groups` 中列出，不能猜测图页或从参考成品回填程序语义。
+
+对仅由 OCR 发现的图页角色，必须先对至少三份独立、完整缓存重新审计：源 PDF 路径和
+SHA-256、OCR 运行时标识、命令、后端、模式、图像预处理、渲染比例、角色-航点对和相邻
+关系必须完全一致。通过后仅可用于已有 `ambiguous_chart` 分组内、同一 424 主进近腿与
+同一源 PDF 哈希绑定的候选页唯一消歧；不得新增主进近、航段或图页匹配，也不得解除
+`no_unique_primary`、`empty_primary` 或 `no_matching_chart` 拒绝。自动化测试：
+`test_iap_ocr_consensus_loads_only_unanimous_roles_for_matching_chart_pages`、
+`test_iap_coverage_uses_consensus_ocr_mapt_only_for_one_matching_chart`、
+`test_iap_coverage_keeps_two_consensus_ocr_mapt_candidates_ambiguous` 和
+`test_bgl_iap_chart_roles_reuses_consensus_ocr_selection`。
 
 不带后缀的 IAP 基础标签可能只包含共享过渡或复飞段，而同页的 `-X/-Y/-Z` 唯一主
 进近段会在 BGL 投影中消费它们。只有基础标签组的每个来源页都能由同机场、同跑道、

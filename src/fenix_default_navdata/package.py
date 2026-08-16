@@ -16,6 +16,7 @@ from .bgl import (
 )
 from .baseline import NavaidDiff
 from .default_navaids import DefaultNavaidSelection, select_default_navaids
+from .iap_ocr_consensus import load_iap_ocr_role_evidence
 from .model import NavModel
 from .official_index import (
     OfficialIndexError,
@@ -192,6 +193,7 @@ def build_candidate(
     general_doc_cache: Path | None = None,
     general_doc_key_point_cache_directory: str = "enr-4.4",
     general_doc_airway_cache_directories: tuple[str, ...] = (),
+    iap_ocr_cache_roots: tuple[Path, ...] = (),
     baseline_db: Path | None = None,
     baseline_tolerance_nm: float = 0.25,
 ) -> dict[str, object]:
@@ -201,21 +203,31 @@ def build_candidate(
     """
     if output.exists():
         raise FileExistsError(f"候选目录已存在: {output}")
+    if pdf_cache is None:
+        cache_root = Path(os.environ.get("LOCALAPPDATA", str(output.parent)))
+        pdf_cache = cache_root / "default_navdata_converter" / f"pdf-evidence-cache-{cycle.number}r{cycle.revision}"
+    pdf_cache = pdf_cache.resolve()
+    iap_ocr_role_evidence = (
+        load_iap_ocr_role_evidence(
+            raw_root,
+            iap_ocr_cache_roots,
+            pdf_cache=pdf_cache,
+        )
+        if iap_ocr_cache_roots
+        else None
+    )
     output.mkdir(parents=True)
     _copy_tree(nav_base, output / BASE_PACKAGE)
     _copy_tree(nav_jepp, output / JEPP_PACKAGE)
     work = output / "_work"
     work.mkdir(exist_ok=True)
-    if pdf_cache is None:
-        cache_root = Path(os.environ.get("LOCALAPPDATA", str(output.parent)))
-        pdf_cache = cache_root / "default_navdata_converter" / f"pdf-evidence-cache-{cycle.number}r{cycle.revision}"
-    pdf_cache = pdf_cache.resolve()
     model = load_naip(
         raw_root,
         pdf_cache=pdf_cache,
         general_doc_cache=general_doc_cache,
         general_doc_key_point_cache_directory=general_doc_key_point_cache_directory,
         general_doc_airway_cache_directories=general_doc_airway_cache_directories,
+        iap_ocr_role_evidence=iap_ocr_role_evidence,
         include_terminal_documents=True,
     )
     navaid_diff: NavaidDiff | None = None
@@ -315,6 +327,14 @@ def build_candidate(
             "holdings": len(model.holdings),
             "rejected_records": len(model.rejected_records),
             "rejected_procedures": len(model.rejected_procedures),
+            "iap_ocr_evidence": (
+                iap_ocr_role_evidence.report
+                if iap_ocr_role_evidence is not None
+                else {
+                    "accepted": False,
+                    "reason": "未提供三份以上 IAP OCR 共识缓存",
+                }
+            ),
         },
         "airway_source": summarize_airway_source_metadata(model),
         "terminal_navaid_evidence": {

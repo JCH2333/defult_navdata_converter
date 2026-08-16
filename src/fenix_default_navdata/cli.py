@@ -75,6 +75,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="要投影最低飞行高度的完整 3.2 航路表 OCR 缓存子目录",
     )
     build.add_argument(
+        "--iap-ocr-cache-roots",
+        nargs="+",
+        default=[],
+        help="至少三份完全一致的 IAP OCR 缓存；仅用于多图进近页的受限消歧",
+    )
+    build.add_argument(
         "--baseline-db",
         help="已验证的官方 VOR/NDB 设施索引 SQLite；未提供时只能生成不可部署的诊断候选",
     )
@@ -390,6 +396,9 @@ def main(argv: list[str] | None = None) -> int:
             general_doc_key_point_cache_directory=args.general_doc_keypoint_cache_directory,
             general_doc_airway_cache_directories=tuple(
                 args.general_doc_airway_cache_directories
+            ),
+            iap_ocr_cache_roots=tuple(
+                Path(value) for value in args.iap_ocr_cache_roots
             ),
             baseline_db=_path(args.baseline_db),
             baseline_tolerance_nm=args.baseline_tolerance_nm,

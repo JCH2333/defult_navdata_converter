@@ -4,7 +4,7 @@ from fenix_default_navdata import convert as convert_module
 from fenix_default_navdata.profile import DEFAULT_CYCLE
 
 
-def test_convert_passes_requested_airway_ocr_cache_directories(
+def test_convert_passes_requested_ocr_cache_directories(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -33,9 +33,19 @@ def test_convert_passes_requested_airway_ocr_cache_directories(
         general_doc_airway_cache_directories=(
             "enr-3.2.4-h-sample-original",
         ),
+        iap_ocr_cache_roots=(
+            tmp_path / "iap-a",
+            tmp_path / "iap-b",
+            tmp_path / "iap-c",
+        ),
     )
 
     assert report == {"status": "test"}
     assert received["general_doc_airway_cache_directories"] == (
         "enr-3.2.4-h-sample-original",
+    )
+    assert received["iap_ocr_cache_roots"] == (
+        (tmp_path / "iap-a").resolve(),
+        (tmp_path / "iap-b").resolve(),
+        (tmp_path / "iap-c").resolve(),
     )

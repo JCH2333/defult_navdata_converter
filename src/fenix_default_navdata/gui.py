@@ -38,6 +38,7 @@ class App:
         self.baseline = tk.StringVar()
         self.general_doc_cache = tk.StringVar()
         self.general_doc_keypoint_cache_directory = tk.StringVar(value="enr-4.4")
+        self.iap_ocr_cache_roots = tk.StringVar()
         self.reference = tk.StringVar()
         self.output = tk.StringVar(value=str(Path.cwd() / "output" / "candidate-2608-default"))
         self.target = tk.StringVar()
@@ -66,6 +67,7 @@ class App:
             ("官方设施索引", self.baseline, "file"),
             ("航路 OCR 缓存", self.general_doc_cache, "dir"),
             ("重要点 OCR 子目录", self.general_doc_keypoint_cache_directory, "text"),
+            ("IAP OCR 共识缓存", self.iap_ocr_cache_roots, "dirs"),
             ("参考成品（只读）", self.reference, "dir"),
             ("隔离候选输出", self.output, "dir"),
             ("Community 目标", self.target, "dir"),
@@ -79,6 +81,16 @@ class App:
                     column=2,
                     pady=5,
                 )
+            elif kind == "dirs":
+                tk.Button(
+                    paths,
+                    text="添加",
+                    command=lambda v=variable: self._add_directory(v),
+                    bg="#203447",
+                    fg=TEXT,
+                    relief=tk.FLAT,
+                    padx=12,
+                ).grid(row=row, column=2, pady=5)
             else:
                 tk.Button(
                     paths,
@@ -117,6 +129,15 @@ class App:
         )
         if value:
             variable.set(value)
+
+    def _add_directory(self, variable: tk.StringVar) -> None:
+        value = filedialog.askdirectory()
+        if not value:
+            return
+        values = [item.strip() for item in variable.get().split(";") if item.strip()]
+        if value not in values:
+            values.append(value)
+        variable.set(";".join(values))
 
     def _detect(self) -> None:
         detected = detect_paths()
@@ -212,6 +233,11 @@ class App:
             general_doc_key_point_cache_directory=(
                 self.general_doc_keypoint_cache_directory.get().strip()
                 or "enr-4.4"
+            ),
+            iap_ocr_cache_roots=tuple(
+                Path(value.strip())
+                for value in self.iap_ocr_cache_roots.get().split(";")
+                if value.strip()
             ),
         ))
 

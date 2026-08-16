@@ -15,7 +15,7 @@
 - 自动探测 MSFS 2024 SDK `fspackagetool.exe`。
 - 通过纯 ASCII 暂存项目调用 Package Tool，生成 BGL、`bglIndex.bout`、包元数据与 ContentInfo。
 - 将 PDF 解析证据缓存到本机可复用目录，长时间转换中断后可以断点续跑。
-- OCR 缓存绑定渲染比例、固定图像预处理和本地识别配置；可将完整 OCR 缓存与重跑缓存逐页比对，并独立审计每条记录是否可唯一回链到直接 424。重跑不完全一致时可由命令行门禁返回非零，且 OCR 结果始终只作为来源审计。
+- OCR 缓存绑定渲染比例、固定图像预处理和本地识别配置；可将完整 OCR 缓存与重跑缓存逐页比对，并独立审计每条记录是否可唯一回链到直接 424。仅 IAP 多图页消歧可在至少三份缓存完全一致后受限使用，不能新增程序或航段。
 - 本地 llama.cpp OCR 启动器固定记录随机种子和温度，并生成可验证的运行时描述文件；OCR 缓存通过 `--runtime-profile-file` 绑定 llama 构建号、模型哈希、视觉投影哈希、种子与温度，避免手工简写混用不同推理配置。
 - 对 GeneralDoc 4.1 中 OCR 识别码与直接 424 记录不一致的情形，只在类型、频率和坐标均唯一匹配时登记为 OCR 转录差异；直接 CSV 仍是唯一的导航台投影来源。
 - 比较参考成品目录的逐文件大小和 SHA-256。
@@ -103,7 +103,12 @@ python -m fenix_default_navdata.gui
 
 `iap-ocr-recheck` 比较两份完整、独立重跑的 IAP OCR 缓存，仅报告角色证据的交集和差异；`--require-agreement` 会同时要求所有候选页记录且匹配完整识别设置：命令、后端、模式、图像预处理、渲染比例与非空 `runtime_profile`。即使两份缓存完全一致，它也不会选择图页或解除 IAP 拒绝。`iap-ocr-consensus` 将这一门禁扩展为至少三份缓存，逐份校验候选页、识别设置、角色-航点对和相邻关系；其输出同样不可投影。
 
-2608R1 的严格共识已使用 A/B/D 三份独立缓存完成。历史 C 的 OCR 命令记录形式不同，
+`build --iap-ocr-cache-roots` 会重新审计至少三份缓存。仅当全部候选页、运行时标识、
+识别设置、角色-航点对及其相邻关系完全一致时，构建才把这些角色用于已有
+`ambiguous_chart` 分组的唯一图页选择。它不处理 `no_unique_primary` 或
+`no_matching_chart`，不生成新程序腿，也不改变测试版、字节比对和实机验证门禁。
+
+2608R1 的严格共识已使用 A/B/D/F 四份独立缓存完成。历史 C 的 OCR 命令记录形式不同，
 即使角色证据相同也不能混入共识；当引擎默认等待不足时，使用 `--engine-timeout` 配合
 更长的外层 `--timeout` 断点续跑，并保留执行参数供审计。
 
@@ -113,6 +118,11 @@ python -m fenix_default_navdata.gui
 python -m fenix_default_navdata.cli build `
   --raw "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
   --bglcomp "C:\MSFS 2024 SDK\Tools\bin\fspackagetool.exe" `
+  --iap-ocr-cache-roots `
+    "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\ocr-3x-deterministic-a-20260815" `
+    "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\ocr-3x-deterministic-b-20260815" `
+    "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\ocr-3x-deterministic-d-20260815" `
+    "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\ocr-3x-deterministic-f-20260815" `
   --output output/candidate-2608-default
 ```
 

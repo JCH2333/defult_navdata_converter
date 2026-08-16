@@ -23,7 +23,7 @@ from .general_docs import (
     load_enroute_navaid_evidence,
     load_selected_enroute_key_point_evidence,
 )
-from .model import CN_PREFIXES, Airport, AirwayLeg, Holding, NavModel, Navaid, ProcedureSegment, RejectedProcedure, RejectedRecord, Runway, SourceRef, TerminalWaypoint, Waypoint, is_china_icao
+from .model import CN_PREFIXES, Airport, AirwayLeg, Holding, IapOcrRoleEvidence, NavModel, Navaid, ProcedureSegment, RejectedProcedure, RejectedRecord, Runway, SourceRef, TerminalWaypoint, Waypoint, is_china_icao
 from .pdf_charts import (
     _is_instrument_approach_index_row,
     _is_standard_procedure_index_row,
@@ -1225,13 +1225,14 @@ def load_naip(
     general_doc_cache: Path | None = None,
     general_doc_key_point_cache_directory: str = ENROUTE_KEY_POINT_CACHE_DIRECTORY,
     general_doc_airway_cache_directories: tuple[str, ...] = (),
+    iap_ocr_role_evidence: IapOcrRoleEvidence | None = None,
     include_terminal_documents: bool = True,
 ) -> NavModel:
     """Load only structured data; PDFs are inspected separately and never guessed."""
     root = root.resolve()
     pdf_cache = _validate_pdf_cache(root, pdf_cache)
     general_doc_cache = _validate_pdf_cache(root, general_doc_cache)
-    model = NavModel(root=root)
+    model = NavModel(root=root, iap_ocr_role_evidence=iap_ocr_role_evidence)
     airway_endpoint_countries: dict[tuple[str, str, float, float], set[str]] = {}
     segment_rows = _optional_index(root, "SEGMENT.csv", "SEGMENT_ID")
     en_route_rows = _optional_index(root, "EN_ROUTE_RTE.csv", "EN_ROUTE_RTE_ID")

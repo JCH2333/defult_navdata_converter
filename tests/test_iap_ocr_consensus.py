@@ -6,6 +6,7 @@ from fenix_default_navdata.cli import main
 from fenix_default_navdata.iap_ocr_consensus import (
     IapOcrConsensusError,
     audit_iap_ocr_role_consensus,
+    load_iap_ocr_role_evidence,
 )
 
 
@@ -122,6 +123,48 @@ def test_iap_ocr_consensus_rejects_too_few_or_duplicate_cache_roots() -> None:
         audit_iap_ocr_role_consensus(
             Path("raw"),
             [Path("a"), Path("a"), Path("c")],
+        )
+
+
+def test_iap_ocr_consensus_loads_only_unanimous_roles_for_matching_chart_pages(
+    monkeypatch,
+) -> None:
+    reports = [_report("a"), _report("b"), _report("c")]
+    monkeypatch.setattr(
+        "fenix_default_navdata.iap_ocr_consensus.audit_iap_ocr_cache",
+        lambda *_args, **_kwargs: reports.pop(0),
+    )
+
+    evidence = load_iap_ocr_role_evidence(
+        Path("raw"),
+        [Path("a"), Path("b"), Path("c")],
+    )
+
+    assert evidence.roles_for((
+        "ZAAA",
+        "R01",
+        "01",
+        "Terminal/ZAAA/first.pdf",
+        "a" * 64,
+    )) == {"FIX01": {"FAF"}}
+    assert evidence.report["accepted"] is True
+    assert evidence.report["accepted_candidate_pages"] == 1
+    assert evidence.report["accepted_role_evidence"] == 1
+
+
+def test_iap_ocr_consensus_rejects_nonunanimous_roles_for_candidate_build(
+    monkeypatch,
+) -> None:
+    reports = [_report("a"), _report("b"), _report("c", relation="vertical_stack")]
+    monkeypatch.setattr(
+        "fenix_default_navdata.iap_ocr_consensus.audit_iap_ocr_cache",
+        lambda *_args, **_kwargs: reports.pop(0),
+    )
+
+    with pytest.raises(IapOcrConsensusError, match="不一致"):
+        load_iap_ocr_role_evidence(
+            Path("raw"),
+            [Path("a"), Path("b"), Path("c")],
         )
 
 

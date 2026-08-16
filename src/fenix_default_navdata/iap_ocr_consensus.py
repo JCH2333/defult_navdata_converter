@@ -9,10 +9,14 @@ from typing import Iterable
 from .iap_ocr import IAP_OCR_ELIGIBLE_STATUSES
 from .iap_ocr_audit import audit_iap_ocr_cache
 from .iap_ocr_recheck import _report_evidence, _role_report_item
+from .model import IapOcrRoleEvidence
 
 
 class IapOcrConsensusError(ValueError):
     """Raised when a reusable multi-run OCR consensus cannot be verified."""
+
+
+_ALLOWED_ROLES = frozenset({"IAF", "IF", "FAF", "MAP", "MAPT"})
 
 
 def _roots(cache_roots: Iterable[Path]) -> tuple[Path, ...]:
@@ -24,13 +28,13 @@ def _roots(cache_roots: Iterable[Path]) -> tuple[Path, ...]:
     return roots
 
 
-def audit_iap_ocr_role_consensus(
+def _audit_iap_ocr_role_consensus(
     root: Path,
     cache_roots: Iterable[Path],
     *,
     pdf_cache: Path | None = None,
     statuses: Iterable[str] = IAP_OCR_ELIGIBLE_STATUSES,
-) -> dict[str, object]:
+) -> tuple[dict[str, object], dict[tuple[object, ...], str]]:
     """Compare three or more source-only OCR caches without enabling projection."""
     roots = _roots(cache_roots)
     reports = [
@@ -123,7 +127,7 @@ def audit_iap_ocr_role_consensus(
             },
         })
 
-    return {
+    report = {
         "diagnostic": "iap-ocr-role-consensus-v1",
         "evidence_only": True,
         "projection_allowed": False,
@@ -139,6 +143,80 @@ def audit_iap_ocr_role_consensus(
         },
         "comparisons": comparisons,
     }
+    return report, canonical_evidence
+
+
+def audit_iap_ocr_role_consensus(
+    root: Path,
+    cache_roots: Iterable[Path],
+    *,
+    pdf_cache: Path | None = None,
+    statuses: Iterable[str] = IAP_OCR_ELIGIBLE_STATUSES,
+) -> dict[str, object]:
+    """Compare three or more source-only OCR caches without enabling projection."""
+    report, _ = _audit_iap_ocr_role_consensus(
+        root,
+        cache_roots,
+        pdf_cache=pdf_cache,
+        statuses=statuses,
+    )
+    return report
+
+
+def load_iap_ocr_role_evidence(
+    root: Path,
+    cache_roots: Iterable[Path],
+    *,
+    pdf_cache: Path | None = None,
+    statuses: Iterable[str] = ("ambiguous_chart",),
+) -> IapOcrRoleEvidence:
+    """Accept only unanimous OCR roles for limited existing-chart selection.
+
+    OCR may distinguish an already matched set of IAP chart pages. It never
+    creates a primary approach, adds legs, or resolves a no-matching-chart
+    group.
+    """
+    report, canonical_evidence = _audit_iap_ocr_role_consensus(
+        root,
+        cache_roots,
+        pdf_cache=pdf_cache,
+        statuses=statuses,
+    )
+    comparison = report["comparison"]
+    if not isinstance(comparison, dict) or comparison.get("consistent") is not True:
+        raise IapOcrConsensusError(
+            "IAP OCR 多缓存角色证据不一致，不能用于候选构建"
+        )
+
+    candidate_roles: dict[tuple[str, str, str, str, str], set[tuple[str, str]]] = {}
+    for role_key in canonical_evidence:
+        candidate, _page, ident, role = role_key
+        if not isinstance(candidate, tuple) or len(candidate) != 5:
+            raise IapOcrConsensusError("IAP OCR 角色证据候选键无效")
+        if role not in _ALLOWED_ROLES:
+            raise IapOcrConsensusError(f"IAP OCR 包含不支持的图页角色: {role}")
+        normalized_candidate = tuple(str(value) for value in candidate)
+        candidate_roles.setdefault(normalized_candidate, set()).add((str(ident), role))
+
+    return IapOcrRoleEvidence(
+        candidate_roles={
+            key: frozenset(sorted(roles))
+            for key, roles in sorted(candidate_roles.items())
+        },
+        report={
+            "accepted": True,
+            "scope": (
+                "仅用于已由 424 主进近标签匹配的多图 IAP 候选页消歧；"
+                "不创建程序或航段"
+            ),
+            "cache_count": report["cache_count"],
+            "accepted_candidate_pages": len(candidate_roles),
+            "accepted_role_evidence": sum(
+                len(roles) for roles in candidate_roles.values()
+            ),
+            "consensus": report,
+        },
+    )
 
 
 def write_iap_ocr_role_consensus(output: Path, report: dict[str, object]) -> None:

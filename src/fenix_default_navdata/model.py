@@ -331,6 +331,23 @@ class ChartRouteFix:
     role: str
 
 
+IapOcrCandidateKey = tuple[str, str, str, str, str]
+
+
+@dataclass(frozen=True)
+class IapOcrRoleEvidence:
+    """Role pairs accepted only after independent source-PDF OCR consensus."""
+
+    candidate_roles: dict[IapOcrCandidateKey, frozenset[tuple[str, str]]]
+    report: dict[str, object]
+
+    def roles_for(self, key: IapOcrCandidateKey) -> dict[str, set[str]]:
+        roles: dict[str, set[str]] = {}
+        for ident, role in self.candidate_roles.get(key, frozenset()):
+            roles.setdefault(ident, set()).add(role)
+        return roles
+
+
 @dataclass(frozen=True)
 class ChartStandardProcedureRoute:
     """One printed standard-procedure route-table entry."""
@@ -376,6 +393,9 @@ class NavModel:
     # Audit-only summary of source-backed IAP coverage.  Target adapters must
     # not treat role evidence as proof that every chart leg was decoded.
     iap_coverage: dict[str, object] = field(default_factory=dict)
+    # Optional source-PDF OCR role evidence accepted through independent cache
+    # consensus. It can only distinguish an existing matching IAP chart page.
+    iap_ocr_role_evidence: IapOcrRoleEvidence | None = None
     # Audit-only result of recovering blank designated-point regions from
     # source FIR boundary geometry.  Empty means the optional FIR tables were
     # unavailable to the source loader.

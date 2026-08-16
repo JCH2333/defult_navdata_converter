@@ -115,6 +115,12 @@ python -m fenix_default_navdata.cli iap-ocr-consensus `
   --output diagnostics\iap-ocr-role-consensus-a-b-d-strict-20260815.json
 ```
 
+构建命令可通过 `--iap-ocr-cache-roots` 传入至少三份同类缓存。构建会重新执行上述
+共识审计，而不是信任已有 JSON 报告；仅当全部候选页、完整识别设置、角色-航点对和相邻
+关系一致时，才把角色证据用于已由 424 主进近标签匹配的 `ambiguous_chart` 多图页消歧。
+它不接受 `no_matching_chart` 或 `no_unique_primary` 作为可投影结果，不创建程序或航段，
+且不会解除测试版、参考字节比对或实机验证门禁。
+
 2608R1 的 A/B/D 三份独立缓存通过了严格共识：22 个分组、50 个候选页和 17 条
 角色-航点证据及其相邻关系完全一致。历史 C 缓存虽然角色证据相同，但其识别设置将
 命令记录为 `E:\python\3.12\Scripts\ocr-skill.exe`，而 A/B 使用 `ocr-skill`，

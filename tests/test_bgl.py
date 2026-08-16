@@ -17,6 +17,7 @@ from fenix_default_navdata.model import (
     ChartRouteFix,
     ChartTerminalLeg,
     Holding,
+    IapOcrRoleEvidence,
     Ils,
     NavModel,
     Navaid,
@@ -574,6 +575,46 @@ def test_iap_chart_roles_leave_ambiguous_plates_unmarked(tmp_path: Path):
     leg = ET.parse(output).getroot().find("Airport/Approach/ApproachLegs/Leg")
     assert leg is not None
     assert "isMAP" not in leg.attrib
+
+
+def test_bgl_iap_chart_roles_reuses_consensus_ocr_selection():
+    model = NavModel(Path("source"))
+    primary_source = SourceRef("database.pdf", 1, 1, "database-sha256")
+    selected_source = SourceRef(
+        "Terminal/ZBCF/selected.pdf", 1, 1, "selected-sha256",
+    )
+    other_source = SourceRef(
+        "Terminal/ZBCF/other.pdf", 1, 1, "other-sha256",
+    )
+    primary = ProcedureSegment(
+        "ZBCF", "R03", "approach", "03", "", (
+            ChartTerminalLeg("R03", "03", "TF", "FINAL", "fixture", sequence=1),
+        ), primary_source,
+    )
+    model.procedure_charts.extend([
+        ProcedureChart(
+            "ZBCF", "selected.pdf", 1, "instrument-approach-index", "RNP RWY03",
+            "text", (), ("03",), (), (), (), selected_source,
+        ),
+        ProcedureChart(
+            "ZBCF", "other.pdf", 1, "instrument-approach-index", "RNP RWY03",
+            "text", (), ("03",), (), (), (), other_source,
+        ),
+    ])
+    model.iap_ocr_role_evidence = IapOcrRoleEvidence(
+        candidate_roles={
+            (
+                "ZBCF",
+                "R03",
+                "03",
+                "Terminal/ZBCF/selected.pdf",
+                "selected-sha256",
+            ): frozenset({("FINAL", "MAPT")}),
+        },
+        report={"accepted": True},
+    )
+
+    assert _iap_chart_roles(model, primary) == {"FINAL": {"MAPT"}}
 
 
 def test_terminal_coordinate_evidence_fills_missing_leg_identity(tmp_path: Path):

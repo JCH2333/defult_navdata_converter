@@ -1,8 +1,17 @@
 from pathlib import Path
 
+import pytest
+
 from fenix_default_navdata.baseline import BaselineIndex, BaselineNavaid
 from fenix_default_navdata.bgl import CompilerInfo
-from fenix_default_navdata.model import AirwayLeg, NavModel, Navaid, SourceRef, Waypoint
+from fenix_default_navdata.model import (
+    AirwayLeg,
+    IapOcrRoleEvidence,
+    NavModel,
+    Navaid,
+    SourceRef,
+    Waypoint,
+)
 from fenix_default_navdata.official_index import OfficialNavaidIndex, OfficialWaypoint
 from fenix_default_navdata.package import AIRPORT_PACKAGE, NAV_PACKAGE, build_candidate
 from fenix_default_navdata.profile import DEFAULT_CYCLE
@@ -62,6 +71,76 @@ def test_missing_navaid_baseline_keeps_candidate_non_deployable(
     assert report["navaid_diff"]["navaid_diff_verified"] is False
     assert report["deployable"] is False
     assert report["model"]["selected_navaids"] == 0
+
+
+def test_candidate_passes_accepted_iap_ocr_consensus_to_source_loader(
+    tmp_path: Path,
+    monkeypatch,
+):
+    raw = tmp_path / "raw"
+    base = tmp_path / "base"
+    jepp = tmp_path / "jepp"
+    output = tmp_path / "candidate"
+    for path in (raw, base, jepp):
+        path.mkdir()
+    evidence = IapOcrRoleEvidence({}, {"accepted": True})
+    received: dict[str, object] = {}
+    monkeypatch.setattr(
+        "fenix_default_navdata.package.load_iap_ocr_role_evidence",
+        lambda *_args, **_kwargs: evidence,
+    )
+
+    def load(root, **kwargs):
+        received.update(root=root, **kwargs)
+        return NavModel(root)
+
+    monkeypatch.setattr("fenix_default_navdata.package.load_naip", load)
+
+    report = build_candidate(
+        raw_root=raw,
+        nav_base=base,
+        nav_jepp=jepp,
+        output=output,
+        cycle=DEFAULT_CYCLE,
+        compiler=CompilerInfo(None, "none", "missing"),
+        iap_ocr_cache_roots=(tmp_path / "ocr-a", tmp_path / "ocr-b", tmp_path / "ocr-c"),
+    )
+
+    assert received["iap_ocr_role_evidence"] is evidence
+    assert report["model"]["iap_ocr_evidence"] == {"accepted": True}
+
+
+def test_candidate_does_not_create_output_when_iap_ocr_consensus_rejects(
+    tmp_path: Path,
+    monkeypatch,
+):
+    raw = tmp_path / "raw"
+    base = tmp_path / "base"
+    jepp = tmp_path / "jepp"
+    output = tmp_path / "candidate"
+    for path in (raw, base, jepp):
+        path.mkdir()
+    monkeypatch.setattr(
+        "fenix_default_navdata.package.load_iap_ocr_role_evidence",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(ValueError("OCR 不一致")),
+    )
+
+    with pytest.raises(ValueError, match="OCR 不一致"):
+        build_candidate(
+            raw_root=raw,
+            nav_base=base,
+            nav_jepp=jepp,
+            output=output,
+            cycle=DEFAULT_CYCLE,
+            compiler=CompilerInfo(None, "none", "missing"),
+            iap_ocr_cache_roots=(
+                tmp_path / "ocr-a",
+                tmp_path / "ocr-b",
+                tmp_path / "ocr-c",
+            ),
+        )
+
+    assert not output.exists()
 
 
 def test_overlay_packages_compile_independently(tmp_path: Path, monkeypatch):

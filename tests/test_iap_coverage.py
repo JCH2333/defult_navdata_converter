@@ -5,6 +5,7 @@ from fenix_default_navdata.model import (
     Airport,
     ChartRouteFix,
     ChartTerminalLeg,
+    IapOcrRoleEvidence,
     NavModel,
     ProcedureChart,
     ProcedureSegment,
@@ -55,7 +56,7 @@ def test_iap_coverage_counts_unique_map_disambiguation():
 
     report = analyze_iap_coverage(model)
 
-    assert report["version"] == 4
+    assert report["version"] == 5
     assert report["chart_pages"]["total"] == 2
     assert report["chart_pages"]["matched_to_primary_group"] == 2
     assert report["chart_pages"]["selected_for_role_projection"] == 1
@@ -196,6 +197,80 @@ def test_iap_coverage_keeps_equal_multi_role_charts_ambiguous():
             ),
         ),
     ])
+
+    report = analyze_iap_coverage(model)
+
+    assert report["procedure_groups"]["status_counts"] == {
+        "ambiguous_chart": 1,
+    }
+    assert report["unresolved_groups"][0]["status"] == "ambiguous_chart"
+
+
+def test_iap_coverage_uses_consensus_ocr_mapt_only_for_one_matching_chart():
+    model = _model_with_iap_segments()
+    selected_source = SourceRef(
+        "Terminal/ZBCF/selected.pdf", 1, 1, "selected-sha256",
+    )
+    other_source = SourceRef(
+        "Terminal/ZBCF/other.pdf", 1, 1, "other-sha256",
+    )
+    model.procedure_charts.extend([
+        ProcedureChart(
+            "ZBCF", "selected.pdf", 1, "instrument-approach-index", "RNP RWY03",
+            "text", (), ("03",), (), (), (), selected_source,
+        ),
+        ProcedureChart(
+            "ZBCF", "other.pdf", 1, "instrument-approach-index", "RNP RWY03",
+            "text", (), ("03",), (), (), (), other_source,
+        ),
+    ])
+    model.iap_ocr_role_evidence = IapOcrRoleEvidence(
+        candidate_roles={
+            (
+                "ZBCF",
+                "R03",
+                "03",
+                "Terminal/ZBCF/selected.pdf",
+                "selected-sha256",
+            ): frozenset({("FINAL", "MAPT")}),
+        },
+        report={"accepted": True},
+    )
+
+    report = analyze_iap_coverage(model)
+
+    assert report["procedure_groups"]["status_counts"] == {
+        "roles_ocr_final_mapt_disambiguated": 1,
+    }
+    assert report["role_evidence_counts"] == {"MAPT": 1}
+    assert report["unresolved_groups"] == []
+
+
+def test_iap_coverage_keeps_two_consensus_ocr_mapt_candidates_ambiguous():
+    model = _model_with_iap_segments()
+    first_source = SourceRef("first.pdf", 1, 1, "first-sha256")
+    second_source = SourceRef("second.pdf", 1, 1, "second-sha256")
+    model.procedure_charts.extend([
+        ProcedureChart(
+            "ZBCF", "first.pdf", 1, "instrument-approach-index", "RNP RWY03",
+            "text", (), ("03",), (), (), (), first_source,
+        ),
+        ProcedureChart(
+            "ZBCF", "second.pdf", 1, "instrument-approach-index", "RNP RWY03",
+            "text", (), ("03",), (), (), (), second_source,
+        ),
+    ])
+    model.iap_ocr_role_evidence = IapOcrRoleEvidence(
+        candidate_roles={
+            ("ZBCF", "R03", "03", "first.pdf", "first-sha256"): frozenset({
+                ("FINAL", "MAPT"),
+            }),
+            ("ZBCF", "R03", "03", "second.pdf", "second-sha256"): frozenset({
+                ("FINAL", "MAPT"),
+            }),
+        },
+        report={"accepted": True},
+    )
 
     report = analyze_iap_coverage(model)
 
