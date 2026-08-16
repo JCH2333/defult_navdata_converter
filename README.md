@@ -34,6 +34,12 @@
 - SDK 项目路径必须为纯 ASCII；中文项目路径会在游戏命令行中损坏并导致启动崩溃。
 - `fspackagetool.exe` 可能先返回非零代码，而后台构建进程仍在运行；转换器会等待该进程结束并以实际产物为判据。
 
+## OCR 限制
+
+- `llamacpp-direct` 是默认 OCR 后端。转换器直接调用本机 llama.cpp 的 OpenAI 兼容接口，并固定 `temperature=0`、`seed=2608`、`top_k=1` 和 `max_tokens=4096`。
+- 每份新 OCR 缓存都记录内置适配器版本、输出 token 上限、图像渲染设置和可验证的运行时模型指纹。IAP 候选构建只接受至少三份这些设置完全一致的完整缓存。
+- 旧 `ocr-skill/llamacpp` 缓存继续保留为只读审计证据，但缺少显式输出上限，不能与新的受限缓存混合参与 IAP 共识或候选构建。
+
 ## 使用
 
 ```powershell

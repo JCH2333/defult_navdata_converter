@@ -155,9 +155,9 @@ def build_parser() -> argparse.ArgumentParser:
     ocr_cache.add_argument("--ocr-command", default="ocr-skill", help="本地 OCR CLI 命令")
     ocr_cache.add_argument(
         "--backend",
-        choices=("llamacpp", "deepseek"),
-        default="llamacpp",
-        help="OCR 后端；默认使用本机 llama.cpp 服务",
+        choices=("llamacpp-direct", "llamacpp", "deepseek"),
+        default="llamacpp-direct",
+        help="OCR 后端；默认使用内置 llama.cpp 请求适配器",
     )
     ocr_cache.add_argument(
         "--mode",
@@ -166,6 +166,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="传给 OCR 引擎的识别模式",
     )
     ocr_cache.add_argument("--timeout", type=int, default=180, help="每页 OCR 超时秒数")
+    ocr_cache.add_argument(
+        "--max-tokens",
+        type=int,
+        default=4096,
+        help="内置 llama.cpp 单页输出 token 上限；写入缓存识别设置",
+    )
     ocr_cache.add_argument(
         "--engine-timeout",
         type=int,
@@ -211,9 +217,9 @@ def build_parser() -> argparse.ArgumentParser:
     ad219_ndb_cache.add_argument("--ocr-command", default="ocr-skill", help="本地 OCR CLI 命令")
     ad219_ndb_cache.add_argument(
         "--backend",
-        choices=("llamacpp", "deepseek"),
-        default="llamacpp",
-        help="OCR 后端；默认使用本地 llama.cpp 服务",
+        choices=("llamacpp-direct", "llamacpp", "deepseek"),
+        default="llamacpp-direct",
+        help="OCR 后端；默认使用内置 llama.cpp 请求适配器",
     )
     ad219_ndb_cache.add_argument(
         "--mode",
@@ -222,6 +228,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="传给 OCR 引擎的识别模式",
     )
     ad219_ndb_cache.add_argument("--timeout", type=int, default=240, help="每页 OCR 超时秒数")
+    ad219_ndb_cache.add_argument(
+        "--max-tokens",
+        type=int,
+        default=4096,
+        help="内置 llama.cpp 单页输出 token 上限；写入缓存识别设置",
+    )
     ad219_ndb_cache.add_argument("--engine-timeout", type=int, help="可选：本地 OCR 引擎单页等待秒数")
     ad219_ndb_cache.add_argument("--render-scale", type=float, default=3.0, help="PDF 页面渲染比例")
     ad219_ndb_cache.add_argument(
@@ -279,9 +291,9 @@ def build_parser() -> argparse.ArgumentParser:
     iap_ocr_cache.add_argument("--ocr-command", default="ocr-skill", help="本地 OCR CLI 命令")
     iap_ocr_cache.add_argument(
         "--backend",
-        choices=("llamacpp", "deepseek"),
-        default="llamacpp",
-        help="OCR 后端；默认使用本机 llama.cpp 服务",
+        choices=("llamacpp-direct", "llamacpp", "deepseek"),
+        default="llamacpp-direct",
+        help="OCR 后端；默认使用内置 llama.cpp 请求适配器",
     )
     iap_ocr_cache.add_argument(
         "--mode",
@@ -290,6 +302,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="传给 OCR 引擎的识别模式",
     )
     iap_ocr_cache.add_argument("--timeout", type=int, default=240, help="每页 OCR 超时秒数")
+    iap_ocr_cache.add_argument(
+        "--max-tokens",
+        type=int,
+        default=4096,
+        help="内置 llama.cpp 单页输出 token 上限；写入缓存识别设置",
+    )
     iap_ocr_cache.add_argument(
         "--engine-timeout",
         type=int,
@@ -554,6 +572,7 @@ def main(argv: list[str] | None = None) -> int:
                 _path(args.runtime_profile_file),
             ),
             engine_timeout_seconds=args.engine_timeout,
+            max_tokens=args.max_tokens,
             retries=args.retries,
         )
         print(json.dumps(report.to_report(), ensure_ascii=False, indent=2))
@@ -574,6 +593,7 @@ def main(argv: list[str] | None = None) -> int:
                 _path(args.runtime_profile_file),
             ),
             engine_timeout_seconds=args.engine_timeout,
+            max_tokens=args.max_tokens,
             force=args.force,
             limit=args.limit,
             retries=args.retries,
@@ -611,6 +631,7 @@ def main(argv: list[str] | None = None) -> int:
                 _path(args.runtime_profile_file),
             ),
             engine_timeout_seconds=args.engine_timeout,
+            max_tokens=args.max_tokens,
             force=args.force,
             limit=args.limit,
             retries=args.retries,

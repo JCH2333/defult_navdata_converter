@@ -8,6 +8,11 @@
 - 覆盖 Community 前必须确认 `FlightSimulator2024.exe` 已退出，并备份目标包与元数据。
 - 每次代码/文档改动都要提交并推送 Git；未经实机验证不得创建正式 Release。
 
+## OCR 证据门禁
+
+- 新建 IAP OCR 缓存必须使用内置 `llamacpp-direct` 适配器。该适配器固定请求 `temperature=0`、`seed=2608`、`top_k=1`，并显式提交正整数 `max_tokens`。
+- IAP 共识和候选构建必须同时校验 OCR 适配器版本、`max_tokens`、渲染设置与完整运行时模型指纹；旧 `ocr-skill/llamacpp` 缓存只能保留为只读审计证据，不能与新缓存混合作为候选构建证据。
+
 ## 2608R1 已确认契约
 
 - 官方全球基线为 Community 中的 `navigraph-nav-base` 与 `navigraph-nav-jepp`，候选复制后分别有 475 和 1752 个文件，2026-08-11 全量 SHA-256 树比较均字节一致。

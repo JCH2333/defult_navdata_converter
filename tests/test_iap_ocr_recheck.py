@@ -42,11 +42,13 @@ def _report(
                 "ocr_recognition_settings": (
                     {
                         "command": "ocr-skill",
-                        "backend": "llamacpp",
+                        "backend": "llamacpp-direct",
                         "mode": "ocr",
                         "image_profile": image_profile,
                         "render_scale": 3.0,
                         "runtime_profile": runtime_profile,
+                        "adapter": "builtin-llamacpp-openai-v1",
+                        "max_tokens": 4096,
                     }
                     if runtime_profile is not None and image_profile is not None
                     else None

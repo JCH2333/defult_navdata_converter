@@ -35,11 +35,25 @@ def _recognition_settings(
     if not isinstance(recognition, Mapping):
         return None
     values: dict[str, str] = {}
-    for field in ("command", "backend", "mode", "image_profile", "runtime_profile"):
+    for field in (
+        "command",
+        "backend",
+        "mode",
+        "image_profile",
+        "runtime_profile",
+        "adapter",
+    ):
         value = recognition.get(field)
         if not isinstance(value, str) or not value.strip():
             return None
         values[field] = value.strip()
+    max_tokens = recognition.get("max_tokens")
+    if (
+        not isinstance(max_tokens, int)
+        or isinstance(max_tokens, bool)
+        or max_tokens < 1
+    ):
+        return None
     render_scale = manifest.get("render_scale")
     if (
         not isinstance(render_scale, (int, float))
@@ -49,6 +63,7 @@ def _recognition_settings(
         return None
     return {
         **values,
+        "max_tokens": max_tokens,
         "render_scale": float(render_scale),
     }
 

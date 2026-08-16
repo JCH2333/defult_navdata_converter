@@ -17,7 +17,7 @@ class IapOcrRecheckError(ValueError):
 _CandidateKey = tuple[str, str, str, str, str]
 _RoleKey = tuple[_CandidateKey, int, str, str]
 _RuntimeProfiles = dict[_CandidateKey, str | None]
-_RecognitionSettings = tuple[str, str, str, str, float, str]
+_RecognitionSettings = tuple[str, str, str, str, float, str, str, int]
 _RecognitionSettingsByCandidate = dict[_CandidateKey, _RecognitionSettings | None]
 
 
@@ -25,6 +25,12 @@ def _text(value: object, field: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise IapOcrRecheckError(f"IAP OCR 审计缺少 {field}")
     return value.strip()
+
+
+def _positive_int(value: object, field: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+        raise IapOcrRecheckError(f"IAP OCR 审计缺少有效的 {field}")
+    return value
 
 
 def _recognition_settings(
@@ -48,15 +54,26 @@ def _recognition_settings(
             _text(value.get("image_profile"), "OCR 图像预处理"),
             float(render_scale),
             _text(value.get("runtime_profile"), "OCR 运行时标识"),
+            _text(value.get("adapter"), "OCR 适配器"),
+            _positive_int(value.get("max_tokens"), "OCR max_tokens"),
         )
-    except KeyError:
+    except (IapOcrRecheckError, KeyError):
         return None
 
 
 def _recognition_settings_report(
     settings: _RecognitionSettings,
 ) -> dict[str, object]:
-    command, backend, mode, image_profile, render_scale, runtime_profile = settings
+    (
+        command,
+        backend,
+        mode,
+        image_profile,
+        render_scale,
+        runtime_profile,
+        adapter,
+        max_tokens,
+    ) = settings
     return {
         "command": command,
         "backend": backend,
@@ -64,6 +81,8 @@ def _recognition_settings_report(
         "image_profile": image_profile,
         "render_scale": render_scale,
         "runtime_profile": runtime_profile,
+        "adapter": adapter,
+        "max_tokens": max_tokens,
     }
 
 
@@ -119,7 +138,7 @@ def _report_evidence(
             if previous_profile != runtime_profile:
                 raise IapOcrRecheckError("同一 IAP OCR 候选图页混用了运行时标识")
             settings = _recognition_settings(candidate)
-            if settings is not None and settings[-1] != runtime_profile:
+            if settings is not None and settings[5] != runtime_profile:
                 raise IapOcrRecheckError("IAP OCR 审计的运行时标识与识别设置不一致")
             previous_settings = recognition_settings.setdefault(key, settings)
             if previous_settings != settings:

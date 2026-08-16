@@ -13,13 +13,24 @@ from pathlib import Path
 import pypdfium2
 from PIL import ImageOps
 
+from .llamacpp_ocr import (
+    DEFAULT_MAX_TOKENS,
+    DIRECT_ADAPTER,
+    DIRECT_BACKEND,
+    DIRECT_COMMAND,
+    LlamaCppOcrError,
+    run_llamacpp_ocr,
+)
+
 
 _CACHE_SCHEMA_VERSION = 1
 _IMAGE_PROFILES = ("original", "autocontrast-grayscale")
 _DEFAULT_OCR_COMMAND = "ocr-skill"
-_DEFAULT_OCR_BACKEND = "llamacpp"
+_DEFAULT_OCR_BACKEND = DIRECT_BACKEND
 _DEFAULT_OCR_MODE = "ocr"
 _DEFAULT_IMAGE_PROFILE = "original"
+_EXTERNAL_COMMAND_ADAPTER = "external-command-v1"
+_LEGACY_DEFAULT_OCR_BACKEND = "llamacpp"
 
 
 class OcrCacheError(ValueError):
@@ -137,12 +148,31 @@ def _run_ocr(
     mode: str,
     timeout_seconds: int,
     engine_timeout_seconds: int | None = None,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
     retries: int = 0,
 ) -> dict[str, object]:
     if retries < 0:
         raise OcrCacheError("OCR 重试次数不能为负数")
     if engine_timeout_seconds is not None and engine_timeout_seconds < 1:
         raise OcrCacheError("OCR 引擎超时必须为正整数秒")
+    if max_tokens < 1:
+        raise OcrCacheError("OCR max_tokens 必须为正整数")
+    if backend == DIRECT_BACKEND:
+        request_timeout_seconds = engine_timeout_seconds or timeout_seconds
+        last_error = ""
+        for attempt in range(retries + 1):
+            try:
+                return run_llamacpp_ocr(
+                    image,
+                    mode=mode,
+                    timeout_seconds=request_timeout_seconds,
+                    max_tokens=max_tokens,
+                )
+            except LlamaCppOcrError as error:
+                last_error = str(error)
+            if attempt < retries:
+                time.sleep(2 ** attempt)
+        raise OcrCacheError(f"{last_error}（已尝试 {retries + 1} 次）")
     arguments = [
         command,
         "extract",
@@ -228,6 +258,7 @@ def _prepare_manifest(
     mode: str,
     image_profile: str,
     runtime_profile: str,
+    max_tokens: int,
 ) -> None:
     manifest_path = cache / "manifest.json"
     expected = {
@@ -237,10 +268,16 @@ def _prepare_manifest(
         "page_count": page_count,
     }
     recognition = {
-        "command": command,
+        "command": DIRECT_COMMAND if backend == DIRECT_BACKEND else command,
         "backend": backend,
         "mode": mode,
         "image_profile": image_profile,
+        "adapter": (
+            DIRECT_ADAPTER
+            if backend == DIRECT_BACKEND
+            else _EXTERNAL_COMMAND_ADAPTER
+        ),
+        "max_tokens": max_tokens if backend == DIRECT_BACKEND else None,
     }
     if runtime_profile:
         recognition["runtime_profile"] = runtime_profile
@@ -269,15 +306,29 @@ def _prepare_manifest(
         if current_recognition is None:
             legacy_recognition = {
                 "command": _DEFAULT_OCR_COMMAND,
-                "backend": _DEFAULT_OCR_BACKEND,
+                "backend": _LEGACY_DEFAULT_OCR_BACKEND,
                 "mode": _DEFAULT_OCR_MODE,
                 "image_profile": _DEFAULT_IMAGE_PROFILE,
             }
-            if recognition != legacy_recognition:
+            compatible_recognition = dict(recognition)
+            compatible_recognition.pop("adapter")
+            compatible_recognition.pop("max_tokens")
+            if (
+                backend == DIRECT_BACKEND
+                or compatible_recognition != legacy_recognition
+            ):
                 raise OcrCacheError(
                     "旧版 OCR 缓存只能按原始默认识别设置复用"
                 )
         elif current_recognition != recognition:
+            legacy_recognition = dict(recognition)
+            legacy_recognition.pop("adapter")
+            legacy_recognition.pop("max_tokens")
+            if (
+                backend != DIRECT_BACKEND
+                and current_recognition == legacy_recognition
+            ):
+                return
             raise OcrCacheError(
                 "OCR 缓存识别设置与本次重跑不一致"
             )
@@ -309,6 +360,7 @@ def build_ocr_cache(
     image_profile: str = _DEFAULT_IMAGE_PROFILE,
     runtime_profile: str = "",
     engine_timeout_seconds: int | None = None,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
     retries: int = 0,
 ) -> OcrCacheBuild:
     """Render physical PDF pages, OCR each page, and retain resumable evidence."""
@@ -333,6 +385,8 @@ def build_ocr_cache(
         raise OcrCacheError("OCR 运行时标识不能只包含空白字符")
     if engine_timeout_seconds is not None and engine_timeout_seconds < 1:
         raise OcrCacheError("OCR 引擎超时必须为正整数秒")
+    if max_tokens < 1:
+        raise OcrCacheError("OCR max_tokens 必须为正整数")
 
     source_file = _source_file(source_pdf, source_root)
     source_sha256 = _sha256(source_pdf)
@@ -353,6 +407,7 @@ def build_ocr_cache(
         mode=mode,
         image_profile=image_profile,
         runtime_profile=runtime_profile,
+        max_tokens=max_tokens,
     )
     image_cache = cache / ".images"
     image_cache.mkdir(exist_ok=True)
@@ -380,6 +435,7 @@ def build_ocr_cache(
             mode=mode,
             timeout_seconds=timeout_seconds,
             engine_timeout_seconds=engine_timeout_seconds,
+            max_tokens=max_tokens,
             retries=retries,
         )
         _write_json(page_path, payload)

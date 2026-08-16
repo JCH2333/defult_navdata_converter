@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Iterable, Mapping
 
 from .iap_coverage import iap_section_kind, matching_iap_charts
+from .llamacpp_ocr import DEFAULT_MAX_TOKENS, DIRECT_BACKEND
 from .model import NavModel
 from .ocr_cache import OcrCacheError, build_ocr_cache
 from .source import load_naip
@@ -163,13 +164,14 @@ def build_iap_ocr_cache(
     pdf_cache: Path | None = None,
     statuses: Iterable[str] = IAP_OCR_ELIGIBLE_STATUSES,
     command: str = "ocr-skill",
-    backend: str = "llamacpp",
+    backend: str = DIRECT_BACKEND,
     mode: str = "markdown",
     timeout_seconds: int = 240,
     render_scale: float = 3.0,
     image_profile: str = "original",
     runtime_profile: str = "",
     engine_timeout_seconds: int | None = None,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
     force: bool = False,
     limit: int | None = None,
     retries: int = 2,
@@ -199,6 +201,7 @@ def build_iap_ocr_cache(
         "execution_settings": {
             "outer_timeout_seconds": timeout_seconds,
             "engine_timeout_seconds": engine_timeout_seconds,
+            "max_tokens": max_tokens,
             "retries": retries,
         },
         "jobs": [job.to_report() for job in jobs],
@@ -228,6 +231,7 @@ def build_iap_ocr_cache(
                 image_profile=image_profile,
                 runtime_profile=runtime_profile,
                 engine_timeout_seconds=engine_timeout_seconds,
+                max_tokens=max_tokens,
                 retries=retries,
             )
         except OcrCacheError as error:

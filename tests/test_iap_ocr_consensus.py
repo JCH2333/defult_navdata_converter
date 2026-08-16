@@ -15,6 +15,7 @@ def _report(
     *,
     relation: str = "same_row",
     image_profile: str = "original",
+    max_tokens: int | None = 4096,
 ) -> dict[str, object]:
     return {
         "diagnostic": "iap-ocr-evidence-audit-v2",
@@ -32,12 +33,14 @@ def _report(
                 "cache_state": "complete",
                 "ocr_runtime_profile": "deterministic-profile",
                 "ocr_recognition_settings": {
-                    "command": "ocr-skill",
-                    "backend": "llamacpp",
+                    "command": "builtin:llama.cpp-openai-v1",
+                    "backend": "llamacpp-direct",
                     "mode": "ocr",
                     "image_profile": image_profile,
                     "render_scale": 3.0,
                     "runtime_profile": "deterministic-profile",
+                    "adapter": "builtin-llamacpp-openai-v1",
+                    "max_tokens": max_tokens,
                 },
                 "ocr_role_matches": [{
                     "page": 1,
@@ -112,6 +115,27 @@ def test_iap_ocr_consensus_rejects_changed_image_profile(monkeypatch) -> None:
 
     assert report["comparison"]["consistent"] is False
     assert report["comparisons"][1]["runtime_profiles_match"] is True
+    assert report["comparisons"][1]["recognition_settings_recorded"] is True
+    assert report["comparisons"][1]["recognition_settings_match"] is False
+
+
+def test_iap_ocr_consensus_rejects_missing_or_changed_token_limit(monkeypatch) -> None:
+    reports = [
+        _report("a"),
+        _report("b"),
+        _report("c", max_tokens=2048),
+    ]
+    monkeypatch.setattr(
+        "fenix_default_navdata.iap_ocr_consensus.audit_iap_ocr_cache",
+        lambda *_args, **_kwargs: reports.pop(0),
+    )
+
+    report = audit_iap_ocr_role_consensus(
+        Path("raw"),
+        [Path("a"), Path("b"), Path("c")],
+    )
+
+    assert report["comparison"]["consistent"] is False
     assert report["comparisons"][1]["recognition_settings_recorded"] is True
     assert report["comparisons"][1]["recognition_settings_match"] is False
 

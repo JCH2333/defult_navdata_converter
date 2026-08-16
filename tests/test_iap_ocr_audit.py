@@ -38,11 +38,13 @@ def _write_cache(
         "page_count": 1,
         "render_scale": 3.0,
         "recognition": {
-            "command": "ocr-skill",
-            "backend": "llamacpp",
+            "command": "builtin:llama.cpp-openai-v1",
+            "backend": "llamacpp-direct",
             "mode": "ocr",
             "image_profile": "original",
             "runtime_profile": runtime_profile,
+            "adapter": "builtin-llamacpp-openai-v1",
+            "max_tokens": 4096,
         },
     }), encoding="utf-8")
     (cache / "page-0001.json").write_text(
@@ -152,12 +154,14 @@ def test_iap_ocr_audit_reports_unique_identifier_evidence_without_projection(
         "test-runtime-profile"
     )
     assert report["groups"][0]["candidates"][0]["ocr_recognition_settings"] == {
-        "command": "ocr-skill",
-        "backend": "llamacpp",
+        "command": "builtin:llama.cpp-openai-v1",
+        "backend": "llamacpp-direct",
         "mode": "ocr",
         "image_profile": "original",
         "render_scale": 3.0,
         "runtime_profile": "test-runtime-profile",
+        "adapter": "builtin-llamacpp-openai-v1",
+        "max_tokens": 4096,
     }
 
 

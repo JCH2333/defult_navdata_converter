@@ -132,10 +132,12 @@ def test_build_ocr_cache_is_resumable_and_uses_source_relative_identity(
         "renderer": "pypdfium2",
         "render_scale": 2.0,
         "recognition": {
-            "command": "ocr-skill",
-            "backend": "llamacpp",
+            "command": "builtin:llama.cpp-openai-v1",
+            "backend": "llamacpp-direct",
             "mode": "ocr",
             "image_profile": "original",
+            "adapter": "builtin-llamacpp-openai-v1",
+            "max_tokens": 4096,
         },
     }
 
@@ -186,6 +188,13 @@ def test_build_ocr_cache_rejects_recognition_setting_mismatch(
             cache,
             source_root=root,
             image_profile="autocontrast-grayscale",
+        )
+    with pytest.raises(OcrCacheError, match="识别设置"):
+        build_ocr_cache(
+            pdf,
+            cache,
+            source_root=root,
+            max_tokens=2048,
         )
 
 
@@ -248,6 +257,11 @@ def test_build_ocr_cache_accepts_legacy_default_recognition_settings(
     )
     monkeypatch.setattr(ocr_cache, "_run_ocr", lambda *_args, **_kwargs: _payload("ok"))
 
-    report = build_ocr_cache(pdf, cache, source_root=root)
+    report = build_ocr_cache(
+        pdf,
+        cache,
+        source_root=root,
+        backend="llamacpp",
+    )
 
     assert report.processed_pages == 1

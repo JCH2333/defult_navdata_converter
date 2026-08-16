@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Iterable, Mapping
 
 from .model import Ad219NdbEvidence, Navaid, SourceRef
+from .llamacpp_ocr import DEFAULT_MAX_TOKENS, DIRECT_BACKEND
 from .ocr_cache import _read_page_payload, build_ocr_cache
 from .pdf_charts import extract_ad219_ndbs
 from .source import load_naip
@@ -146,13 +147,14 @@ def build_ad219_ndb_ocr_cache(
     *,
     airports: Iterable[str] = (),
     command: str = "ocr-skill",
-    backend: str = "llamacpp",
+    backend: str = DIRECT_BACKEND,
     mode: str = "ocr",
     timeout_seconds: int = 240,
     render_scale: float = 3.0,
     image_profile: str = "original",
     runtime_profile: str = "",
     engine_timeout_seconds: int | None = None,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
     force: bool = False,
     limit: int | None = None,
     retries: int = 2,
@@ -185,6 +187,7 @@ def build_ad219_ndb_ocr_cache(
         "execution_settings": {
             "outer_timeout_seconds": timeout_seconds,
             "engine_timeout_seconds": engine_timeout_seconds,
+            "max_tokens": max_tokens,
             "retries": retries,
         },
         "reason": (
@@ -209,6 +212,7 @@ def build_ad219_ndb_ocr_cache(
             image_profile=image_profile,
             runtime_profile=runtime_profile,
             engine_timeout_seconds=engine_timeout_seconds,
+            max_tokens=max_tokens,
             retries=retries,
         )
         builds.append({
