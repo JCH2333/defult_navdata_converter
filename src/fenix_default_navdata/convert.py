@@ -20,6 +20,7 @@ def convert(
     pdf_cache: Path | None = None,
     general_doc_cache: Path | None = None,
     general_doc_key_point_cache_directory: str = "enr-4.4",
+    general_doc_airway_cache_directories: tuple[str, ...] = (),
     baseline_db: Path | None = None,
     baseline_tolerance_nm: float = 0.25,
 ) -> dict[str, object]:
@@ -35,6 +36,7 @@ def convert(
         pdf_cache=pdf_cache,
         general_doc_cache=general_doc_cache,
         general_doc_key_point_cache_directory=general_doc_key_point_cache_directory,
+        general_doc_airway_cache_directories=general_doc_airway_cache_directories,
         baseline_db=baseline_db.resolve() if baseline_db else None,
         baseline_tolerance_nm=baseline_tolerance_nm,
     )
