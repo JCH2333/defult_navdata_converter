@@ -170,7 +170,7 @@ python -m fenix_default_navdata.cli build `
 - 参考成品只用于只读差分，绝不复制参考 BGL 冒充转换结果。
 - `semantic-diff` 不返回参考 SQLite 的坐标、频率、磁差、高程、名称或航路端点字段值，不能作为候选内容的反向来源。调用时必须显式提供候选和参考各自的预期 BGL 数；`bgl_file` 登记数不精确相等即拒绝生成报告。
 - `source-gap-audit` 只接受完整、只读且已脱敏、并已证明 BGL 登记数完整的 `semantic-diff` 报告；它只输出 424 来源分类计数，不导出或保存参考逻辑身份。它还会核验 `ROUTE_HOLDING.csv` 是否只回链既有点；无区域键或复用位置标签的记录不得当作新 enroute 航点。
-- `terminal-coordinate-audit` 使用同一类完整脱敏差分，只读核验参考缺失全局航点是否可由 424 终端坐标页独立证明；输出只含来源类别计数。`terminal_source_promotable` 非零时必须先把规则、最小 fixture 和转换报告接入代码，不能按审计结果列表补点。
+- `terminal-coordinate-audit` 使用同一类完整脱敏差分，只读核验参考缺失航点是否可由 424 终端坐标页独立证明；输出只含来源类别计数。全局航点只有在 `terminal_source_promotable` 非零时，才可进入通用跨机场提升规则；机场作用域的 `airport_terminal_coordinate_source_present` 仅表示同机场坐标页存在来源，不构成新增或补写依据。传入 `--check-retention` 后，审计会再区分现有规则是否保留此类来源点；`airport_terminal_coordinate_not_retained` 仍只是一项调查信号，必须另行证明通用保留与投影规则，不能按审计结果列表补点。
 - `general-doc-keypoint-audit` 仅使用带 SHA-256 校验的 ENR 4.4 OCR 缓存与同源 FIR 几何，分类参考缺失全局航点是否能由关键点页独立证明；输出只含类别计数。`general_doc_source_promotable` 非零时，必须先把来源规则、最小 fixture 和候选报告接入构建，不能按审计列表补点。
 - Package Tool 构建和 Community 覆盖前都要求 `FlightSimulator2024.exe` 已完全退出。
 - 覆盖前自动备份四个相关包；测试候选、不完整候选、未完成字节比对或实机验证的候选都会拒绝部署。

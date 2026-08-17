@@ -226,6 +226,7 @@ def test_terminal_coordinate_audit_keeps_source_categories_redacted(
             {"logical_key": {"ident": "NEW", "region": "ZB", "airport_ident": None}},
             {"logical_key": {"ident": "NONE", "region": "ZB", "airport_ident": None}},
             {"logical_key": {"ident": "AIRPORT", "region": "ZB", "airport_ident": "ZBAA"}},
+            {"logical_key": {"ident": "LOCAL", "region": "ZB", "airport_ident": "ZBAA"}},
         ],
         airway_samples=[],
     )
@@ -233,7 +234,8 @@ def test_terminal_coordinate_audit_keeps_source_categories_redacted(
     result = audit_terminal_coordinate_reference_coverage(model, report)
 
     assert result["categories"] == {
-        "airport_scoped_reference_only": 1,
+        "airport_terminal_coordinate_source_present": 1,
+        "airport_terminal_not_present_in_coordinate_pages": 1,
         "not_present_in_terminal_coordinate_pages": 1,
         "terminal_existing_global_identity": 1,
         "terminal_multiple_coordinates": 1,
@@ -243,6 +245,35 @@ def test_terminal_coordinate_audit_keeps_source_categories_redacted(
     serialized = json.dumps(result)
     for value in ("LOCAL", "AMBIG", "GLOBAL", "NEW", "NONE", "AIRPORT"):
         assert value not in serialized
+
+
+def test_terminal_coordinate_audit_reports_unretained_airport_coordinate(
+    tmp_path: Path,
+) -> None:
+    model = _model(tmp_path)
+    source = SourceRef("Terminal/ZBAA/coordinate-page.pdf", page=1)
+    model.terminal_waypoints.append(
+        TerminalWaypoint("local", "ZBAA", "LOCAL", 40.1, 116.1, source, "ZB"),
+    )
+    report = _semantic_report(
+        waypoint_samples=[
+            {"logical_key": {"ident": "LOCAL", "region": "ZB", "airport_ident": "ZBAA"}},
+        ],
+        airway_samples=[],
+    )
+
+    result = audit_terminal_coordinate_reference_coverage(
+        model,
+        report,
+        retained_terminal_waypoints=(),
+    )
+
+    assert result["diagnostic"] == "terminal-coordinate-reference-coverage-v2"
+    assert result["source"]["retention_checked"] is True
+    assert result["categories"] == {
+        "airport_terminal_coordinate_not_retained": 1,
+    }
+    assert "LOCAL" not in json.dumps(result)
 
 
 def test_general_doc_keypoint_audit_keeps_source_categories_redacted(

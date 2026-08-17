@@ -4,7 +4,7 @@ import json
 import xml.etree.ElementTree as ET
 from collections import Counter, defaultdict
 from pathlib import Path
-from typing import Mapping
+from typing import Iterable, Mapping
 
 from .general_docs import load_enroute_key_point_evidence
 from .model import NavModel
@@ -140,8 +140,10 @@ def _waypoint_categories(
 def audit_terminal_coordinate_reference_coverage(
     model: NavModel,
     semantic_report: Mapping[str, object],
+    *,
+    retained_terminal_waypoints: Iterable[object] | None = None,
 ) -> dict[str, object]:
-    """Classify redacted missing global waypoints against source PDF coordinates.
+    """Classify redacted missing waypoint identities against source PDF coordinates.
 
     The caller must populate ``model.terminal_waypoints`` from source coordinate
     pages before calling this function. The report contains category totals
@@ -154,11 +156,24 @@ def audit_terminal_coordinate_reference_coverage(
         _WAYPOINT_FIELDS,
     )
     grouped: dict[tuple[str, str], list[object]] = defaultdict(list)
+    airport_grouped: dict[tuple[str, str, str], list[object]] = defaultdict(list)
     for point in model.terminal_waypoints:
-        grouped[(
-            _normalized(point.country or point.airport[:2])[:2],
-            _normalized(point.ident),
-        )].append(point)
+        region = _normalized(point.country or point.airport[:2])[:2]
+        ident = _normalized(point.ident)
+        grouped[(region, ident)].append(point)
+        airport_grouped[(_normalized(point.airport), region, ident)].append(point)
+    retained_airport_identities = (
+        {
+            (
+                _normalized(point.airport),
+                _normalized(point.country or point.airport[:2])[:2],
+                _normalized(point.ident),
+            )
+            for point in retained_terminal_waypoints
+        }
+        if retained_terminal_waypoints is not None
+        else None
+    )
     existing_identities = {
         (_normalized(point.country)[:2], _normalized(point.ident))
         for point in model.waypoints
@@ -169,13 +184,23 @@ def audit_terminal_coordinate_reference_coverage(
     )
     categories: Counter[str] = Counter()
     for key in keys:
-        if key["airport_ident"] not in (None, ""):
-            categories["airport_scoped_reference_only"] += 1
+        region = _normalized(key["region"])[:2]
+        ident = _normalized(key["ident"])
+        airport = _normalized(key["airport_ident"])
+        if airport:
+            airport_identity = (airport, region, ident)
+            candidates = airport_grouped.get(airport_identity, [])
+            if candidates:
+                if retained_airport_identities is None:
+                    categories["airport_terminal_coordinate_source_present"] += 1
+                elif airport_identity in retained_airport_identities:
+                    categories["airport_terminal_coordinate_retained"] += 1
+                else:
+                    categories["airport_terminal_coordinate_not_retained"] += 1
+            else:
+                categories["airport_terminal_not_present_in_coordinate_pages"] += 1
             continue
-        identity = (
-            _normalized(key["region"])[:2],
-            _normalized(key["ident"]),
-        )
+        identity = (region, ident)
         candidates = grouped.get(identity, [])
         if not candidates:
             categories["not_present_in_terminal_coordinate_pages"] += 1
@@ -203,7 +228,7 @@ def audit_terminal_coordinate_reference_coverage(
     if sum(categories.values()) != len(keys):
         raise SourceGapAuditError("终端坐标页来源分类未覆盖全部参考缺失航点身份")
     return {
-        "diagnostic": "terminal-coordinate-reference-coverage-v1",
+        "diagnostic": "terminal-coordinate-reference-coverage-v2",
         "read_only": True,
         "reference_values_redacted": True,
         "source": {
@@ -211,6 +236,13 @@ def audit_terminal_coordinate_reference_coverage(
             "navaids": len(model.navaids),
             "terminal_coordinate_points": len(model.terminal_waypoints),
             "terminal_coordinate_identity_groups": len(grouped),
+            "terminal_coordinate_airport_identity_groups": len(airport_grouped),
+            "retention_checked": retained_airport_identities is not None,
+            "retained_terminal_coordinate_airport_identity_groups": (
+                len(retained_airport_identities)
+                if retained_airport_identities is not None
+                else None
+            ),
         },
         "reference_only_waypoint_identities": len(keys),
         "categories": dict(sorted(categories.items())),

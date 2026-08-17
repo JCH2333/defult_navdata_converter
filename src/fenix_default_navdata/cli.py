@@ -154,7 +154,7 @@ def build_parser() -> argparse.ArgumentParser:
     source_gap.add_argument("--output", help="可选的本地来源缺口审计 JSON 输出路径")
     terminal_coordinate = sub.add_parser(
         "terminal-coordinate-audit",
-        help="只读分类参考缺失全局航点在 424 终端坐标页中的来源覆盖",
+        help="只读分类参考缺失航点在 424 终端坐标页中的来源覆盖",
     )
     terminal_coordinate.add_argument("--raw", help="2608 原始 CSV/PDF 目录")
     terminal_coordinate.add_argument(
@@ -174,6 +174,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--general-doc-keypoint-cache-directory",
         default="enr-4.4",
         help="与候选构建相同的 GeneralDoc 4.4 缓存子目录",
+    )
+    terminal_coordinate.add_argument(
+        "--check-retention",
+        action="store_true",
+        help="额外加载完整来源模型，区分同机场坐标页条目是否被当前保留规则保留",
     )
     terminal_coordinate.add_argument(
         "--output",
@@ -626,9 +631,21 @@ def main(argv: list[str] | None = None) -> int:
             include_terminal_documents=False,
         )
         _load_terminal_coordinate_pages(model, pdf_cache)
+        retained_terminal_waypoints = None
+        if args.check_retention:
+            retained_model = load_naip(
+                raw,
+                pdf_cache=pdf_cache,
+                general_doc_cache=_path(args.general_doc_cache),
+                general_doc_key_point_cache_directory=(
+                    args.general_doc_keypoint_cache_directory
+                ),
+            )
+            retained_terminal_waypoints = retained_model.terminal_waypoints
         report = audit_terminal_coordinate_reference_coverage(
             model,
             load_semantic_diff(Path(args.semantic_diff)),
+            retained_terminal_waypoints=retained_terminal_waypoints,
         )
         if args.output:
             output = Path(args.output).expanduser().resolve()
