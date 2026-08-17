@@ -303,6 +303,11 @@ BGL 标记。
   因此参考 `ZJ_airports.bgl` 中的机场作用域 `K/ZJSY` 与 `P/ZJHK`
   不能由允许的 424 CSV/PDF 来源填足名称、磁差、高程与区域，必须保持
   `projection_allowed=false`，不得按参考身份或机场名称硬编码新增。
+- 2026-08-17 对 `Terminal/ZGDY/湛江机场.pdf` 以同一可复用设置完成 19 页
+  AD 2.19 OCR。审计只解析到 `JX`，当期 `NDB.csv` 没有可直接回链记录，
+  因而名称、磁差、高程和区域均未被来源证明。参考 `ZG_airports.bgl` 中的
+  `D/P@ZGDY` 也没有由该 CSV/PDF 链支持的身份；不得按参考差分或服务机场
+  推断、硬编码这些机场作用域 NDB，继续保持 `projection_allowed=false`。
 - AD 2.19 机场无线电导航设施表可提供直接打印的 VOR/DME 标识、频率、坐标和
   明确打印的 DME 天线高程，并作为带页码与 SHA-256 的审计证据保留。它没有可验证的设施
   磁差；2026-08-14 对 346 条可按服务机场关联的直接 `VOR.csv` 记录与
