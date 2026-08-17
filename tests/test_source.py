@@ -8,6 +8,7 @@ from fenix_default_navdata.source import (
     _load_general_document_airway_minimum_altitudes,
     _load_terminal_landing_aids,
     _promote_shared_terminal_coordinate_waypoints,
+    _retain_database_referenced_terminal_waypoints,
     _surface,
     audit_enroute_navaid_ocr_source,
     load_naip,
@@ -23,8 +24,10 @@ from fenix_default_navdata.general_docs import (
 from fenix_default_navdata.model import (
     Ad219Vor,
     AirwayLeg,
+    ChartRouteFix,
     NavModel,
     Navaid,
+    ProcedureChart,
     SourceRef,
     TerminalWaypoint,
     Waypoint,
@@ -210,6 +213,28 @@ def test_shared_terminal_coordinate_waypoint_rejects_coordinate_conflicts() -> N
     assert model.terminal_coordinate_waypoint_promotion["rejected"][
         "multiple_coordinates"
     ] == 1
+
+
+def test_direct_iap_role_alone_does_not_retain_terminal_coordinate_waypoint() -> None:
+    model = NavModel(Path("raw"))
+    source = SourceRef("Terminal/ZBAA/Charts.csv", page=1)
+    model.terminal_waypoints.extend((
+        TerminalWaypoint("keep", "ZBAA", "FAF01", 40.1, 116.1, source, "ZB"),
+        TerminalWaypoint("vector", "ZBAA", "VECTOR", 40.2, 116.2, source, "ZB"),
+        TerminalWaypoint("unused", "ZBAA", "UNUSED", 40.3, 116.3, source, "ZB"),
+    ))
+    model.procedure_charts.append(ProcedureChart(
+        "ZBAA", "ZBAA-approach.pdf", 1, "instrument-approach-index",
+        "RNP RWY01", "text", (), ("01",), (), (), (), source,
+        route_fixes=(
+            ChartRouteFix("FAF01", "FAF"),
+            ChartRouteFix("VECTOR", "VECTOR"),
+        ),
+    ))
+
+    _retain_database_referenced_terminal_waypoints(model)
+
+    assert model.terminal_waypoints == []
 
 
 @pytest.mark.parametrize("kind", ("waypoint", "navaid"))

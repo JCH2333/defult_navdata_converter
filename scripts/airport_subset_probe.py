@@ -112,6 +112,51 @@ def parse_holding_attributes(values: list[str]) -> dict[str, str]:
     return attributes
 
 
+def parse_airport_waypoint_selectors(
+    values: list[str],
+) -> set[tuple[str, str]]:
+    """Normalize diagnostic-only AIRPORT:IDENT selectors."""
+
+    selectors: set[tuple[str, str]] = set()
+    for raw in values:
+        airport, separator, ident = raw.partition(":")
+        airport = airport.strip().upper()
+        ident = ident.strip().upper()
+        if not separator or len(airport) != 4 or not ident:
+            raise ValueError(
+                "--drop-airport-waypoint 必须使用 ICAO:IDENT 形式"
+            )
+        selector = (airport, ident)
+        if selector in selectors:
+            raise ValueError(
+                "--drop-airport-waypoint 不能包含重复的机场航点"
+            )
+        selectors.add(selector)
+    return selectors
+
+
+def drop_selected_waypoints(
+    root: ET.Element,
+    *,
+    airport_selectors: set[tuple[str, str]],
+    root_idents: set[str],
+) -> None:
+    """Remove only explicitly selected waypoints from a diagnostic XML tree."""
+
+    for point in list(root.findall("Waypoint")):
+        if (point.get("waypointIdent") or "").upper() in root_idents:
+            root.remove(point)
+    for airport in root.findall("Airport"):
+        airport_ident = (airport.get("ident") or "").upper()
+        for point in list(airport.findall("Waypoint")):
+            selector = (
+                airport_ident,
+                (point.get("waypointIdent") or "").upper(),
+            )
+            if selector in airport_selectors:
+                airport.remove(point)
+
+
 def select_airports(
     airports: list[ET.Element],
     *,
@@ -250,6 +295,20 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--move-waypoints-to-root", action="store_true")
     parser.add_argument("--keep-root-waypoints", action="store_true")
+    parser.add_argument(
+        "--drop-airport-waypoint",
+        action="append",
+        default=[],
+        metavar="ICAO:IDENT",
+        help="仅诊断用：从保留机场删除精确匹配的局部航点",
+    )
+    parser.add_argument(
+        "--drop-root-waypoint",
+        action="append",
+        default=[],
+        metavar="IDENT",
+        help="仅诊断用：从根节点删除精确匹配的全局航点",
+    )
     return parser
 
 
@@ -304,8 +363,20 @@ def main() -> int:
         assigned_holding_attributes = parse_holding_attributes(
             args.set_holding_attribute
         )
+        dropped_airport_waypoints = parse_airport_waypoint_selectors(
+            args.drop_airport_waypoint
+        )
     except ValueError as error:
         raise SystemExit(str(error)) from error
+    dropped_root_waypoints = {
+        ident.strip().upper()
+        for ident in args.drop_root_waypoint
+        if ident.strip()
+    }
+    if len(dropped_root_waypoints) != len([
+        ident for ident in args.drop_root_waypoint if ident.strip()
+    ]):
+        raise SystemExit("--drop-root-waypoint 不能包含重复的航点标识")
     selected_holding_idents: tuple[str, ...] = ()
     for airport in selected:
         for child in list(airport):
@@ -356,6 +427,12 @@ def main() -> int:
                 holding.attrib.pop(attribute, None)
             for attribute, value in assigned_holding_attributes.items():
                 holding.set(attribute, value)
+
+    drop_selected_waypoints(
+        root,
+        airport_selectors=dropped_airport_waypoints,
+        root_idents=dropped_root_waypoints,
+    )
 
     try:
         holding_file_groups = normalize_holding_file_groups(
@@ -465,6 +542,11 @@ def main() -> int:
                 "kept" if args.keep_root_waypoints
                 else "removed"
             ),
+            "dropped_airport_waypoints": [
+                f"{airport}:{ident}"
+                for airport, ident in sorted(dropped_airport_waypoints)
+            ],
+            "dropped_root_waypoints": sorted(dropped_root_waypoints),
             "waypoint_placement": (
                 "root" if args.move_waypoints_to_root else "airport"
             ),

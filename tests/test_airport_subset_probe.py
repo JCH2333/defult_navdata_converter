@@ -3,8 +3,10 @@ from xml.etree import ElementTree as ET
 import pytest
 
 from scripts.airport_subset_probe import (
+    drop_selected_waypoints,
     isolate_holding_group,
     normalize_holding_file_groups,
+    parse_airport_waypoint_selectors,
     parse_holding_attributes,
     select_airports,
     select_holding_patterns,
@@ -138,3 +140,43 @@ def test_isolated_holding_group_keeps_only_its_waypoint_and_holding_pattern():
         include_waypoints=False,
     )
     assert [child.tag for child in without_waypoint] == ["HoldingPattern"]
+
+
+def test_parse_airport_waypoint_selectors_normalizes_and_rejects_duplicates() -> None:
+    assert parse_airport_waypoint_selectors([
+        "zggg:gg101",
+        "ZGUH:UH402",
+    ]) == {("ZGGG", "GG101"), ("ZGUH", "UH402")}
+
+    with pytest.raises(ValueError, match="重复"):
+        parse_airport_waypoint_selectors(["ZGGG:GG101", "zggg:gg101"])
+
+
+def test_drop_selected_waypoints_keeps_unselected_scopes() -> None:
+    root = ET.fromstring(
+        "<FSData>"
+        '<Waypoint waypointIdent="ROOT01" />'
+        '<Waypoint waypointIdent="ROOT02" />'
+        '<Airport ident="ZGGG"><Waypoint waypointIdent="GG101" />'
+        '<Waypoint waypointIdent="KEEP" /></Airport>'
+        '<Airport ident="ZGUH"><Waypoint waypointIdent="UH401" /></Airport>'
+        "</FSData>"
+    )
+
+    drop_selected_waypoints(
+        root,
+        airport_selectors={("ZGGG", "GG101")},
+        root_idents={"ROOT01"},
+    )
+
+    assert [point.get("waypointIdent") for point in root.findall("Waypoint")] == [
+        "ROOT02",
+    ]
+    assert [
+        point.get("waypointIdent")
+        for point in root.find("Airport[@ident='ZGGG']").findall("Waypoint")
+    ] == ["KEEP"]
+    assert [
+        point.get("waypointIdent")
+        for point in root.find("Airport[@ident='ZGUH']").findall("Waypoint")
+    ] == ["UH401"]
