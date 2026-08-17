@@ -137,7 +137,10 @@ python -m fenix_default_navdata.gui
 `build --iap-ocr-cache-roots` 会重新审计至少三份缓存。仅当全部候选页、运行时标识、
 识别设置、角色-航点对及其相邻关系完全一致时，构建才把这些角色用于已有
 `ambiguous_chart` 分组的唯一图页选择。它不处理 `no_unique_primary` 或
-`no_matching_chart`，不生成新程序腿，也不改变测试版、字节比对和实机验证门禁。
+`no_matching_chart`，不生成新程序腿，也不改变测试版、字节比对和实机验证门禁。与 OCR
+无关的窄例外是未标变体的同机场同跑道 RNP AR 图题：当唯一图页的直接文本航点集合完整
+包含数据库主进近至少两个不同固定点时，转换器会记录
+`source_fixed_point_selections` 并关联该图页；缺点、同分或显式图题变体仍拒绝。
 
 2608R1 的严格共识已使用 A/B/D/F 四份独立缓存完成。历史 C 的 OCR 命令记录形式不同，
 即使角色证据相同也不能混入共识；当引擎默认等待不足时，使用 `--engine-timeout` 配合

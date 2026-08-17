@@ -218,6 +218,19 @@ SHA-256、OCR 运行时标识、命令、后端、模式、图像预处理、渲
 `test_iap_coverage_keeps_two_consensus_ocr_mapt_candidates_ambiguous` 和
 `test_bgl_iap_chart_roles_reuses_consensus_ocr_selection`。
 
+上述 OCR 限制不排除由同一 424 PDF 直接文本完整证明的窄例外：当通常图题匹配为空、
+同机场同跑道的图题包含未标变体的 `RNP ... (AR)`、主进近数据库标签为
+`R<跑道>-...`，且恰好一张图页直接抽取的 `waypoints` 包含该主段所有至少两个不同的
+非空数据库固定点时，可关联该图页。该规则不使用 OCR、参考成品或 Fenix 数据；固定点
+缺失、少于两个、图题已有变体或多个完整候选仍为 `no_matching_chart`。覆盖报告将此类
+选择写入 `source_fixed_point_selections`，供构建和差分审计。图页关联本身不能制造角色
+证据：只有图页的直接 `IAF`、`IF`、`FAF`、`MAP` 或 `MAPT` 标识与主进近腿实际相交时，
+才可计入角色覆盖或投影到 BGL。
+
+覆盖报告的 `role_evidence_used`、`role_evidence_counts` 和角色类状态同样只统计上述交集。
+同页的共享过渡、复飞或其他路径角色不能因图页已经选中而计入当前主进近，更不能生成
+BGL 标记。
+
 不带后缀的 IAP 基础标签可能只包含共享过渡或复飞段，而同页的 `-X/-Y/-Z` 唯一主
 进近段会在 BGL 投影中消费它们。只有基础标签组的每个来源页都能由同机场、同跑道、
 同页的唯一后缀主段消费时，覆盖报告才计入 `shared_section_groups` 而非未决；跨页

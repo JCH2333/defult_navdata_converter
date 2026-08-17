@@ -38,6 +38,39 @@ def _model_with_iap_segments() -> NavModel:
     return model
 
 
+def _model_with_unqualified_rnp_ar_variant() -> NavModel:
+    source = SourceRef("Terminal/ZUNP/ZUNP-4Z04.pdf", 1, 1, "database-hash")
+    model = NavModel(Path("source"))
+    model.airports["airport"] = Airport(
+        "airport", "ZUNP", "ZUNP", 35.0, 105.0, 1000, 18000, 180, source,
+    )
+    model.runways.append(
+        Runway("runway", "airport", "24", 30.0, 10000, 150, "ASP", 1000, source),
+    )
+    model.procedure_segments.append(
+        ProcedureSegment(
+            "ZUNP", "R24-Y", "approach", "24", "", (
+                ChartTerminalLeg("R24-Y", "24", "TF", "NP716", "fixture", sequence=1),
+                ChartTerminalLeg("R24-Y", "24", "TF", "NP714", "fixture", sequence=2),
+            ), source,
+        ),
+    )
+    return model
+
+
+def _unqualified_rnp_ar_chart(
+    filename: str,
+    waypoints: tuple[str, ...],
+    source: SourceRef,
+    chart_name: str = "RNP RWY24(AR)",
+    route_fixes: tuple[ChartRouteFix, ...] = (),
+) -> ProcedureChart:
+    return ProcedureChart(
+        "ZUNP", filename, 1, "instrument-approach-index", chart_name,
+        "text", (), ("24",), waypoints, (), (), source, route_fixes=route_fixes,
+    )
+
+
 def test_iap_coverage_counts_unique_map_disambiguation():
     model = _model_with_iap_segments()
     source = SourceRef("approach.pdf", 1, 1, "hash")
@@ -56,7 +89,7 @@ def test_iap_coverage_counts_unique_map_disambiguation():
 
     report = analyze_iap_coverage(model)
 
-    assert report["version"] == 6
+    assert report["version"] == 7
     assert report["chart_pages"]["total"] == 2
     assert report["chart_pages"]["matched_to_primary_group"] == 2
     assert report["chart_pages"]["selected_for_role_projection"] == 1
@@ -68,6 +101,112 @@ def test_iap_coverage_counts_unique_map_disambiguation():
     assert report["role_evidence_counts"] == {"MAPT": 1}
     assert report["ocr_role_selections"] == []
     assert report["unresolved_groups"] == []
+
+
+def test_iap_coverage_selects_unqualified_rnp_ar_chart_by_complete_direct_fixes():
+    model = _model_with_unqualified_rnp_ar_variant()
+    selected_source = SourceRef("Terminal/ZUNP/ZUNP-9D.pdf", 1, 1, "selected-hash")
+    model.procedure_charts.extend([
+        _unqualified_rnp_ar_chart(
+            "ZUNP-9C.pdf", ("NP706", "NP708", "NP710"), selected_source,
+        ),
+        _unqualified_rnp_ar_chart(
+            "ZUNP-9D.pdf",
+            ("NP714", "NP716", "NP718"),
+            selected_source,
+            route_fixes=(ChartRouteFix("NP900", "IAF"),),
+        ),
+    ])
+
+    report = analyze_iap_coverage(model)
+
+    assert report["procedure_groups"]["status_counts"] == {
+        "unique_chart_without_roles": 1,
+    }
+    assert report["procedure_groups"]["role_evidence_used"] == 0
+    assert report["role_evidence_counts"] == {}
+    assert report["source_fixed_point_selections"] == [{
+        "airport": "ZUNP",
+        "label": "R24-Y",
+        "runway": "24",
+        "selection": "direct_fixed_points",
+        "chart_name": "RNP RWY24(AR)",
+        "source": {
+            "file": "Terminal/ZUNP/ZUNP-9D.pdf",
+            "row": 1,
+            "page": 1,
+            "sha256": "selected-hash",
+        },
+        "required_fixes": ["NP714", "NP716"],
+    }]
+    assert report["unresolved_groups"] == []
+
+
+def test_iap_coverage_rejects_equal_unqualified_rnp_ar_direct_fix_candidates():
+    model = _model_with_unqualified_rnp_ar_variant()
+    source = SourceRef("Terminal/ZUNP/ZUNP-9C.pdf", 1, 1, "chart-hash")
+    model.procedure_charts.extend([
+        _unqualified_rnp_ar_chart(
+            "ZUNP-9C.pdf", ("NP714", "NP716"), source,
+        ),
+        _unqualified_rnp_ar_chart(
+            "ZUNP-9D.pdf", ("NP714", "NP716"), source,
+        ),
+    ])
+
+    report = analyze_iap_coverage(model)
+
+    assert report["procedure_groups"]["status_counts"] == {
+        "no_matching_chart": 1,
+    }
+    assert report["source_fixed_point_selections"] == []
+    assert report["unresolved_groups"][0]["status"] == "no_matching_chart"
+
+
+def test_iap_coverage_rejects_unqualified_rnp_ar_chart_with_only_one_direct_fix():
+    model = _model_with_unqualified_rnp_ar_variant()
+    source = SourceRef("Terminal/ZUNP/ZUNP-9D.pdf", 1, 1, "chart-hash")
+    model.procedure_segments[0] = ProcedureSegment(
+        "ZUNP", "R24-Y", "approach", "24", "", (
+            ChartTerminalLeg("R24-Y", "24", "TF", "NP716", "fixture", sequence=1),
+        ), source,
+    )
+    model.procedure_charts.append(
+        _unqualified_rnp_ar_chart("ZUNP-9D.pdf", ("NP716",), source),
+    )
+
+    report = analyze_iap_coverage(model)
+
+    assert report["procedure_groups"]["status_counts"] == {
+        "no_matching_chart": 1,
+    }
+    assert report["source_fixed_point_selections"] == []
+
+
+def test_iap_coverage_does_not_use_fixed_points_when_rnp_ar_title_declares_variant():
+    model = _model_with_unqualified_rnp_ar_variant()
+    source = SourceRef("Terminal/ZUNP/ZUNP-9C.pdf", 1, 1, "chart-hash")
+    model.procedure_segments[0] = ProcedureSegment(
+        "ZUNP", "R24-Z", "approach", "24", "", (
+            ChartTerminalLeg("R24-Z", "24", "TF", "NP706", "fixture", sequence=1),
+            ChartTerminalLeg("R24-Z", "24", "TF", "NP708", "fixture", sequence=2),
+        ), source,
+    )
+    model.procedure_charts.append(
+        _unqualified_rnp_ar_chart(
+            "ZUNP-9C.pdf",
+            ("NP706", "NP708"),
+            source,
+            chart_name="RNP Y RWY24(AR)",
+        ),
+    )
+
+    report = analyze_iap_coverage(model)
+
+    assert report["procedure_groups"]["status_counts"] == {
+        "no_matching_chart": 1,
+    }
+    assert report["source_fixed_point_selections"] == []
 
 
 def test_iap_coverage_uses_unique_multi_role_evidence_when_final_leg_is_not_mapt():
