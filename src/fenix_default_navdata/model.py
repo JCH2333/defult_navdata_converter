@@ -422,6 +422,9 @@ class NavModel:
     # source FIR boundary geometry.  Empty means the optional FIR tables were
     # unavailable to the source loader.
     source_fir_region_resolution: dict[str, object] = field(default_factory=dict)
+    # Audit-only result of recovering blank designated-point regions from
+    # uniquely mapped source FIR/ACC remarks on connected airway segments.
+    source_acc_region_resolution: dict[str, object] = field(default_factory=dict)
     # Audit-only record of terminal coordinate-page points promoted to global
     # waypoints through a source-only shared-identity rule.
     terminal_coordinate_waypoint_promotion: dict[str, object] = field(

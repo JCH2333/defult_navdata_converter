@@ -38,6 +38,20 @@ FIR 多边形恢复。该规则只生成区域键，不复制官方航点记录�
 13 个边界附近、38 个多边形外、0 个歧义。自动化覆盖：
 `test_load_naip_recovers_blank_waypoint_fir_only_when_source_geometry_is_unambiguous`。
 
+对于上述来源规则仍为空、且连接到航路的指定点，可继续从同周期
+`RTE_SEG.csv.Airspace_Remark` 恢复区域，但仅限可直接回链到
+`AIRSPACE.csv` FIR 标题的 ACC 名称。解析仅标准化 ACC 名称前的精确边界词
+`以上` 或 `以下`，例如 `以下广州ACC` 归一为 `广州`；归一后的名称必须唯一匹配
+`TXT_NAME` 去除 `飞行情报区` 后的 FIR 名称。一个指定点关联到的全部非空 ACC 名称
+都必须可映射且落到同一地区，才可恢复该点和同源精确身份的航路端点；未知 ACC、
+多个地区、无 ACC 或未连接航路一律保持为空。该规则只读取 424
+`AIRSPACE.csv`/`RTE_SEG.csv`，不读取官方索引、参考成品或 Fenix。2026-08-17 的
+2608 全量复核得到 9 个可映射 FIR/ACC 名称；FIR 几何后的 51 个空区域点中，18 个
+由该规则恢复，30 个因未知 ACC、2 个因多地区、1 个未连接航路而继续拒绝。r96
+完整构建与 r95 的 2,258 个 BGL SHA-256 全部一致，说明该“以下”前缀修正是当前周期
+的无内容变化解析防护，不能据此宣称字节差分收敛。自动化覆盖：
+`test_load_naip_recovers_blank_waypoint_region_from_unambiguous_source_acc`。
+
 ### Navdatareader 语义差分
 
 候选和参考覆盖包可以分别由 Navdatareader 解析为 SQLite 后，使用

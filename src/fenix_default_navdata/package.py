@@ -387,6 +387,7 @@ def build_candidate(
             "selected_navaids": len(selected_navaids),
             "waypoints": len(model.waypoints),
             "source_fir_region_resolution": model.source_fir_region_resolution,
+            "source_acc_region_resolution": model.source_acc_region_resolution,
             "terminal_coordinate_waypoint_promotion": (
                 model.terminal_coordinate_waypoint_promotion
             ),

@@ -495,6 +495,75 @@ def test_load_naip_recovers_blank_route_endpoint_firs_from_matching_424_records(
     assert next(point.country for point in model.waypoints if point.ident == "NOFIR") == ""
 
 
+def test_load_naip_recovers_blank_waypoint_region_from_unambiguous_source_acc(
+    tmp_path: Path,
+) -> None:
+    root = _minimal_naip_root(tmp_path, "沥青")
+    _write_csv(root, "AIRSPACE.csv", "\n".join((
+        "AIRSPACE_ID,CODE_TYPE,CODE_ID,TXT_NAME",
+        "beijing,FIR,ZBPE,北京飞行情报区",
+        "guangzhou,FIR,ZGZU,广州飞行情报区",
+    )))
+    _write_csv(root, "DESIGNATED_POINT.csv", "\n".join((
+        "SIGNIFICANT_POINT_ID,CODE_ID,TXT_NAME,GEO_LAT_ACCURACY,GEO_LONG_ACCURACY,CODE_FIR",
+        "anchor,ANCHOR,ANCHOR,N350000,E1050000,北京情报区",
+        "unique,UNIQUE,UNIQUE,N360000,E1060000,",
+        "unknown,UNKNOWN,UNKNOWN,N370000,E1070000,",
+        "multiple,MULTIPLE,MULTIPLE,N380000,E1080000,",
+        "below,BELOW,BELOW,N385000,E1083000,",
+        "unused,UNUSED,UNUSED,N390000,E1090000,",
+    )))
+    _write_csv(root, "RTE_SEG.csv", "\n".join((
+        "TXT_DESIG,VAL_SORT,CODE_POINT_START,CODE_POINT_END,GEO_LAT_START_ACCURACY,GEO_LONG_START_ACCURACY,GEO_LAT_END_ACCURACY,GEO_LONG_END_ACCURACY,CODE_FIR_START,CODE_FIR_END,CODE_DIR,CODE_TYPE,CODE_TYPE_START,CODE_TYPE_END,Airspace_Remark",
+        "R1,1,UNIQUE,ANCHOR,N360000,E1060000,N350000,E1050000,,,B,L,DESIGNATED_POINT,DESIGNATED_POINT,广州ACC",
+        "R2,2,UNKNOWN,ANCHOR,N370000,E1070000,N350000,E1050000,,,B,L,DESIGNATED_POINT,DESIGNATED_POINT,哈尔滨ACC",
+        "R3,3,MULTIPLE,ANCHOR,N380000,E1080000,N350000,E1050000,,,B,L,DESIGNATED_POINT,DESIGNATED_POINT,以上北京ACC",
+        "R4,4,MULTIPLE,ANCHOR,N380000,E1080000,N350000,E1050000,,,B,L,DESIGNATED_POINT,DESIGNATED_POINT,以下广州ACC",
+        "R5,5,BELOW,ANCHOR,N385000,E1083000,N350000,E1050000,,,B,L,DESIGNATED_POINT,DESIGNATED_POINT,以下广州ACC",
+    )))
+
+    model = load_naip(root, include_terminal_documents=False)
+
+    assert {
+        point.ident: point.country
+        for point in model.waypoints
+    } == {
+        "ANCHOR": "ZB",
+        "UNIQUE": "ZG",
+        "UNKNOWN": "",
+        "MULTIPLE": "",
+        "BELOW": "ZG",
+        "UNUSED": "",
+    }
+    assert [
+        (leg.start_country, leg.end_country)
+        for leg in model.airway_legs
+    ] == [
+        ("ZG", "ZB"),
+        ("", "ZB"),
+        ("", "ZB"),
+        ("", "ZB"),
+        ("ZG", "ZB"),
+    ]
+    assert model.source_acc_region_resolution == {
+        "source": {
+            "airspace": "AIRSPACE.csv",
+            "airway_segments": "RTE_SEG.csv",
+        },
+        "fir_acc_names": 2,
+        "waypoints": {
+            "blank_before": 5,
+            "airway_connected": 4,
+            "not_airway_connected": 1,
+            "recovered": 2,
+            "unknown_acc": 1,
+            "no_mapped_acc": 0,
+            "multiple_acc_regions": 1,
+            "blank_after": 3,
+        },
+    }
+
+
 def test_load_naip_uses_strict_serviced_airport_prefix_for_blank_waypoint_fir(
     tmp_path: Path,
 ) -> None:

@@ -57,6 +57,7 @@ _AIRWAY_ENDPOINT_SOURCE_TYPES = {
     "VORDME": "VORDME",
     "NDB": "NDB",
 }
+_ACC_NAME = re.compile(r"([\u4e00-\u9fff]+)ACC")
 _EARTH_RADIUS_NM = 3440.065
 _FIR_BOUNDARY_MIN_DISTANCE_NM = 5.0
 
@@ -486,6 +487,133 @@ def _restore_airway_endpoint_countries(
         )
         for leg in model.airway_legs
     ]
+
+
+def _load_fir_acc_countries(root: Path) -> dict[str, str]:
+    """Map only explicitly named FIR control centers from AIRSPACE.csv."""
+    path = root / "AIRSPACE.csv"
+    if not path.is_file():
+        return {}
+    candidates: dict[str, set[str]] = {}
+    for row in _rows(path):
+        if (row.get("CODE_TYPE") or "").strip().upper() != "FIR":
+            continue
+        country = (row.get("CODE_ID") or "").strip().upper()[:2]
+        name = (row.get("TXT_NAME") or "").strip()
+        if country not in CN_PREFIXES or not name.endswith("飞行情报区"):
+            continue
+        acc_name = name.removesuffix("飞行情报区").strip()
+        if acc_name:
+            candidates.setdefault(acc_name, set()).add(country)
+    return {
+        name: next(iter(countries))
+        for name, countries in sorted(candidates.items())
+        if len(countries) == 1
+    }
+
+
+def _airway_acc_names(remark: str) -> set[str]:
+    """Extract normalized source ACC names without assigning their regions."""
+    return {
+        match.group(1).removeprefix("以上").removeprefix("以下").strip()
+        for match in _ACC_NAME.finditer(remark or "")
+        if match.group(1).removeprefix("以上").removeprefix("以下").strip()
+    }
+
+
+def _restore_waypoint_countries_from_airway_acc(
+    model: NavModel,
+    countries: dict[tuple[str, str, float, float], set[str]],
+    acc_countries: dict[str, str],
+) -> dict[str, object]:
+    """Recover blank designated-point regions from unambiguous source ACC evidence.
+
+    A route remark is admissible only when every ACC it names is itself an
+    AIRSPACE.csv FIR title and all mapped ACCs resolve to one target region.
+    Blank remarks do not weaken otherwise unanimous evidence; unknown or
+    cross-region ACCs keep the point unresolved.
+    """
+    evidence: dict[tuple[str, str, float, float], dict[str, set[str]]] = {}
+    for leg in model.airway_legs:
+        acc_names = _airway_acc_names(leg.source_airspace_remark)
+        if not acc_names:
+            continue
+        regions = {acc_countries[name] for name in acc_names if name in acc_countries}
+        unknown = acc_names - acc_countries.keys()
+        for endpoint_type, ident, latitude, longitude in (
+            (leg.start_type, leg.start_ident, leg.start_latitude, leg.start_longitude),
+            (leg.end_type, leg.end_ident, leg.end_latitude, leg.end_longitude),
+        ):
+            key = _airway_endpoint_key(endpoint_type, ident, latitude, longitude)
+            if key is None or key[0] != "DESIGNATED_POINT":
+                continue
+            item = evidence.setdefault(key, {"regions": set(), "unknown": set()})
+            item["regions"].update(regions)
+            item["unknown"].update(unknown)
+
+    counts: Counter[str] = Counter()
+    restored: list[Waypoint] = []
+    for waypoint in model.waypoints:
+        if waypoint.country:
+            restored.append(waypoint)
+            continue
+        counts["blank_before"] += 1
+        key = (
+            "DESIGNATED_POINT",
+            waypoint.ident.upper(),
+            round(waypoint.latitude, 6),
+            round(waypoint.longitude, 6),
+        )
+        item = evidence.get(key)
+        if item is None:
+            counts["not_airway_connected"] += 1
+            restored.append(waypoint)
+            continue
+        counts["airway_connected"] += 1
+        if item["unknown"]:
+            counts["unknown_acc"] += 1
+            restored.append(waypoint)
+            continue
+        if not item["regions"]:
+            counts["no_mapped_acc"] += 1
+            restored.append(waypoint)
+            continue
+        if len(item["regions"]) != 1:
+            counts["multiple_acc_regions"] += 1
+            restored.append(waypoint)
+            continue
+        country = next(iter(item["regions"]))
+        restored_waypoint = replace(waypoint, country=country)
+        restored.append(restored_waypoint)
+        _register_airway_endpoint_country(
+            countries,
+            "DESIGNATED_POINT",
+            restored_waypoint.ident,
+            restored_waypoint.latitude,
+            restored_waypoint.longitude,
+            country,
+        )
+        counts["recovered"] += 1
+
+    model.waypoints = restored
+    counts["blank_after"] = counts["blank_before"] - counts["recovered"]
+    return {
+        "source": {
+            "airspace": "AIRSPACE.csv",
+            "airway_segments": "RTE_SEG.csv",
+        },
+        "fir_acc_names": len(acc_countries),
+        "waypoints": {
+            "blank_before": counts["blank_before"],
+            "airway_connected": counts["airway_connected"],
+            "not_airway_connected": counts["not_airway_connected"],
+            "recovered": counts["recovered"],
+            "unknown_acc": counts["unknown_acc"],
+            "no_mapped_acc": counts["no_mapped_acc"],
+            "multiple_acc_regions": counts["multiple_acc_regions"],
+            "blank_after": counts["blank_after"],
+        },
+    }
 
 
 def _unwrap_longitude(longitude: float, origin_longitude: float) -> float:
@@ -1246,6 +1374,7 @@ def load_naip(
     segment_rows = _optional_index(root, "SEGMENT.csv", "SEGMENT_ID")
     en_route_rows = _optional_index(root, "EN_ROUTE_RTE.csv", "EN_ROUTE_RTE_ID")
     fir_polygons, fir_vertices_loaded = _load_fir_polygons(root)
+    fir_acc_countries = _load_fir_acc_countries(root)
     fir_region_counts: Counter[str] = Counter()
     for row_number, row in enumerate(_rows(root / "AD_HP.csv"), start=2):
         icao = (row.get("CODE_ID") or "").strip().upper()
@@ -1464,6 +1593,11 @@ def load_naip(
                 kind="airway-leg", key=row.get("TXT_DESIG") or "", reason="invalid airway endpoint coordinate",
                 source=SourceRef("RTE_SEG.csv", row_number),
             ))
+    model.source_acc_region_resolution = _restore_waypoint_countries_from_airway_acc(
+        model,
+        airway_endpoint_countries,
+        fir_acc_countries,
+    )
     _restore_airway_endpoint_countries(model, airway_endpoint_countries)
     _load_general_document_airway_minimum_altitudes(
         model,
