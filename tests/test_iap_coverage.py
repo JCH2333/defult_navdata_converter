@@ -287,6 +287,40 @@ def test_iap_coverage_selects_ambiguous_title_match_by_complete_direct_fixes():
     assert report["unresolved_groups"] == []
 
 
+def test_iap_coverage_prefers_unique_plain_ils_title_for_database_i_label():
+    model = _model_with_iap_segments()
+    source = SourceRef("Terminal/ZPNL/ZPNL-4H.pdf", 1, 1, "database-hash")
+    model.procedure_segments[:] = [
+        ProcedureSegment(
+            "ZPNL", "I23", "approach", "23", "", (
+                ChartTerminalLeg("I23", "23", "IF", "NL706", "fixture", sequence=1),
+            ), source, approach_family="ILS",
+        ),
+    ]
+    rnp_ils_source = SourceRef("Terminal/ZPNL/ZPNL-5A.pdf", 1, 1, "rnp-ils-hash")
+    plain_ils_source = SourceRef("Terminal/ZPNL/ZPNL-5B.pdf", 1, 1, "plain-ils-hash")
+    model.procedure_charts.extend([
+        ProcedureChart(
+            "ZPNL", "ZPNL-5A.pdf", 1, "instrument-approach-index",
+            "RNP ILS/DME z RWY23", "text", (), ("23",), (), (), (),
+            rnp_ils_source, route_fixes=(ChartRouteFix("NL706", "IF"),),
+        ),
+        ProcedureChart(
+            "ZPNL", "ZPNL-5B.pdf", 1, "instrument-approach-index",
+            "ILS/DME y RWY23", "text", (), ("23",), (), (), (),
+            plain_ils_source,
+        ),
+    ])
+
+    report = analyze_iap_coverage(model)
+
+    assert report["chart_pages"]["matched_to_primary_group"] == 1
+    assert report["procedure_groups"]["status_counts"] == {
+        "unique_chart_without_roles": 1,
+    }
+    assert report["unresolved_groups"] == []
+
+
 def test_iap_coverage_selects_unique_rnp_ar_title_qualifier_matching_primary_leg():
     model = _model_with_iap_segments()
     source = SourceRef("Terminal/ZUNZ/ZUNZ-4G05.pdf", 1, 1, "database-hash")

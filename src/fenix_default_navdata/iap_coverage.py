@@ -179,6 +179,12 @@ def _unqualified_rnp_ar_chart(chart: Any, segment: Any) -> bool:
     return not any(candidate.startswith(base_label + "-") for candidate in title_candidates)
 
 
+def _plain_ils_chart(chart: Any) -> bool:
+    """Identify a chart explicitly titled as ILS without an RNP qualifier."""
+    title = chart.chart_name.upper()
+    return "ILS" in title and "RNP" not in title
+
+
 def _matching_iap_charts_with_selection(
     model: NavModel,
     segment: Any,
@@ -194,6 +200,17 @@ def _matching_iap_charts_with_selection(
         )
     ]
     if direct_matches:
+        # ``RNP ILS/DME`` titles deliberately expose both RNP and ILS name
+        # candidates.  A database-coded ``Ixx`` primary is nevertheless an
+        # explicit ILS identity.  When the source also contains exactly one
+        # non-RNP ILS plate, retain that narrower direct title match instead
+        # of treating an RNP ILS plate as the same primary.
+        if segment.label.upper().startswith("I"):
+            plain_ils_matches = [
+                chart for chart in direct_matches if _plain_ils_chart(chart)
+            ]
+            if len(plain_ils_matches) == 1:
+                return plain_ils_matches, "plain_ils_title"
         return direct_matches, None
 
     # Some RNP AR titles omit the database suffix even though separate plates
