@@ -210,7 +210,7 @@ PDF 缓存载荷带有提取器版本。修改可影响证据解释的规则时�
 `_EVIDENCE_CACHE_VERSION`，并以新缓存进行冷读与热读一致性复核；不得依据旧缓存
 中的统计或程序分类作出发布、部署或数据覆盖决定。
 
-IAP 覆盖报告由 `iap_coverage.version=12` 标记。所有角色投影必须满足：数据库编码页
+IAP 覆盖报告由 `iap_coverage.version=13` 标记。所有角色投影必须满足：数据库编码页
 提供有序腿，仪表进近图页提供明确角色，且同一机场、跑道、程序标签的图页唯一；多图
 时优先要求主进近最后定位点在恰好一张图上明确为 `MAP/MAPT`。若该定位点不能消歧，
 仅当恰好一张候选图页对至少两个不同数据库腿给出 `IAF`、`IF`、`FAF`、`MAP` 或
@@ -268,6 +268,13 @@ RNP AR 图题中的固定点限定状态也必须在所有候选中一致，且�
 不同。多个候选命中、没有候选命中、重复标题或混合 AR 类别一律继续拒绝。自动化测试：
 `test_iap_coverage_selects_unique_direct_source_role_without_ar_title_mixing` 和
 `test_iap_coverage_selects_uniform_qualified_rnp_ar_by_unique_direct_role`。
+
+若候选图的直接“固定点、角色”集合中恰好一张严格包含每一张其他候选的集合，且仍满足
+标题不同、RNP AR 分类一致与限定状态一致的条件，可选择该图并记录为
+`source_dominant_direct_role_selections`。相同集合、不可比较集合、重复标题或混合类别
+一律拒绝。该规则不使用 OCR、参考成品或 Fenix。自动化测试：
+`test_iap_coverage_selects_strict_direct_role_superset` 和
+`test_iap_coverage_rejects_incomparable_direct_role_sets`。
 
 覆盖报告的 `role_evidence_used`、`role_evidence_counts` 和角色类状态同样只统计上述交集。
 同页的共享过渡、复飞或其他路径角色不能因图页已经选中而计入当前主进近，更不能生成

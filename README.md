@@ -155,6 +155,10 @@ python -m fenix_default_navdata.gui
 OCR、参考成品或 Fenix；RNP AR 不能与非 AR 图题混用，带固定点限定与不带限定的 RNP AR
 候选也不能混用，候选标题标准化后必须彼此不同；其余多个命中或零命中继续拒绝。
 
+若多张候选图的直接角色-固定点集合中，只有一张严格包含每一张其他候选的集合，转换器会
+记录 `source_dominant_direct_role_selections`。这同样只使用直接 424 文本；集合相同、
+不可比较、重复标题或混合 AR 类别仍拒绝。
+
 当前候选构建使用 `bounded-max4096-ocr-r80-a/b/c-20260817` 三份独立缓存。三者都记录了
 内置 `llamacpp-direct` 适配器、`max_tokens=4096`、完整运行时描述、角色-航点对和相邻
 关系，并通过严格共识。旧 `ocr-3x-deterministic-a/b/d/f-20260815` 即使角色证据相同，

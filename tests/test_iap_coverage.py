@@ -92,7 +92,7 @@ def test_iap_coverage_counts_unique_map_disambiguation():
 
     report = analyze_iap_coverage(model)
 
-    assert report["version"] == 12
+    assert report["version"] == 13
     assert report["chart_pages"]["total"] == 2
     assert report["chart_pages"]["matched_to_primary_group"] == 2
     assert report["chart_pages"]["selected_for_role_projection"] == 1
@@ -580,6 +580,70 @@ def test_iap_coverage_selects_uniform_qualified_rnp_ar_by_unique_direct_role():
         "RNP RWY03(AR)(FIRST)"
     )
     assert report["unresolved_groups"] == []
+
+
+def test_iap_coverage_selects_strict_direct_role_superset():
+    model = _model_with_iap_segments()
+    source = SourceRef("Terminal/ZBCF/ZBCF-4L.pdf", 1, 1, "database-hash")
+    model.procedure_segments[0] = ProcedureSegment(
+        "ZBCF", "R03", "approach", "03", "", (
+            ChartTerminalLeg("R03", "03", "TF", "FIRST", "fixture", sequence=1),
+            ChartTerminalLeg("R03", "03", "TF", "SECOND", "fixture", sequence=2),
+        ), source,
+    )
+    model.procedure_charts.extend([
+        ProcedureChart(
+            "ZBCF", "subset.pdf", 1, "instrument-approach-index",
+            "RNP ILS/DME z RWY03", "text", (), ("03",), (), (), (), source,
+            route_fixes=(ChartRouteFix("FIRST", "IAF"),),
+        ),
+        ProcedureChart(
+            "ZBCF", "superset.pdf", 1, "instrument-approach-index",
+            "RNP RWY03", "text", (), ("03",), (), (), (), source,
+            route_fixes=(
+                ChartRouteFix("FIRST", "IAF"),
+                ChartRouteFix("SECOND", "IF"),
+            ),
+        ),
+    ])
+
+    report = analyze_iap_coverage(model)
+
+    assert report["procedure_groups"]["status_counts"] == {
+        "roles_source_dominant_direct_role_chart": 1,
+    }
+    assert report["source_dominant_direct_role_selections"][0]["chart_name"] == (
+        "RNP RWY03"
+    )
+    assert report["unresolved_groups"] == []
+
+
+def test_iap_coverage_rejects_incomparable_direct_role_sets():
+    model = _model_with_iap_segments()
+    source = SourceRef("Terminal/ZBCF/ZBCF-4L.pdf", 1, 1, "database-hash")
+    model.procedure_segments[0] = ProcedureSegment(
+        "ZBCF", "R03", "approach", "03", "", (
+            ChartTerminalLeg("R03", "03", "TF", "FIRST", "fixture", sequence=1),
+            ChartTerminalLeg("R03", "03", "TF", "SECOND", "fixture", sequence=2),
+        ), source,
+    )
+    model.procedure_charts.extend([
+        ProcedureChart(
+            "ZBCF", "first.pdf", 1, "instrument-approach-index",
+            "RNP ILS/DME z RWY03", "text", (), ("03",), (), (), (), source,
+            route_fixes=(ChartRouteFix("FIRST", "IAF"),),
+        ),
+        ProcedureChart(
+            "ZBCF", "second.pdf", 1, "instrument-approach-index",
+            "RNP RWY03", "text", (), ("03",), (), (), (), source,
+            route_fixes=(ChartRouteFix("SECOND", "IF"),),
+        ),
+    ])
+
+    report = analyze_iap_coverage(model)
+
+    assert report["procedure_groups"]["status_counts"] == {"ambiguous_chart": 1}
+    assert report["source_dominant_direct_role_selections"] == []
 
 
 def test_iap_coverage_prefers_direct_role_selection_before_complete_direct_fixes():
