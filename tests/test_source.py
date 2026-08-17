@@ -555,12 +555,72 @@ def test_load_naip_recovers_blank_waypoint_region_from_unambiguous_source_acc(
             "blank_before": 5,
             "airway_connected": 4,
             "not_airway_connected": 1,
+            "explicit_endpoint_labeled": 0,
             "recovered": 2,
+            "recovered_from_explicit_endpoint_label": 0,
             "unknown_acc": 1,
             "no_mapped_acc": 0,
             "multiple_acc_regions": 1,
             "blank_after": 3,
         },
+    }
+
+
+def test_load_naip_prefers_explicit_endpoint_acc_label_over_generic_leg_accs(
+    tmp_path: Path,
+) -> None:
+    root = _minimal_naip_root(tmp_path, "ASP")
+    _write_csv(root, "AIRSPACE.csv", "\n".join((
+        "AIRSPACE_ID,CODE_TYPE,CODE_ID,TXT_NAME",
+        "beijing,FIR,ZBPE,\u5317\u4eac\u98de\u884c\u60c5\u62a5\u533a",
+        "guangzhou,FIR,ZGZU,\u5e7f\u5dde\u98de\u884c\u60c5\u62a5\u533a",
+    )))
+    _write_csv(root, "DESIGNATED_POINT.csv", "\n".join((
+        "SIGNIFICANT_POINT_ID,CODE_ID,TXT_NAME,GEO_LAT_ACCURACY,GEO_LONG_ACCURACY,CODE_FIR",
+        "anchor,ANCHOR,ANCHOR,N350000,E1050000,\u5317\u4eac\u60c5\u62a5\u533a",
+        "slash,SLASH/ID,SLASH/ID,N360000,E1060000,",
+        "conflict,CONFLICT,CONFLICT,N370000,E1070000,",
+        "unknown,UNKNOWN,UNKNOWN,N380000,E1080000,",
+    )))
+    _write_csv(root, "RTE_SEG.csv", "\n".join((
+        "TXT_DESIG,VAL_SORT,CODE_POINT_START,CODE_POINT_END,GEO_LAT_START_ACCURACY,GEO_LONG_START_ACCURACY,GEO_LAT_END_ACCURACY,GEO_LONG_END_ACCURACY,CODE_FIR_START,CODE_FIR_END,CODE_DIR,CODE_TYPE,CODE_TYPE_START,CODE_TYPE_END,Airspace_Remark",
+        "R1,1,SLASH/ID,ANCHOR,N360000,E1060000,N350000,E1050000,,,B,L,DESIGNATED_POINT,DESIGNATED_POINT,SLASH/ID:\u5e7f\u5ddeACCANCHOR:\u5317\u4eacACC",
+        "R2,2,CONFLICT,ANCHOR,N370000,E1070000,N350000,E1050000,,,B,L,DESIGNATED_POINT,DESIGNATED_POINT,CONFLICT:\u5317\u4eacACCANCHOR:\u5317\u4eacACC",
+        "R3,3,CONFLICT,ANCHOR,N370000,E1070000,N350000,E1050000,,,B,L,DESIGNATED_POINT,DESIGNATED_POINT,CONFLICT:\u5e7f\u5ddeACCANCHOR:\u5317\u4eacACC",
+        "R4,4,UNKNOWN,ANCHOR,N380000,E1080000,N350000,E1050000,,,B,L,DESIGNATED_POINT,DESIGNATED_POINT,UNKNOWN:\u54c8\u5c14\u6ee8ACCANCHOR:\u5317\u4eacACC",
+    )))
+
+    model = load_naip(root, include_terminal_documents=False)
+
+    assert {
+        point.ident: point.country
+        for point in model.waypoints
+    } == {
+        "ANCHOR": "ZB",
+        "SLASH/ID": "ZG",
+        "CONFLICT": "",
+        "UNKNOWN": "",
+    }
+    assert [
+        (leg.start_country, leg.end_country)
+        for leg in model.airway_legs
+    ] == [
+        ("ZG", "ZB"),
+        ("", "ZB"),
+        ("", "ZB"),
+        ("", "ZB"),
+    ]
+    assert model.source_acc_region_resolution["waypoints"] == {
+        "blank_before": 3,
+        "airway_connected": 3,
+        "not_airway_connected": 0,
+        "explicit_endpoint_labeled": 3,
+        "recovered": 1,
+        "recovered_from_explicit_endpoint_label": 1,
+        "unknown_acc": 1,
+        "no_mapped_acc": 0,
+        "multiple_acc_regions": 1,
+        "blank_after": 2,
     }
 
 

@@ -521,6 +521,46 @@ def _airway_acc_names(remark: str) -> set[str]:
     }
 
 
+def _explicit_endpoint_acc_evidence(
+    remark: str,
+    endpoints: tuple[tuple[str, str, float, float], ...],
+    acc_countries: dict[str, str],
+) -> dict[tuple[str, str, float, float], dict[str, set[str]]]:
+    """Bind ACC evidence only to an explicitly labelled source route endpoint."""
+    labels: list[tuple[int, int, tuple[str, str, float, float]]] = []
+    for endpoint_type, ident, latitude, longitude in endpoints:
+        key = _airway_endpoint_key(endpoint_type, ident, latitude, longitude)
+        normalized_ident = (ident or "").strip()
+        if key is None or key[0] != "DESIGNATED_POINT" or not normalized_ident:
+            continue
+        pattern = re.compile(
+            rf"{re.escape(normalized_ident)}\s*[:\uFF1A]",
+            re.IGNORECASE,
+        )
+        labels.extend(
+            (match.start(), match.end(), key)
+            for match in pattern.finditer(remark or "")
+        )
+
+    evidence: dict[tuple[str, str, float, float], dict[str, set[str]]] = {}
+    ordered_labels = sorted(labels)
+    for index, (_, end, key) in enumerate(ordered_labels):
+        next_start = (
+            ordered_labels[index + 1][0]
+            if index + 1 < len(ordered_labels)
+            else len(remark)
+        )
+        names = _airway_acc_names(remark[end:next_start])
+        if not names:
+            continue
+        item = evidence.setdefault(key, {"regions": set(), "unknown": set()})
+        item["regions"].update(
+            acc_countries[name] for name in names if name in acc_countries
+        )
+        item["unknown"].update(names - acc_countries.keys())
+    return evidence
+
+
 def _restore_waypoint_countries_from_airway_acc(
     model: NavModel,
     countries: dict[tuple[str, str, float, float], set[str]],
@@ -534,16 +574,29 @@ def _restore_waypoint_countries_from_airway_acc(
     cross-region ACCs keep the point unresolved.
     """
     evidence: dict[tuple[str, str, float, float], dict[str, set[str]]] = {}
+    explicit_evidence: dict[
+        tuple[str, str, float, float], dict[str, set[str]]
+    ] = {}
     for leg in model.airway_legs:
+        endpoints = (
+            (leg.start_type, leg.start_ident, leg.start_latitude, leg.start_longitude),
+            (leg.end_type, leg.end_ident, leg.end_latitude, leg.end_longitude),
+        )
+        for key, direct_item in _explicit_endpoint_acc_evidence(
+            leg.source_airspace_remark,
+            endpoints,
+            acc_countries,
+        ).items():
+            item = explicit_evidence.setdefault(key, {"regions": set(), "unknown": set()})
+            item["regions"].update(direct_item["regions"])
+            item["unknown"].update(direct_item["unknown"])
+
         acc_names = _airway_acc_names(leg.source_airspace_remark)
         if not acc_names:
             continue
         regions = {acc_countries[name] for name in acc_names if name in acc_countries}
         unknown = acc_names - acc_countries.keys()
-        for endpoint_type, ident, latitude, longitude in (
-            (leg.start_type, leg.start_ident, leg.start_latitude, leg.start_longitude),
-            (leg.end_type, leg.end_ident, leg.end_latitude, leg.end_longitude),
-        ):
+        for endpoint_type, ident, latitude, longitude in endpoints:
             key = _airway_endpoint_key(endpoint_type, ident, latitude, longitude)
             if key is None or key[0] != "DESIGNATED_POINT":
                 continue
@@ -564,12 +617,15 @@ def _restore_waypoint_countries_from_airway_acc(
             round(waypoint.latitude, 6),
             round(waypoint.longitude, 6),
         )
-        item = evidence.get(key)
+        explicit_item = explicit_evidence.get(key)
+        item = explicit_item or evidence.get(key)
         if item is None:
             counts["not_airway_connected"] += 1
             restored.append(waypoint)
             continue
         counts["airway_connected"] += 1
+        if explicit_item is not None:
+            counts["explicit_endpoint_labeled"] += 1
         if item["unknown"]:
             counts["unknown_acc"] += 1
             restored.append(waypoint)
@@ -594,6 +650,8 @@ def _restore_waypoint_countries_from_airway_acc(
             country,
         )
         counts["recovered"] += 1
+        if explicit_item is not None:
+            counts["recovered_from_explicit_endpoint_label"] += 1
 
     model.waypoints = restored
     counts["blank_after"] = counts["blank_before"] - counts["recovered"]
@@ -607,7 +665,11 @@ def _restore_waypoint_countries_from_airway_acc(
             "blank_before": counts["blank_before"],
             "airway_connected": counts["airway_connected"],
             "not_airway_connected": counts["not_airway_connected"],
+            "explicit_endpoint_labeled": counts["explicit_endpoint_labeled"],
             "recovered": counts["recovered"],
+            "recovered_from_explicit_endpoint_label": (
+                counts["recovered_from_explicit_endpoint_label"]
+            ),
             "unknown_acc": counts["unknown_acc"],
             "no_mapped_acc": counts["no_mapped_acc"],
             "multiple_acc_regions": counts["multiple_acc_regions"],
