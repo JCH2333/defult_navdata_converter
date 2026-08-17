@@ -387,6 +387,9 @@ def build_candidate(
             "selected_navaids": len(selected_navaids),
             "waypoints": len(model.waypoints),
             "source_fir_region_resolution": model.source_fir_region_resolution,
+            "terminal_coordinate_waypoint_promotion": (
+                model.terminal_coordinate_waypoint_promotion
+            ),
             "general_document_evidence": model.general_document_evidence,
             "airway_legs": len(model.airway_legs),
             "procedure_segments": len(model.procedure_segments),

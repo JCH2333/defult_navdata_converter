@@ -303,18 +303,28 @@ SHA-256、OCR 运行时标识、命令、后端、模式、图像预处理、渲
   一致、3 个保持原区域，未出现第三方区域反例。因此 `SERVICED_AIRPORT` 是唯一
   可以提高该源侧区域判定优先级的字段；此结论不允许按参考差分反推其他点的区域。
   自动化覆盖：`test_waypoint_country_prefers_valid_serviced_airport_over_fir`。
-- 同次审计确认 246 个参考缺失的全局航点身份可在 424 终端坐标页中唯一对应。
-  这些资料共包含 11,981 个终端全局身份，其中 349 个在同一坐标被多个机场使用。
-  默认 BGL 只允许提升满足以下全部条件的终端点：同一 SDK 身份、同一坐标、至少
-  两个机场共同发布，且该身份尚未由结构化指定点或已解析航路端点占用。该规则在
-  当前来源中新增 88 个身份，其中 77 个对应参考缺口、11 个不在参考中；后者是
-  源规则的自然结果，不得据此缩小为参考名单。单机场点或同一身份存在多个源坐标
-  的点继续只保留在机场 BGL，不能提升到 `00_enroute.bgl`。自动化覆盖：
-  `test_enroute_projection_adds_only_shared_terminal_waypoints`。2026-08-14 的 r54
-  真实 SDK 构建经同一受控 Navdatareader 读取为航点 `2643/3266`（候选/参考），
-  参考缺失逻辑身份从 1,109 降至 1,032，候选仅新增从 398 增至 409，严格一致从
-  1,328 增至 1,364；另有 41 个新同身份记录仍存在来源属性差异，字段差异从 829
-  增至 870。该结果证明规则按来源生效，但不构成参考字段回填依据。
+- 终端坐标页全局航点提升（2608R1，证据：全部 `Terminal/*/Charts.csv` 索引的源
+  PDF 坐标页、r70 完整只读加载、`conversion-report.json`、受控 Navdatareader 与
+  `tests/test_source.py`，2026-08-17）：加载器在坐标页解析之后、数据库编码腿筛选
+  之前执行 `_promote_shared_terminal_coordinate_waypoints()`。全量来源共有 12,991
+  个坐标点、12,417 个“区域 + 标识”身份组；只有同一区域、原始标识完全一致且不超过
+  8 字符、坐标六位小数一致、至少两个不同机场独立发布、且未被既有规范化全局航点或
+  导航台身份占用的组，才可作为全局 `Waypoint` 提升。r70 提升 96 个；明确拒绝
+  11,967 个单机场组、79 个多坐标组和 275 个既有全局身份冲突组，标识为空、变体和
+  超长均为 0。终端点本身继续保留给机场程序和等待航线；已有 BGL 的动态共享选择会
+  因新全局身份存在而避免重复写入。自动化覆盖：
+  `test_promotes_shared_terminal_coordinate_waypoint_to_global_model`、
+  `test_shared_terminal_coordinate_waypoint_requires_two_airports`、
+  `test_shared_terminal_coordinate_waypoint_rejects_coordinate_conflicts`、
+  `test_shared_terminal_coordinate_waypoint_keeps_existing_global_identity` 和
+  `test_candidate_reports_terminal_coordinate_waypoint_promotion`。
+- r70 `00_enroute.bgl` 的单 BGL 受控读取为 VOR `121/135`、NDB `133/143`、航点
+  `3139/3266`、航路 `4401/4614`（候选/参考）。完整脱敏差分的来源审计把 1,019 个
+  参考缺失航点分为：663 个不在结构化指定点或航路端点中、326 个直接指定点区域不同、
+  15 个直接指定点区域未决、15 个仅以不同区域出现的航路端点；1,186 个参考缺失航路
+  分为：538 个同名同序号源段已在候选连通图表达、41 个因端点区域为空未投影、123 个
+  同名不同序号、484 个不在 `RTE_SEG.csv`。这些分类只用于下一步来源追溯，不能从
+  参考 BGL/SQLite 反向补写内容。r70 仍是测试候选，尚未达到字节一致或实机验证门槛。
 - 对当前剩余 47 个无区域航路端点，`RTE_SEG.POINT_START_ID/POINT_END_ID` 的
   只读回链没有提供新增可投影区域：40 个 ID 指向的当期 424 源点本身仍为空区域，
   6 个端点类型与同 ID 源表类型矛盾，1 个 ID 没有对应源点。端点类型不得跨表放宽，

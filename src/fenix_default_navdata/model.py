@@ -417,6 +417,11 @@ class NavModel:
     # source FIR boundary geometry.  Empty means the optional FIR tables were
     # unavailable to the source loader.
     source_fir_region_resolution: dict[str, object] = field(default_factory=dict)
+    # Audit-only record of terminal coordinate-page points promoted to global
+    # waypoints through a source-only shared-identity rule.
+    terminal_coordinate_waypoint_promotion: dict[str, object] = field(
+        default_factory=dict,
+    )
     # Audit-only status of GeneralDoc OCR evidence used for enroute additions.
     # The source loader records every rejection instead of silently guessing.
     general_document_evidence: dict[str, object] = field(default_factory=dict)

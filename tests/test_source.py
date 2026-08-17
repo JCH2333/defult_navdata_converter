@@ -7,6 +7,7 @@ import pytest
 from fenix_default_navdata.source import (
     _load_general_document_airway_minimum_altitudes,
     _load_terminal_landing_aids,
+    _promote_shared_terminal_coordinate_waypoints,
     _surface,
     audit_enroute_navaid_ocr_source,
     load_naip,
@@ -19,7 +20,15 @@ from fenix_default_navdata.general_docs import (
     ENROUTE_KEY_POINT_DOCUMENT,
     ENROUTE_NAVAID_DOCUMENT,
 )
-from fenix_default_navdata.model import Ad219Vor, AirwayLeg, NavModel, SourceRef
+from fenix_default_navdata.model import (
+    Ad219Vor,
+    AirwayLeg,
+    NavModel,
+    Navaid,
+    SourceRef,
+    TerminalWaypoint,
+    Waypoint,
+)
 
 
 def test_general_document_airway_minimum_altitude_projects_only_unique_424_leg(
@@ -137,6 +146,98 @@ def test_load_naip_keeps_ad219_vor_evidence_separate_from_direct_vor(
 
 def _write_csv(root: Path, name: str, text: str) -> None:
     (root / name).write_text(text, encoding="utf-8")
+
+
+def test_promotes_shared_terminal_coordinate_waypoint_to_global_model() -> None:
+    model = NavModel(Path("raw"))
+    source = SourceRef("Terminal/ZBAA/Charts.csv", page=1)
+    model.terminal_waypoints.extend((
+        TerminalWaypoint("one", "ZBAA", "SHARED", 40.1, 116.1, source, "ZB"),
+        TerminalWaypoint("two", "ZBAD", "SHARED", 40.1, 116.1, source, "ZB"),
+    ))
+
+    _promote_shared_terminal_coordinate_waypoints(model)
+
+    assert [
+        (point.key, point.ident, point.country, point.latitude, point.longitude)
+        for point in model.waypoints
+    ] == [
+        ("terminal-coordinate:ZB:SHARED", "SHARED", "ZB", 40.1, 116.1),
+    ]
+    assert model.terminal_coordinate_waypoint_promotion == {
+        "source": "Terminal/*/Charts.csv coordinate pages",
+        "coordinate_points": 2,
+        "identity_groups": 1,
+        "promoted": 1,
+        "rejected": {
+            "empty_identifier": 0,
+            "identifier_variants": 0,
+            "identifier_too_long": 0,
+            "multiple_coordinates": 0,
+            "single_airport": 0,
+            "existing_global_identity": 0,
+        },
+    }
+
+
+def test_shared_terminal_coordinate_waypoint_requires_two_airports() -> None:
+    model = NavModel(Path("raw"))
+    source = SourceRef("Terminal/ZBAA/Charts.csv", page=1)
+    model.terminal_waypoints.extend((
+        TerminalWaypoint("one", "ZBAA", "LOCAL", 40.1, 116.1, source, "ZB"),
+        TerminalWaypoint("two", "ZBAA", "LOCAL", 40.1, 116.1, source, "ZB"),
+    ))
+
+    _promote_shared_terminal_coordinate_waypoints(model)
+
+    assert model.waypoints == []
+    assert model.terminal_coordinate_waypoint_promotion["rejected"][
+        "single_airport"
+    ] == 1
+
+
+def test_shared_terminal_coordinate_waypoint_rejects_coordinate_conflicts() -> None:
+    model = NavModel(Path("raw"))
+    source = SourceRef("Terminal/ZBAA/Charts.csv", page=1)
+    model.terminal_waypoints.extend((
+        TerminalWaypoint("one", "ZBAA", "AMBIG", 40.1, 116.1, source, "ZB"),
+        TerminalWaypoint("two", "ZBAD", "AMBIG", 40.2, 116.1, source, "ZB"),
+    ))
+
+    _promote_shared_terminal_coordinate_waypoints(model)
+
+    assert model.waypoints == []
+    assert model.terminal_coordinate_waypoint_promotion["rejected"][
+        "multiple_coordinates"
+    ] == 1
+
+
+@pytest.mark.parametrize("kind", ("waypoint", "navaid"))
+def test_shared_terminal_coordinate_waypoint_keeps_existing_global_identity(
+    kind: str,
+) -> None:
+    model = NavModel(Path("raw"))
+    source = SourceRef("Terminal/ZBAA/Charts.csv", page=1)
+    model.terminal_waypoints.extend((
+        TerminalWaypoint("one", "ZBAA", "OCCUPIED", 40.1, 116.1, source, "ZB"),
+        TerminalWaypoint("two", "ZBAD", "OCCUPIED", 40.1, 116.1, source, "ZB"),
+    ))
+    if kind == "waypoint":
+        model.waypoints.append(Waypoint(
+            "existing", "OCCUPIED", "OCCUPIED", 35.0, 105.0, source, "ZB",
+        ))
+    else:
+        model.navaids.append(Navaid(
+            "existing", "OCCUPIED", "VOR", "OCCUPIED", 35.0, 105.0, 113.1,
+            0.0, 0, "ZB", source,
+        ))
+
+    _promote_shared_terminal_coordinate_waypoints(model)
+
+    assert len(model.waypoints) == (1 if kind == "waypoint" else 0)
+    assert model.terminal_coordinate_waypoint_promotion["rejected"][
+        "existing_global_identity"
+    ] == 1
 
 
 def _minimal_naip_root(tmp_path: Path, composition: str, *, include_second_airport: bool = False) -> Path:

@@ -103,6 +103,43 @@ def test_missing_navaid_baseline_keeps_candidate_non_deployable(
     assert report["model"]["selected_navaids"] == 0
 
 
+def test_candidate_reports_terminal_coordinate_waypoint_promotion(
+    tmp_path: Path,
+    monkeypatch,
+):
+    raw = tmp_path / "raw"
+    base = tmp_path / "base"
+    jepp = tmp_path / "jepp"
+    output = tmp_path / "candidate"
+    for path in (raw, base, jepp):
+        path.mkdir()
+    model = NavModel(raw)
+    model.terminal_coordinate_waypoint_promotion = {
+        "coordinate_points": 2,
+        "identity_groups": 1,
+        "promoted": 1,
+    }
+    monkeypatch.setattr(
+        "fenix_default_navdata.package.load_naip",
+        lambda root, **kwargs: model,
+    )
+
+    report = build_candidate(
+        raw_root=raw,
+        nav_base=base,
+        nav_jepp=jepp,
+        output=output,
+        cycle=DEFAULT_CYCLE,
+        compiler=CompilerInfo(None, "none", "missing"),
+    )
+
+    assert report["model"]["terminal_coordinate_waypoint_promotion"] == {
+        "coordinate_points": 2,
+        "identity_groups": 1,
+        "promoted": 1,
+    }
+
+
 def test_candidate_reports_source_rejection_audit_deterministically(
     tmp_path: Path,
     monkeypatch,

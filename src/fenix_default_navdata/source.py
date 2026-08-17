@@ -1460,6 +1460,7 @@ def load_naip(
     )
     if include_terminal_documents:
         _load_terminal_coordinate_pages(model, pdf_cache)
+        _promote_shared_terminal_coordinate_waypoints(model)
         _load_terminal_landing_aids(model)
         _load_terminal_database_charts(model, pdf_cache)
         _load_terminal_standard_procedure_charts(model, pdf_cache)
@@ -1529,6 +1530,88 @@ def _load_terminal_coordinate_pages(model: NavModel, pdf_cache: Path | None = No
                     key, chart.airport, point.ident, point.latitude, point.longitude,
                     SourceRef((airport_directory / chart.filename).relative_to(model.root).as_posix(), chart.page, chart.page, chart.source.sha256), chart.airport[:2],
                 ))
+
+
+def _promote_shared_terminal_coordinate_waypoints(model: NavModel) -> None:
+    """Promote only unambiguous cross-airport coordinate-page waypoints.
+
+    A terminal coordinate catalogue is not normally an enroute source.  It can
+    establish a global point only when the same untouched identifier and
+    coordinate are independently published by at least two airports in the
+    same region.  Existing global waypoint or navaid identities always take
+    precedence.
+    """
+    grouped: dict[tuple[str, str], list[TerminalWaypoint]] = {}
+    for point in model.terminal_waypoints:
+        country = (point.country or point.airport[:2]).strip().upper()[:2]
+        ident = point.ident.strip().upper()
+        grouped.setdefault((country, ident), []).append(point)
+
+    existing_identities = {
+        ((point.country or "").strip().upper()[:2], point.ident.strip().upper())
+        for point in model.waypoints
+    }
+    existing_identities.update(
+        (navaid.country.strip().upper()[:2], navaid.ident.strip().upper())
+        for navaid in model.navaids
+    )
+    rejections: Counter[str] = Counter()
+    promoted: list[Waypoint] = []
+    for (country, normalized_ident), candidates in sorted(grouped.items()):
+        raw_idents = {point.ident.strip() for point in candidates}
+        if not normalized_ident:
+            rejections["empty_identifier"] += 1
+            continue
+        if len(raw_idents) != 1:
+            rejections["identifier_variants"] += 1
+            continue
+        ident = next(iter(raw_idents))
+        if len(ident) > 8:
+            rejections["identifier_too_long"] += 1
+            continue
+        coordinates = {
+            (round(point.latitude, 6), round(point.longitude, 6))
+            for point in candidates
+        }
+        if len(coordinates) != 1:
+            rejections["multiple_coordinates"] += 1
+            continue
+        if len({point.airport.upper() for point in candidates}) < 2:
+            rejections["single_airport"] += 1
+            continue
+        if (country, normalized_ident) in existing_identities:
+            rejections["existing_global_identity"] += 1
+            continue
+        representative = min(
+            candidates,
+            key=lambda point: (point.airport.upper(), point.key),
+        )
+        promoted.append(Waypoint(
+            key=f"terminal-coordinate:{country}:{normalized_ident}",
+            ident=ident,
+            name=ident,
+            latitude=representative.latitude,
+            longitude=representative.longitude,
+            source=representative.source,
+            country=country,
+        ))
+        existing_identities.add((country, normalized_ident))
+
+    model.waypoints.extend(promoted)
+    model.terminal_coordinate_waypoint_promotion = {
+        "source": "Terminal/*/Charts.csv coordinate pages",
+        "coordinate_points": len(model.terminal_waypoints),
+        "identity_groups": len(grouped),
+        "promoted": len(promoted),
+        "rejected": {
+            "empty_identifier": rejections["empty_identifier"],
+            "identifier_variants": rejections["identifier_variants"],
+            "identifier_too_long": rejections["identifier_too_long"],
+            "multiple_coordinates": rejections["multiple_coordinates"],
+            "single_airport": rejections["single_airport"],
+            "existing_global_identity": rejections["existing_global_identity"],
+        },
+    }
 
 
 def _load_terminal_database_charts(model: NavModel, pdf_cache: Path | None = None) -> None:
