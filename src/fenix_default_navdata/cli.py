@@ -9,6 +9,7 @@ from .ad219_ndb import (
     build_ad219_ndb_ocr_cache,
     write_ad219_ndb_ocr_audit,
 )
+from .bgl import find_compiler
 from .convert import convert
 from .deployment import deploy, restore
 from .general_docs import (
@@ -28,6 +29,7 @@ from .official_index import build_official_navaid_index
 from .package_reader import DEFAULT_READER_TIMEOUT_SECONDS, read_package
 from .paths import detect_paths
 from .profile import DEFAULT_CYCLE
+from .route_fragment_probe import run_route_fragment_probe
 from .semantic_diff import SUPPORTED_TABLES, semantic_diff, write_semantic_diff
 from .source import (
     _load_terminal_coordinate_pages,
@@ -526,6 +528,39 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_READER_TIMEOUT_SECONDS,
         help=f"读取器超时秒数（默认 {DEFAULT_READER_TIMEOUT_SECONDS}）",
     )
+    route_fragment_probe = sub.add_parser(
+        "route-fragment-probe",
+        help="以合成航路验证 SDK 的片段和类型编码，不修改转换候选",
+    )
+    route_fragment_probe.add_argument(
+        "--output",
+        required=True,
+        help="新的本地诊断目录",
+    )
+    route_fragment_probe.add_argument(
+        "--bglcomp",
+        help="合法 fspackagetool.exe 路径；未提供时自动探测",
+    )
+    route_fragment_probe.add_argument(
+        "--reader",
+        help="本机 Navdatareader.exe 路径",
+    )
+    route_fragment_probe.add_argument(
+        "--cache-root",
+        help="纯 ASCII 的本地读取器暂存目录",
+    )
+    route_fragment_probe.add_argument(
+        "--build-timeout",
+        type=int,
+        default=3600,
+        help="Package Tool 构建超时秒数（默认 3600）",
+    )
+    route_fragment_probe.add_argument(
+        "--reader-timeout",
+        type=int,
+        default=DEFAULT_READER_TIMEOUT_SECONDS,
+        help=f"读取器超时秒数（默认 {DEFAULT_READER_TIMEOUT_SECONDS}）",
+    )
     validate = sub.add_parser("validate", help="验证候选")
     validate.add_argument("--candidate", required=True)
     validate.add_argument("--reference")
@@ -843,6 +878,17 @@ def main(argv: list[str] | None = None) -> int:
             timeout_seconds=args.timeout,
         )
         print(json.dumps(result.to_report(), ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "route-fragment-probe":
+        report = run_route_fragment_probe(
+            Path(args.output),
+            compiler=find_compiler(_path(args.bglcomp)),
+            reader=_path(args.reader),
+            cache_root=_path(args.cache_root),
+            build_timeout_seconds=args.build_timeout,
+            reader_timeout_seconds=args.reader_timeout,
+        )
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "validate":
         report = validate_candidate(Path(args.candidate), _path(args.reference))

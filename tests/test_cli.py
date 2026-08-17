@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from fenix_default_navdata import cli
+from fenix_default_navdata.bgl import CompilerInfo
 
 
 def test_ocr_audit_compares_available_rerun_pages_without_an_extra_flag(monkeypatch) -> None:
@@ -75,3 +76,36 @@ def test_iap_ocr_cache_reads_verified_runtime_profile_file(
 
     assert result == 0
     assert received["runtime_profile"] == profile
+
+
+def test_route_fragment_probe_passes_sdk_and_reader_options(monkeypatch) -> None:
+    received: dict[str, object] = {}
+    compiler = CompilerInfo(Path("fspackagetool.exe"), "PackageTool", "test")
+
+    def run(output: Path, **kwargs) -> dict[str, object]:
+        received["output"] = output
+        received.update(kwargs)
+        return {"airway_rows": []}
+
+    monkeypatch.setattr(cli, "find_compiler", lambda explicit: compiler)
+    monkeypatch.setattr(cli, "run_route_fragment_probe", run)
+
+    result = cli.main([
+        "route-fragment-probe",
+        "--output", "diagnostics/probe",
+        "--bglcomp", "sdk.exe",
+        "--reader", "reader.exe",
+        "--cache-root", "cache",
+        "--build-timeout", "600",
+        "--reader-timeout", "90",
+    ])
+
+    assert result == 0
+    assert received == {
+        "output": Path("diagnostics/probe"),
+        "compiler": compiler,
+        "reader": Path("reader.exe"),
+        "cache_root": Path("cache"),
+        "build_timeout_seconds": 600,
+        "reader_timeout_seconds": 90,
+    }

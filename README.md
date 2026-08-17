@@ -14,6 +14,7 @@
 - 生成符合 SDK `bglcomp.xsd` 的确定性设施 XML。
 - 自动探测 MSFS 2024 SDK `fspackagetool.exe`。
 - 通过纯 ASCII 暂存项目调用 Package Tool，生成 BGL、`bglIndex.bout`、包元数据与 ContentInfo。
+- 提供 `route-fragment-probe`：用最小合成航路复现实测 SDK 的片段、序号和 `routeType` 编码，不修改任何转换候选。
 - 将 PDF 解析证据缓存到本机可复用目录，长时间转换中断后可以断点续跑。
 - OCR 缓存绑定渲染比例、固定图像预处理和本地识别配置；可将完整 OCR 缓存与重跑缓存逐页比对，并独立审计每条记录是否可唯一回链到直接 424。仅 IAP 多图页消歧可在至少三份缓存完全一致后受限使用，不能新增程序或航段。
 - 本地 llama.cpp OCR 启动器固定记录随机种子和温度，并生成可验证的运行时描述文件；OCR 缓存通过 `--runtime-profile-file` 绑定 llama 构建号、模型哈希、视觉投影哈希、种子与温度，避免手工简写混用不同推理配置。
@@ -59,6 +60,9 @@ python -m fenix_default_navdata.cli read-package `
   --package output\candidate-2608-default\zzz-pmdg-china-navdata `
   --output diagnostics\navdatareader\candidate.sqlite `
   --filenames *.bgl
+python -m fenix_default_navdata.cli route-fragment-probe `
+  --output diagnostics\route-fragment-probe `
+  --bglcomp "C:\MSFS 2024 SDK\Tools\bin\fspackagetool.exe"
 python -m fenix_default_navdata.cli source-gap-audit `
   --raw "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
   --semantic-diff diagnostics\navdatareader\semantic-diff.json `
