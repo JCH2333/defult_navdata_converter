@@ -369,6 +369,10 @@ def approach_procedure_name_candidates(chart_name: str, runways: tuple[str, ...]
                 continue
             separator = "" if family == "I" and len(runway) > 2 else "-"
             candidates.append(f"{family}{runway}{separator}{variant}")
+            if family == "I" and len(runway) > 2:
+                # Published chart titles concatenate a lettered runway and
+                # variant (I17LZ), while the database can retain I17L-Z.
+                candidates.append(f"{family}{runway}-{variant}")
             if family == "R" and "(AR)" in title and airport.upper() in _RNP_AR_LONG_NAME_AIRPORTS:
                 candidates.append(f"R{runway}-AR-{variant}")
     return tuple(dict.fromkeys(candidates))

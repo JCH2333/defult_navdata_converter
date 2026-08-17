@@ -378,6 +378,47 @@ def test_projects_same_page_ils_suffix_from_unique_combined_rnp_candidate() -> N
     assert model.shared_ils_primary_projections[0]["rnp_label"] == "R02"
 
 
+def test_projects_same_page_ils_lettered_runway_suffix_from_combined_title() -> None:
+    model = NavModel(Path("raw"))
+    source = SourceRef(
+        "Terminal/ZYQQ/ZYQQ-0C-05.pdf", 1, 1, "database-hash",
+    )
+    model.procedure_segments.extend((
+        ProcedureSegment(
+            "ZYQQ", "R17L", "approach", "17L", "", (
+                ChartTerminalLeg("R17L", "17L", "IF", "QQ601", "fixture"),
+                ChartTerminalLeg("R17L", "17L", "TF", "RW17L", "fixture"),
+            ),
+            source,
+        ),
+        ProcedureSegment(
+            "ZYQQ", "I17L-Z", "missed", "17L", "", (
+                ChartTerminalLeg(
+                    "I17L-Z", "17L", "DF", "ILSMA", "fixture",
+                ),
+            ),
+            source,
+            approach_family="ILS",
+        ),
+    ))
+    model.procedure_charts.append(ProcedureChart(
+        "ZYQQ", "ZYQQ-5L-1.pdf", 1, "instrument-approach-index",
+        "RNP ILS/DME z RWY17L", "text", (), ("17L",), (), (), (),
+        SourceRef("Terminal/ZYQQ/ZYQQ-5L-1.pdf", 1, 1, "ils-chart-hash"),
+    ))
+
+    _project_same_page_rnp_primary_to_ils(model)
+
+    projected = [
+        segment
+        for segment in model.procedure_segments
+        if segment.label == "I17L-Z" and segment.kind == "approach"
+    ]
+    assert len(projected) == 1
+    assert [leg.fix_ident for leg in projected[0].legs] == ["QQ601", "RW17L"]
+    assert model.shared_ils_primary_projections[0]["rnp_label"] == "R17L"
+
+
 def test_same_page_ils_suffix_rejects_multiple_combined_rnp_candidates() -> None:
     model = NavModel(Path("raw"))
     source = SourceRef("Terminal/ZPLJ/ZPLJ-0C-04.pdf", 1, 1, "database-hash")

@@ -1,10 +1,19 @@
 from fenix_default_navdata.pdf_charts import (
+    approach_procedure_name_candidates,
     extract_ad219_vors,
     extract_positioned_coordinate_page_points,
     extract_terminal_holding_evidence,
     extract_terminal_leg_evidence,
 )
 from fenix_default_navdata.model import SourceRef
+
+
+def test_approach_title_keeps_hyphenated_ils_alias_for_lettered_runway() -> None:
+    assert approach_procedure_name_candidates(
+        "RNP ILS/DME z RWY17L",
+        ("17L",),
+        "ZYQQ",
+    ) == ("I17L", "R17L", "I17LZ", "I17L-Z", "R17L-Z")
 
 
 def test_ad219_vor_evidence_keeps_direct_facts_without_a_magnetic_variation() -> None:
