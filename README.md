@@ -66,7 +66,7 @@ python -m fenix_default_navdata.cli source-gap-audit `
 python -m fenix_default_navdata.cli terminal-coordinate-audit `
   --raw "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
   --semantic-diff diagnostics\navdatareader\semantic-diff.json `
-  --pdf-cache "$env:LOCALAPPDATA\default_navdata_converter\pdf-evidence-cache-2608r1-r36" `
+  --pdf-cache "$env:LOCALAPPDATA\default_navdata_converter\pdf-evidence-cache-2608r1-r37" `
   --output diagnostics\terminal-coordinate-audit.json
 python -m fenix_default_navdata.cli general-doc-keypoint-audit `
   --raw "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
@@ -102,7 +102,7 @@ python -m fenix_default_navdata.cli ad219-ndb-ocr-audit `
   --output diagnostics\ad219-ndb-ocr-zbcz.json
 python -m fenix_default_navdata.cli iap-ocr-cache `
   --source-root "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
-  --pdf-cache "$env:LOCALAPPDATA\default_navdata_converter\pdf-evidence-cache-2608r1-r36" `
+  --pdf-cache "$env:LOCALAPPDATA\default_navdata_converter\pdf-evidence-cache-2608r1-r37" `
   --cache-root "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\markdown-3x" `
   --mode ocr `
   --runtime-profile "deepseek-ocr-2-q8_0-seed2608-temp0" `
@@ -110,7 +110,7 @@ python -m fenix_default_navdata.cli iap-ocr-cache `
   --dry-run
 python -m fenix_default_navdata.cli iap-ocr-audit `
   --source-root "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
-  --pdf-cache "$env:LOCALAPPDATA\default_navdata_converter\pdf-evidence-cache-2608r1-r36" `
+  --pdf-cache "$env:LOCALAPPDATA\default_navdata_converter\pdf-evidence-cache-2608r1-r37" `
   --cache-root "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\markdown-3x" `
   --output diagnostics\iap-ocr-evidence-audit.json
 python -m fenix_default_navdata.gui
@@ -157,7 +157,7 @@ python -m fenix_default_navdata.gui
 python -m fenix_default_navdata.cli build `
   --raw "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
   --bglcomp "C:\MSFS 2024 SDK\Tools\bin\fspackagetool.exe" `
-  --pdf-cache "$env:LOCALAPPDATA\default_navdata_converter\pdf-evidence-cache-2608r1-r36" `
+  --pdf-cache "$env:LOCALAPPDATA\default_navdata_converter\pdf-evidence-cache-2608r1-r37" `
   --iap-ocr-cache-roots `
     "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\bounded-max4096-ocr-r80-a-20260817" `
     "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\bounded-max4096-ocr-r80-b-20260817" `
