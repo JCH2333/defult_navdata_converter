@@ -108,12 +108,17 @@ python -m fenix_default_navdata.cli iap-ocr-consensus `
   --source-root "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
   --pdf-cache "$env:LOCALAPPDATA\default_navdata_converter\pdf-evidence-cache-2608r1-r35" `
   --cache-roots `
-    "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\ocr-3x-deterministic-a-20260815" `
-    "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\ocr-3x-deterministic-b-20260815" `
-    "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\ocr-3x-deterministic-d-20260815" `
+    "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\bounded-max4096-ocr-a-20260816" `
+    "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\bounded-max4096-ocr-b-20260816" `
+    "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\bounded-max4096-ocr-c-20260816" `
   --require-agreement `
-  --output diagnostics\iap-ocr-role-consensus-a-b-d-strict-20260815.json
+  --output diagnostics\iap-ocr-role-consensus-bounded-max4096.json
 ```
+
+2608R1 当前候选只能使用上述三份 `bounded-max4096` 缓存。它们均由
+`llamacpp-direct` 生成，并完整记录适配器、`max_tokens=4096`、运行时描述、渲染设置、
+角色-航点对和邻接关系。旧 `ocr-3x-deterministic-a/b/d/f-20260815` 的角色内容虽然一致，
+但缺少完整识别设置元数据；严格共识会拒绝它们，禁止在候选构建中降级使用或与当前缓存混用。
 
 构建命令可通过 `--iap-ocr-cache-roots` 传入至少三份同类缓存。构建会重新执行上述
 共识审计，而不是信任已有 JSON 报告；仅当全部候选页、完整识别设置、角色-航点对和相邻

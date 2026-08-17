@@ -142,9 +142,10 @@ python -m fenix_default_navdata.gui
 包含数据库主进近至少两个不同固定点时，转换器会记录
 `source_fixed_point_selections` 并关联该图页；缺点、同分或显式图题变体仍拒绝。
 
-2608R1 的严格共识已使用 A/B/D/F 四份独立缓存完成。历史 C 的 OCR 命令记录形式不同，
-即使角色证据相同也不能混入共识；当引擎默认等待不足时，使用 `--engine-timeout` 配合
-更长的外层 `--timeout` 断点续跑，并保留执行参数供审计。
+当前候选构建使用 `bounded-max4096-ocr-a/b/c-20260816` 三份独立缓存。三者都记录了
+内置 `llamacpp-direct` 适配器、`max_tokens=4096`、完整运行时描述、角色-航点对和相邻
+关系，并通过严格共识。旧 `ocr-3x-deterministic-a/b/d/f-20260815` 即使角色证据相同，
+也因缺少完整识别设置元数据被严格门禁拒绝，只能保留为只读审计证据。
 
 显式指定 SDK Package Tool：
 
@@ -153,10 +154,9 @@ python -m fenix_default_navdata.cli build `
   --raw "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
   --bglcomp "C:\MSFS 2024 SDK\Tools\bin\fspackagetool.exe" `
   --iap-ocr-cache-roots `
-    "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\ocr-3x-deterministic-a-20260815" `
-    "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\ocr-3x-deterministic-b-20260815" `
-    "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\ocr-3x-deterministic-d-20260815" `
-    "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\ocr-3x-deterministic-f-20260815" `
+    "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\bounded-max4096-ocr-a-20260816" `
+    "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\bounded-max4096-ocr-b-20260816" `
+    "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\bounded-max4096-ocr-c-20260816" `
   --output output/candidate-2608-default
 ```
 
