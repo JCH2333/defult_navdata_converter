@@ -1162,7 +1162,7 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
     role_evidence_pages = sum(bool(chart.route_fixes) for chart in charts)
     missed_evidence_pages = sum(bool(chart.has_missed_approach) for chart in charts)
     return {
-        "version": 16,
+        "version": 17,
         "chart_pages": {
             "total": len(charts),
             "with_route_role_evidence": role_evidence_pages,

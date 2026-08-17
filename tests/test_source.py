@@ -261,7 +261,8 @@ def test_projects_same_page_rnp_primary_to_ils_without_rnp_missed_legs() -> None
                     "R02-Z", "02", "TF", "RW02", "fixture",
                     procedure_kind="approach", approach_family="RNP",
                 ),
-            ), database_source, approach_family="RNP",
+            ),
+            database_source,
         ),
         ProcedureSegment(
             "ZPLJ", "R02-Z", "missed", "02", "", (
@@ -305,6 +306,7 @@ def test_projects_same_page_rnp_primary_to_ils_without_rnp_missed_legs() -> None
         "runway": "02",
         "selection": "same_database_page_unique_rnp_primary",
         "rnp_label": "R02-Z",
+        "rnp_approach_family": "implicit_rnp_label",
         "primary_legs": 2,
         "database_source": {
             "file": "Terminal/ZPLJ/ZPLJ-0C-04.pdf",
@@ -411,6 +413,38 @@ def test_same_page_rnp_primary_to_ils_rejects_nonunique_or_incomplete_evidence(
         segment for segment in model.procedure_segments
         if segment.label == "I02-Z" and segment.kind == "approach"
     ] == existing_ils_primaries
+    assert model.shared_ils_primary_projections == []
+
+
+def test_same_page_rnp_primary_to_ils_rejects_explicit_rnp_ar_primary() -> None:
+    model = NavModel(Path("raw"))
+    source = SourceRef(
+        "Terminal/ZPLJ/ZPLJ-0C-04.pdf", 1, 1, "database-hash",
+    )
+    model.procedure_segments.extend((
+        ProcedureSegment(
+            "ZPLJ", "R02-Z", "approach", "02", "", (
+                ChartTerminalLeg("R02-Z", "02", "TF", "RW02", "fixture"),
+            ), source, approach_family="RNP_AR",
+        ),
+        ProcedureSegment(
+            "ZPLJ", "I02-Z", "missed", "02", "", (
+                ChartTerminalLeg("I02-Z", "02", "DF", "ILSMA", "fixture"),
+            ), source, approach_family="ILS",
+        ),
+    ))
+    model.procedure_charts.append(ProcedureChart(
+        "ZPLJ", "ZPLJ-5Z02.pdf", 1, "instrument-approach-index",
+        "RNP ILS/DME z RWY02", "text", (), ("02",), (), (), (),
+        SourceRef("Terminal/ZPLJ/ZPLJ-5Z02.pdf", 1, 1, "ils-chart-hash"),
+    ))
+
+    _project_same_page_rnp_primary_to_ils(model)
+
+    assert [
+        segment for segment in model.procedure_segments
+        if segment.label == "I02-Z" and segment.kind == "approach"
+    ] == []
     assert model.shared_ils_primary_projections == []
 def test_standard_route_table_retains_matching_terminal_coordinate_waypoint() -> None:
     model = NavModel(Path("raw"))

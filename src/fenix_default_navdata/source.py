@@ -2183,7 +2183,10 @@ def _project_same_page_rnp_primary_to_ils(model: NavModel) -> None:
             for segment in groups.get((airport, rnp_label, runway), [])
             if (
                 iap_section_kind(segment) == "approach"
-                and segment.approach_family.upper() == "RNP"
+                # The Rxx database label is the source identity for a plain
+                # RNP primary. Some coding-table headings omit that repeated
+                # family text, while RNP AR remains explicit and excluded.
+                and segment.approach_family.upper() in {"", "RNP"}
                 and _source_page_key(segment.source) in source_pages
             )
         ]
@@ -2236,6 +2239,9 @@ def _project_same_page_rnp_primary_to_ils(model: NavModel) -> None:
             "runway": runway,
             "selection": "same_database_page_unique_rnp_primary",
             "rnp_label": rnp_primary.label,
+            "rnp_approach_family": (
+                rnp_primary.approach_family or "implicit_rnp_label"
+            ),
             "primary_legs": len(legs),
             "database_source": {
                 "file": rnp_primary.source.file,
