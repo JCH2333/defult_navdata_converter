@@ -306,6 +306,8 @@ class ChartTerminalLeg:
     arc_radius_nm: float | None = None
     waypoint_description_code: str = ""
     speed_limit_descriptor: str | None = None
+    # Direct database-table headings can identify RNP, RNP AR, or ILS.
+    approach_family: str = ""
 
 
 @dataclass(frozen=True)
@@ -387,6 +389,8 @@ class ProcedureSegment:
     source: SourceRef
     # Only a standard-procedure route table may set this printed Fenix code.
     fenix_name: str | None = None
+    # Preserved from the direct database-table heading, never inferred from Rxx.
+    approach_family: str = ""
 
 
 @dataclass

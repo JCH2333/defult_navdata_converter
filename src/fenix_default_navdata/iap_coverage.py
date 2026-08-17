@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,17 @@ _UNRESOLVED_STATUSES = frozenset({
     "no_matching_chart",
     "ambiguous_chart",
 })
+
+
+@dataclass(frozen=True)
+class IapPrimaryVariant:
+    """A source-proven identity for a same-label RNP/RNP AR primary."""
+
+    chart: Any
+    family: str
+    rnp_ar: bool
+    rnp_ar_missed: bool
+    selection: str
 
 
 def procedure_kind(kind: str) -> str:
@@ -360,6 +372,89 @@ def _select_iap_chart(
     return chart, f"ocr_{selection}"
 
 
+def _chart_approach_family(chart: Any) -> str:
+    title = chart.chart_name.upper()
+    if "RNP" in title:
+        return "RNP_AR" if "(AR)" in title else "RNP"
+    if "ILS" in title:
+        return "ILS"
+    return ""
+
+
+def _direct_primary_variant(
+    model: NavModel,
+    segment: Any,
+) -> IapPrimaryVariant | None:
+    """Accept a multiple-primary identity only through direct fixed points."""
+    matching, match_selection = _matching_iap_charts_with_selection(model, segment)
+    chart, selection = _select_iap_chart(model, matching, segment)
+    selection = selection or match_selection
+    if chart is None or selection != "direct_fixed_points":
+        return None
+    family = _chart_approach_family(chart)
+    if family not in {"RNP", "RNP_AR"}:
+        return None
+    return IapPrimaryVariant(
+        chart=chart,
+        family=family,
+        rnp_ar=family == "RNP_AR",
+        rnp_ar_missed=family == "RNP_AR" and bool(chart.has_missed_approach),
+        selection=selection,
+    )
+
+
+def iap_multi_primary_variants(model: NavModel) -> dict[int, IapPrimaryVariant]:
+    """Resolve a group only when every source section has exactly one owner.
+
+    Generic ``Rxx`` rows can represent both RNP and RNP AR.  Each primary must
+    have a distinct chart family selected by complete direct fixed points.  A
+    transition or missed section must then share one source page with a
+    compatible target family.  Partial evidence keeps the complete group out.
+    """
+    groups: dict[tuple[str, str, str], list[Any]] = defaultdict(list)
+    for segment in model.procedure_segments:
+        if iap_section_kind(segment) in IAP_KINDS:
+            groups[(segment.airport, segment.label, segment.runway)].append(segment)
+    assignments: dict[int, IapPrimaryVariant] = {}
+    for selected in groups.values():
+        primary = [
+            segment for segment in selected
+            if iap_section_kind(segment) == "approach"
+        ]
+        if len(primary) < 2:
+            continue
+        variants = {
+            id(segment): _direct_primary_variant(model, segment)
+            for segment in primary
+        }
+        resolved = [variant for variant in variants.values() if variant is not None]
+        if len(resolved) != len(primary) or len({variant.family for variant in resolved}) != len(primary):
+            continue
+        for section in selected:
+            if iap_section_kind(section) == "approach":
+                continue
+            owners = [
+                candidate
+                for candidate in primary
+                if (
+                    section.source.file == candidate.source.file
+                    and section.source.page == candidate.source.page
+                    and (
+                        not section.approach_family
+                        or section.approach_family == variants[id(candidate)].family
+                    )
+                )
+            ]
+            if len(owners) != 1:
+                break
+        else:
+            assignments.update({
+                id(segment): variants[id(segment)]
+                for segment in primary
+            })
+    return assignments
+
+
 def iap_chart_roles(model: NavModel, segment: Any) -> dict[str, set[str]]:
     """Return roles only when one printed approach plate is identifiable."""
     chart, _ = _select_iap_chart(
@@ -422,6 +517,7 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
             groups[(segment.airport, segment.label, segment.runway)].append(segment)
     shared_assignments = shared_iap_section_assignments(model.procedure_segments)
     shared_section_groups = _shared_section_group_keys(groups, shared_assignments)
+    multi_primary_variants = iap_multi_primary_variants(model)
 
     charts = sorted(
         (
@@ -452,7 +548,42 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
         roles: dict[str, set[str]] = {}
         primary_legs = 0
         match_selection: str | None = None
-        if len(primary) != 1:
+        resolved_multi_primary = (
+            len(primary) > 1
+            and all(id(segment) in multi_primary_variants for segment in primary)
+        )
+        if resolved_multi_primary:
+            status = "multiple_primary_direct_fixed_points"
+            complete_primary_groups += len(primary)
+            for segment in primary:
+                variant = multi_primary_variants[id(segment)]
+                selected_chart = variant.chart
+                matched_pages.add((
+                    selected_chart.airport,
+                    selected_chart.filename,
+                    selected_chart.page,
+                ))
+                roles = _chart_roles_for_segment(model, selected_chart, segment)
+                matching_roles = _matching_leg_roles(segment, roles)
+                if matching_roles:
+                    role_groups += 1
+                    selected_role_pages.add((
+                        selected_chart.airport,
+                        selected_chart.filename,
+                        selected_chart.page,
+                    ))
+                    for evidence in matching_roles:
+                        role_counts.update(evidence["roles"])
+                source_fixed_point_selections.append({
+                    "airport": airport,
+                    "label": label,
+                    "runway": runway,
+                    "selection": "direct_fixed_points",
+                    "chart_name": selected_chart.chart_name,
+                    "source": _source_report(selected_chart.source),
+                    "required_fixes": sorted(_direct_database_fix_idents(segment)),
+                })
+        elif len(primary) != 1:
             status = "no_unique_primary"
         elif not primary[0].legs:
             status = "empty_primary"
@@ -594,6 +725,23 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
             for segment in model.procedure_segments
             if (assignment := shared_assignments.get(id(segment))) is not None
             for target, selection in (assignment,)
+        ],
+        "multi_primary_variant_assignments": [
+            {
+                "airport": segment.airport,
+                "label": segment.label,
+                "runway": segment.runway,
+                "family": variant.family,
+                "rnp_ar": variant.rnp_ar,
+                "rnp_ar_missed": variant.rnp_ar_missed,
+                "selection": variant.selection,
+                "chart_name": variant.chart.chart_name,
+                "source": _source_report(segment.source),
+                "chart_source": _source_report(variant.chart.source),
+                "required_fixes": sorted(_direct_database_fix_idents(segment)),
+            }
+            for segment in model.procedure_segments
+            if (variant := multi_primary_variants.get(id(segment))) is not None
         ],
         "ocr_role_selections": ocr_role_selections,
         "source_fixed_point_selections": source_fixed_point_selections,

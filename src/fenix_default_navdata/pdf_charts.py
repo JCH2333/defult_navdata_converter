@@ -22,7 +22,7 @@ from pypdf import PdfReader
 from .model import Ad219NdbEvidence, Ad219Vor, ChartFixCoordinate, ChartHoldingEvidence, ChartRouteFix, ChartStandardProcedureRoute, ChartTerminalLeg, Ils, ProcedureChart, SourceRef
 
 
-_EVIDENCE_CACHE_VERSION = 35
+_EVIDENCE_CACHE_VERSION = 36
 
 
 _PROCEDURE = re.compile(r"\b([A-Z0-9]{2,6}-\d{2}[AD])\b")
@@ -59,10 +59,18 @@ _DATABASE_HOLDING = re.compile(
     re.IGNORECASE,
 )
 _DATABASE_APPROACH_PROCEDURE = re.compile(
-    r"\bRWY\s?(?P<runway>\d{2}[LRC]?)\s*(?:(?:RNP\s+)?ILS\s*)?(?:AR\s+[WXYZ](?:\s+[WXYZ])?\s*)?"
+    r"\bRWY\s?(?P<runway>\d{2}[LRC]?)\s*(?:(?P<family>(?:RNP\s+)?ILS|RNP)\s*)?(?:AR\s+[WXYZ](?:\s+[WXYZ])?\s*)?"
     r"(?P<kind>\u8fdb\u8fd1\s*\u8fc7\u6e21|\u8fdb\u8fd1(?:\u53ca|\u3001)\s*\u590d\u98de|\u8fdb\u8fd1|\u590d\u98de)"
     r"(?:\s*-?\s*(?P<variant>[WXYZ]))?"
     r"(?:\s+(?P<transition>[A-Z][A-Z0-9]{0,5})|\s*VIA\s*(?P<via_transition>[A-Z][A-Z0-9]{0,5}))?\b", re.IGNORECASE
+)
+_DATABASE_TARGET_FAMILY_APPROACH = re.compile(
+    r"\bRWY\s?(?P<runway>\d{2}[LRC]?).{0,48}?"
+    r"(?P<connection>\u63a5|\u81f3|\u5230)?\s*(?P<family>RNP(?:\s+AR)?|(?:RNP\s+)?ILS)\s*"
+    r"(?P<kind>\u8fdb\u8fd1\s*\u8fc7\u6e21|\u8fdb\u8fd1(?:\u53ca|\u3001)\s*\u590d\u98de|\u8fdb\u8fd1|\u590d\u98de)"
+    r"(?:\s*-?\s*(?P<variant>[WXYZ]))?"
+    r"(?:\s+(?P<transition>[A-Z][A-Z0-9]{0,5})|\s*VIA\s*(?P<via_transition>[A-Z][A-Z0-9]{0,5}))?\b",
+    re.IGNORECASE,
 )
 _AR_APPROACH_PREFIX = re.compile(
     r"\bRWY\s?(?P<runway>\d{2}[LRC]?)\s*(?:RNP\s+)?AR\s*"
@@ -678,6 +686,15 @@ def _database_leg_attributes(
     return course, altitude, turn_direction, speed
 
 
+def _normalize_approach_family(value: str) -> str:
+    normalized = re.sub(r"\s+", " ", value or "").strip().upper()
+    if "ILS" in normalized:
+        return "ILS"
+    if "RNP" in normalized:
+        return "RNP_AR" if "AR" in normalized else "RNP"
+    return ""
+
+
 def extract_terminal_holding_evidence(text: str) -> tuple[ChartHoldingEvidence, ...]:
     """Return the explicit holding rows associated with a holding-table title.
 
@@ -745,6 +762,7 @@ def extract_terminal_leg_evidence(text: str) -> tuple[ChartTerminalLeg, ...]:
     active_runways: tuple[str, ...] = ()
     active_kind = ""
     active_transition = ""
+    active_approach_family = ""
     split_combined_approach_missed = False
     holding_active = False
     active_rows: list[tuple[str, str | None, str, float | None, float | None, str | None, int | None, str | None]] = []
@@ -755,7 +773,21 @@ def extract_terminal_leg_evidence(text: str) -> tuple[ChartTerminalLeg, ...]:
         if not active_label:
             return
         result.extend(
-            ChartTerminalLeg(active_label, runway, leg_type, fix_ident, raw, active_kind, course, altitude, turn, speed, active_transition, center_ident)
+            ChartTerminalLeg(
+                active_label,
+                runway,
+                leg_type,
+                fix_ident,
+                raw,
+                active_kind,
+                course,
+                altitude,
+                turn,
+                speed,
+                active_transition,
+                center_ident,
+                approach_family=active_approach_family,
+            )
             for runway in active_runways
             for leg_type, fix_ident, raw, course, altitude, turn, speed, center_ident in active_rows
         )
@@ -770,6 +802,7 @@ def extract_terminal_leg_evidence(text: str) -> tuple[ChartTerminalLeg, ...]:
             active_runways = ()
             active_kind = ""
             active_transition = ""
+            active_approach_family = ""
             active_rows = []
             pending_rows = []
             split_combined_approach_missed = False
@@ -778,7 +811,12 @@ def extract_terminal_leg_evidence(text: str) -> tuple[ChartTerminalLeg, ...]:
         compound_heading = _DATABASE_COMPOUND_PROCEDURE.search(line)
         heading = compound_heading or _DATABASE_PROCEDURE.search(line) or _DATABASE_NUMERIC_PROCEDURE.search(line)
         adjacent_transition_heading = _DATABASE_ADJACENT_APPROACH_TRANSITION.search(line) or _DATABASE_BARE_APPROACH_TRANSITION.search(line)
-        approach_heading = adjacent_transition_heading or _DATABASE_APPROACH_PROCEDURE.search(line)
+        target_family_heading = _DATABASE_TARGET_FAMILY_APPROACH.search(line)
+        approach_heading = (
+            target_family_heading
+            or adjacent_transition_heading
+            or _DATABASE_APPROACH_PROCEDURE.search(line)
+        )
         if heading or approach_heading:
             flush()
             if approach_heading:
@@ -789,13 +827,25 @@ def extract_terminal_leg_evidence(text: str) -> tuple[ChartTerminalLeg, ...]:
                     if ar_prefix is not None
                     else []
                 )
+                active_approach_family = _normalize_approach_family(
+                    approach_heading.groupdict().get("family") or ""
+                )
+                if ar_variants and not active_approach_family:
+                    active_approach_family = "RNP_AR"
+                label_prefix = "I" if active_approach_family == "ILS" else "R"
                 if len(ar_variants) == 1:
                     active_label = f"R{approach_heading['runway']}-AR-{ar_variants[0]}"
                 else:
-                    active_label = f"R{approach_heading['runway']}{f'-{variant}' if variant else ''}"
+                    active_label = f"{label_prefix}{approach_heading['runway']}{f'-{variant}' if variant else ''}"
                 active_runways = (approach_heading["runway"],)
                 kind = approach_heading.groupdict().get("kind") or "\u8fdb\u8fd1\u8fc7\u6e21"
                 normalized_kind = re.sub(r"\s+", "", kind)
+                if (
+                    approach_heading is target_family_heading
+                    and approach_heading.groupdict().get("connection")
+                    and normalized_kind == "\u8fdb\u8fd1"
+                ):
+                    normalized_kind = "\u8fdb\u8fd1\u8fc7\u6e21"
                 split_combined_approach_missed = normalized_kind in {"\u8fdb\u8fd1\u53ca\u590d\u98de", "\u8fdb\u8fd1\u3001\u590d\u98de"}
                 active_kind = "\u8fdb\u8fd1" if split_combined_approach_missed else normalized_kind
                 active_transition = (
@@ -819,6 +869,7 @@ def extract_terminal_leg_evidence(text: str) -> tuple[ChartTerminalLeg, ...]:
                 active_runways = _database_heading_runways(heading.group(0))
                 active_kind = heading["kind"] or ""
                 active_transition = ""
+                active_approach_family = ""
                 active_rows = pending_rows
                 split_combined_approach_missed = False
             pending_rows = []

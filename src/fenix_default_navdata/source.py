@@ -1661,19 +1661,32 @@ def _build_database_procedure_segments(model: NavModel) -> None:
     for chart in model.procedure_charts:
         if chart.chart_type != "terminal-database-coding":
             continue
-        active_key: tuple[str, str, str, str] | None = None
+        active_key: tuple[str, str, str, str, str] | None = None
         active_legs = []
 
         def flush() -> None:
             if active_key is None or not active_legs:
                 return
-            label, kind, runway, transition = active_key
+            label, kind, runway, transition, approach_family = active_key
             model.procedure_segments.append(ProcedureSegment(
-                chart.airport, label, kind, runway, transition, tuple(active_legs), chart.source,
+                chart.airport,
+                label,
+                kind,
+                runway,
+                transition,
+                tuple(active_legs),
+                chart.source,
+                approach_family=approach_family,
             ))
 
         for leg in chart.terminal_legs:
-            key = (leg.procedure_label, leg.procedure_kind, leg.runway, leg.transition)
+            key = (
+                leg.procedure_label,
+                leg.procedure_kind,
+                leg.runway,
+                leg.transition,
+                leg.approach_family,
+            )
             if active_key is not None and key != active_key:
                 flush()
                 active_legs.clear()

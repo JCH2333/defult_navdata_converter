@@ -540,6 +540,71 @@ def test_iap_chart_roles_select_unique_map_chart_and_project_role_flags(tmp_path
     assert legs[2].attrib["isMAP"] == "TRUE"
 
 
+def test_bgl_projects_same_runway_rnp_and_rnp_ar_from_direct_primary_identity(
+    tmp_path: Path,
+):
+    model = NavModel(Path("source"))
+    source = SourceRef("database.pdf", 1, 1, "database-hash")
+    normal_source = SourceRef("Terminal/ZBCF/ZBCF-4H.pdf", 1, 1, "normal-db")
+    ar_source = SourceRef("Terminal/ZBCF/ZBCF-4L.pdf", 1, 1, "ar-db")
+    model.airports["airport"] = Airport(
+        "airport", "ZBCF", "ZBCF", 35.0, 105.0, 1000, 18000, 180, source,
+    )
+    model.runways.append(Runway(
+        "runway", "airport", "03", 30.0, 10000, 150, "ASP", 1000, source,
+    ))
+    model.procedure_segments.extend([
+        ProcedureSegment(
+            "ZBCF", "R03", "approach_transition", "03", "VIA", (
+                ChartTerminalLeg("R03", "03", "IF", "NORMAL1", "fixture", sequence=1),
+            ), normal_source, approach_family="RNP",
+        ),
+        ProcedureSegment(
+            "ZBCF", "R03", "approach", "03", "", (
+                ChartTerminalLeg("R03", "03", "TF", "NORMAL1", "fixture", sequence=1),
+                ChartTerminalLeg("R03", "03", "TF", "NORMAL2", "fixture", sequence=2),
+            ), normal_source, approach_family="RNP",
+        ),
+        ProcedureSegment(
+            "ZBCF", "R03", "approach", "03", "", (
+                ChartTerminalLeg("R03", "03", "TF", "ARFIX1", "fixture", sequence=1),
+                ChartTerminalLeg("R03", "03", "TF", "ARFIX2", "fixture", sequence=2),
+            ), ar_source, approach_family="RNP_AR",
+        ),
+        ProcedureSegment(
+            "ZBCF", "R03", "missed", "03", "", (
+                ChartTerminalLeg("R03", "03", "TF", "ARMAHF", "fixture", sequence=1),
+            ), ar_source, approach_family="RNP_AR",
+        ),
+    ])
+    model.procedure_charts.extend([
+        ProcedureChart(
+            "ZBCF", "ZBCF-9A.pdf", 1, "instrument-approach-index", "RNP RWY03",
+            "text", (), ("03",), ("NORMAL1", "NORMAL2"), (), (),
+            SourceRef("Terminal/ZBCF/ZBCF-9A.pdf", 1, 1, "normal-chart"),
+        ),
+        ProcedureChart(
+            "ZBCF", "ZBCF-9C.pdf", 1, "instrument-approach-index", "RNP RWY03(AR)",
+            "text", (), ("03",), ("ARFIX1", "ARFIX2"), (), (),
+            SourceRef("Terminal/ZBCF/ZBCF-9C.pdf", 1, 1, "ar-chart"),
+            has_missed_approach=True,
+        ),
+    ])
+
+    output = tmp_path / "rnp-ar-primary-identity.xml"
+    write_bglcomp_xml(model, DEFAULT_CYCLE, output, scope="airports")
+
+    approaches = ET.parse(output).getroot().findall("Airport/Approach")
+    assert len(approaches) == 2
+    normal, ar = approaches
+    assert normal.attrib.get("rnpAr") is None
+    assert normal.find("Transition[@name='VIA']") is not None
+    assert ar.attrib["rnpAr"] == "TRUE"
+    assert ar.attrib["rnpArMissed"] == "TRUE"
+    assert ar.find("Transition") is None
+    assert ar.find("MissedApproachLegs/Leg[@fixIdent='ARMAHF']") is not None
+
+
 def test_iap_chart_roles_leave_ambiguous_plates_unmarked(tmp_path: Path):
     model = NavModel(Path("source"))
     source = SourceRef("approach.pdf", 1, 1, "hash")

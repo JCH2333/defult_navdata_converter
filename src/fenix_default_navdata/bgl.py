@@ -17,6 +17,7 @@ from pathlib import Path
 
 from .iap_coverage import (
     iap_chart_roles,
+    iap_multi_primary_variants,
     matching_iap_charts,
     shared_iap_section_assignments,
 )
@@ -1335,6 +1336,7 @@ def _approach_sections(model: NavModel, segments: list):
             ).append(segment)
     source_order = {id(segment): index for index, segment in enumerate(segments)}
     shared_assignments = shared_iap_section_assignments(segments)
+    multi_primary_variants = iap_multi_primary_variants(model)
 
     for (segment_airport, label, runway), selected in sorted(groups.items()):
         primary = [
@@ -1349,6 +1351,43 @@ def _approach_sections(model: NavModel, segments: list):
             segment for segment in selected
             if _iap_section_kind(segment) == "missed"
         ]
+        if len(primary) > 1:
+            if not all(id(segment) in multi_primary_variants for segment in primary):
+                yield label, runway, transitions, primary, missed, None
+                continue
+            for primary_segment in primary:
+                variant = multi_primary_variants[id(primary_segment)]
+                local_transitions = [
+                    segment for segment in transitions
+                    if (
+                        segment.source.file == primary_segment.source.file
+                        and segment.source.page == primary_segment.source.page
+                        and (
+                            not segment.approach_family
+                            or segment.approach_family == variant.family
+                        )
+                    )
+                ]
+                local_missed = [
+                    segment for segment in missed
+                    if (
+                        segment.source.file == primary_segment.source.file
+                        and segment.source.page == primary_segment.source.page
+                        and (
+                            not segment.approach_family
+                            or segment.approach_family == variant.family
+                        )
+                    )
+                ]
+                yield (
+                    label,
+                    runway,
+                    local_transitions,
+                    [primary_segment],
+                    local_missed,
+                    variant,
+                )
+            continue
         if "-" in label and len(primary) == 1:
             target = (segment_airport, label, runway)
             transitions.extend(
@@ -1363,7 +1402,7 @@ def _approach_sections(model: NavModel, segments: list):
             )
             transitions.sort(key=lambda segment: source_order[id(segment)])
             missed.sort(key=lambda segment: source_order[id(segment)])
-        yield label, runway, transitions, primary, missed
+        yield label, runway, transitions, primary, missed, None
 
 
 def _append_approaches(
@@ -1375,7 +1414,7 @@ def _append_approaches(
     identities,
 ) -> None:
     runway_headings = {runway.ident: runway.true_heading for runway in runways}
-    for label, runway, transitions, primary, missed in _approach_sections(
+    for label, runway, transitions, primary, missed, variant in _approach_sections(
         model, segments,
     ):
         if len(primary) != 1 or not primary[0].legs:
@@ -1433,6 +1472,16 @@ def _append_approaches(
             altitude=_feet(first_altitude),
             heading=_float(heading or 0, 3),
             missedAltitude=_feet(missed_altitude),
+            rnpAr="TRUE" if variant is not None and variant.rnp_ar else None,
+            rnpArMissed=(
+                "TRUE"
+                if (
+                    variant is not None
+                    and variant.rnp_ar_missed
+                    and (split_missed_legs or missed)
+                )
+                else None
+            ),
         ))
         if primary_legs:
             _append_legs(

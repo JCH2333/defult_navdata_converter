@@ -142,6 +142,63 @@ def test_iap_coverage_selects_unqualified_rnp_ar_chart_by_complete_direct_fixes(
     assert report["unresolved_groups"] == []
 
 
+def test_iap_coverage_splits_same_label_rnp_and_rnp_ar_primaries_by_direct_fixes():
+    model = _model_with_iap_segments()
+    normal_source = SourceRef("Terminal/ZBCF/ZBCF-4H.pdf", 1, 1, "normal-db")
+    ar_source = SourceRef("Terminal/ZBCF/ZBCF-4L.pdf", 1, 1, "ar-db")
+    model.procedure_segments[:] = [
+        ProcedureSegment(
+            "ZBCF", "R03", "approach", "03", "", (
+                ChartTerminalLeg("R03", "03", "TF", "NORMAL1", "fixture", sequence=1),
+                ChartTerminalLeg("R03", "03", "TF", "NORMAL2", "fixture", sequence=2),
+            ), normal_source, approach_family="RNP",
+        ),
+        ProcedureSegment(
+            "ZBCF", "R03", "approach_transition", "03", "VIA", (
+                ChartTerminalLeg("R03", "03", "IF", "NORMAL1", "fixture", sequence=1),
+            ), normal_source, approach_family="RNP",
+        ),
+        ProcedureSegment(
+            "ZBCF", "R03", "approach", "03", "", (
+                ChartTerminalLeg("R03", "03", "TF", "ARFIX1", "fixture", sequence=1),
+                ChartTerminalLeg("R03", "03", "TF", "ARFIX2", "fixture", sequence=2),
+            ), ar_source, approach_family="RNP_AR",
+        ),
+        ProcedureSegment(
+            "ZBCF", "R03", "missed", "03", "", (
+                ChartTerminalLeg("R03", "03", "TF", "ARMAHF", "fixture", sequence=1),
+            ), ar_source, approach_family="RNP_AR",
+        ),
+    ]
+    normal_chart_source = SourceRef("Terminal/ZBCF/ZBCF-9A.pdf", 1, 1, "normal-chart")
+    ar_chart_source = SourceRef("Terminal/ZBCF/ZBCF-9C.pdf", 1, 1, "ar-chart")
+    model.procedure_charts.extend([
+        ProcedureChart(
+            "ZBCF", "ZBCF-9A.pdf", 1, "instrument-approach-index", "RNP RWY03",
+            "text", (), ("03",), ("NORMAL1", "NORMAL2"), (), (), normal_chart_source,
+        ),
+        ProcedureChart(
+            "ZBCF", "ZBCF-9C.pdf", 1, "instrument-approach-index", "RNP RWY03(AR)",
+            "text", (), ("03",), ("ARFIX1", "ARFIX2"), (), (), ar_chart_source,
+            has_missed_approach=True,
+        ),
+    ])
+
+    report = analyze_iap_coverage(model)
+
+    assert report["procedure_groups"]["status_counts"] == {
+        "multiple_primary_direct_fixed_points": 1,
+    }
+    assert report["unresolved_groups"] == []
+    assert [
+        (item["family"], item["rnp_ar"], item["source"]["file"])
+        for item in report["multi_primary_variant_assignments"]
+    ] == [
+        ("RNP", False, "Terminal/ZBCF/ZBCF-4H.pdf"),
+        ("RNP_AR", True, "Terminal/ZBCF/ZBCF-4L.pdf"),
+    ]
+
+
 def test_iap_coverage_rejects_equal_unqualified_rnp_ar_direct_fix_candidates():
     model = _model_with_unqualified_rnp_ar_variant()
     source = SourceRef("Terminal/ZUNP/ZUNP-9C.pdf", 1, 1, "chart-hash")
