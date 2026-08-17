@@ -68,6 +68,11 @@ python -m fenix_default_navdata.cli terminal-coordinate-audit `
   --semantic-diff diagnostics\navdatareader\semantic-diff.json `
   --pdf-cache "$env:LOCALAPPDATA\default_navdata_converter\pdf-evidence-cache-2608r1-r35" `
   --output diagnostics\terminal-coordinate-audit.json
+python -m fenix_default_navdata.cli general-doc-keypoint-audit `
+  --raw "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
+  --semantic-diff diagnostics\navdatareader\semantic-diff.json `
+  --general-doc-cache "$env:LOCALAPPDATA\default_navdata_converter\general-doc-ocr-cache-2608r1" `
+  --output diagnostics\general-doc-keypoint-audit.json
 python -m fenix_default_navdata.cli ocr-cache `
   --pdf "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608\GeneralDoc\航路_4.1无线电导航设施——航路.pdf" `
   --source-root "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
@@ -163,6 +168,7 @@ python -m fenix_default_navdata.cli build `
 - `semantic-diff` 不返回参考 SQLite 的坐标、频率、磁差、高程、名称或航路端点字段值，不能作为候选内容的反向来源。调用时必须显式提供候选和参考各自的预期 BGL 数；`bgl_file` 登记数不精确相等即拒绝生成报告。
 - `source-gap-audit` 只接受完整、只读且已脱敏、并已证明 BGL 登记数完整的 `semantic-diff` 报告；它只输出 424 来源分类计数，不导出或保存参考逻辑身份。它还会核验 `ROUTE_HOLDING.csv` 是否只回链既有点；无区域键或复用位置标签的记录不得当作新 enroute 航点。
 - `terminal-coordinate-audit` 使用同一类完整脱敏差分，只读核验参考缺失全局航点是否可由 424 终端坐标页独立证明；输出只含来源类别计数。`terminal_source_promotable` 非零时必须先把规则、最小 fixture 和转换报告接入代码，不能按审计结果列表补点。
+- `general-doc-keypoint-audit` 仅使用带 SHA-256 校验的 ENR 4.4 OCR 缓存与同源 FIR 几何，分类参考缺失全局航点是否能由关键点页独立证明；输出只含类别计数。`general_doc_source_promotable` 非零时，必须先把来源规则、最小 fixture 和候选报告接入构建，不能按审计列表补点。
 - Package Tool 构建和 Community 覆盖前都要求 `FlightSimulator2024.exe` 已完全退出。
 - 覆盖前自动备份四个相关包；测试候选、不完整候选、未完成字节比对或实机验证的候选都会拒绝部署。
 - 只有 `status=release`、参考覆盖包逐文件字节一致，并已登记 ZBCF、ZUNZ、ZUUU 与退出稳定性实机验证的候选才可覆盖 Community。

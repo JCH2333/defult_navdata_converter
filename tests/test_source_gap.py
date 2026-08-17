@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from fenix_default_navdata.cli import main
+from fenix_default_navdata.general_docs import EnrouteKeyPointEvidence
 from fenix_default_navdata.model import (
     AirwayLeg,
     NavModel,
@@ -15,6 +17,7 @@ from fenix_default_navdata.model import (
 )
 from fenix_default_navdata.source_gap import (
     SourceGapAuditError,
+    audit_general_document_key_point_reference_coverage,
     audit_source_gaps,
     audit_terminal_coordinate_reference_coverage,
 )
@@ -239,6 +242,94 @@ def test_terminal_coordinate_audit_keeps_source_categories_redacted(
     }
     serialized = json.dumps(result)
     for value in ("LOCAL", "AMBIG", "GLOBAL", "NEW", "NONE", "AIRPORT"):
+        assert value not in serialized
+
+
+def test_general_doc_keypoint_audit_keeps_source_categories_redacted(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    model = _model(tmp_path)
+    source = SourceRef("GeneralDoc/enr-4.4.pdf", page=1, sha256="source")
+    model.waypoints.extend((
+        Waypoint("same", "SAME", "", 31.0, 105.0, source, "ZB"),
+        Waypoint("conflict", "CONFLICT", "", 0.0, 0.0, source, "ZB"),
+    ))
+    evidence = (
+        EnrouteKeyPointEvidence("SAFE", 30.0, 105.0, source),
+        EnrouteKeyPointEvidence("SAME", 31.0, 105.0, source),
+        EnrouteKeyPointEvidence("CONFLICT", 32.0, 105.0, source),
+        EnrouteKeyPointEvidence("MULTI", 33.0, 105.0, source),
+        EnrouteKeyPointEvidence("MULTI", 34.0, 105.0, source),
+        EnrouteKeyPointEvidence("MISMATCH", 35.0, 105.0, source),
+        EnrouteKeyPointEvidence("BOUNDARY", 36.0, 105.0, source),
+    )
+    statuses = {
+        30.0: SimpleNamespace(status="recovered", country="ZB"),
+        31.0: SimpleNamespace(status="recovered", country="ZB"),
+        32.0: SimpleNamespace(status="recovered", country="ZB"),
+        33.0: SimpleNamespace(status="recovered", country="ZB"),
+        34.0: SimpleNamespace(status="recovered", country="ZB"),
+        35.0: SimpleNamespace(status="recovered", country="ZG"),
+        36.0: SimpleNamespace(status="near_boundary", country=""),
+    }
+    monkeypatch.setattr(
+        "fenix_default_navdata.source_gap._load_fir_polygons",
+        lambda root: (("polygon",), 3),
+    )
+    monkeypatch.setattr(
+        "fenix_default_navdata.source_gap._match_source_fir_region",
+        lambda polygons, latitude, longitude: statuses[latitude],
+    )
+    monkeypatch.setattr(
+        "fenix_default_navdata.source_gap.load_enroute_key_point_evidence",
+        lambda root, cache, cache_directory: (evidence, {
+            "document": "GeneralDoc/enr-4.4.pdf",
+            "source_sha256": "source",
+            "pages": 1,
+        }),
+    )
+    report = _semantic_report(
+        waypoint_samples=[
+            {"logical_key": {"ident": "SAFE", "region": "ZB", "airport_ident": None}},
+            {"logical_key": {"ident": "SAME", "region": "ZB", "airport_ident": None}},
+            {"logical_key": {"ident": "CONFLICT", "region": "ZB", "airport_ident": None}},
+            {"logical_key": {"ident": "MULTI", "region": "ZB", "airport_ident": None}},
+            {"logical_key": {"ident": "MISMATCH", "region": "ZB", "airport_ident": None}},
+            {"logical_key": {"ident": "BOUNDARY", "region": "ZB", "airport_ident": None}},
+            {"logical_key": {"ident": "ABSENT", "region": "ZB", "airport_ident": None}},
+            {"logical_key": {"ident": "AIRPORT", "region": "ZB", "airport_ident": "ZBAA"}},
+        ],
+        airway_samples=[],
+    )
+    result = audit_general_document_key_point_reference_coverage(
+        model,
+        report,
+        source_root=tmp_path,
+        cache_root=tmp_path / "ocr-cache",
+    )
+
+    assert result["categories"] == {
+        "airport_scoped_reference_only": 1,
+        "general_doc_already_present": 1,
+        "general_doc_ident_absent": 1,
+        "general_doc_identity_conflict": 1,
+        "general_doc_multiple_coordinates": 1,
+        "general_doc_region_mismatch": 1,
+        "general_doc_region_near_boundary": 1,
+        "general_doc_source_promotable": 1,
+    }
+    serialized = json.dumps(result)
+    for value in (
+        "SAFE",
+        "SAME",
+        "CONFLICT",
+        "MULTI",
+        "MISMATCH",
+        "BOUNDARY",
+        "ABSENT",
+        "AIRPORT",
+    ):
         assert value not in serialized
 
 

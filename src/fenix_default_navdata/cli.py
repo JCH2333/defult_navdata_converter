@@ -36,6 +36,7 @@ from .source import (
     load_naip,
 )
 from .source_gap import (
+    audit_general_document_key_point_reference_coverage,
     audit_source_gaps,
     audit_terminal_coordinate_reference_coverage,
     load_semantic_diff,
@@ -177,6 +178,30 @@ def build_parser() -> argparse.ArgumentParser:
     terminal_coordinate.add_argument(
         "--output",
         help="可选的本地终端坐标页来源覆盖审计 JSON 输出路径",
+    )
+    general_doc_keypoint = sub.add_parser(
+        "general-doc-keypoint-audit",
+        help="只读分类参考缺失全局航点在 ENR 4.4 关键点 OCR 证据中的来源覆盖",
+    )
+    general_doc_keypoint.add_argument("--raw", help="2608 原始 CSV/PDF 目录")
+    general_doc_keypoint.add_argument(
+        "--semantic-diff",
+        required=True,
+        help="完整、只读且已脱敏的 semantic-diff JSON",
+    )
+    general_doc_keypoint.add_argument(
+        "--general-doc-cache",
+        required=True,
+        help="已校验 SHA-256 的 GeneralDoc OCR 缓存根目录",
+    )
+    general_doc_keypoint.add_argument(
+        "--general-doc-keypoint-cache-directory",
+        default="enr-4.4",
+        help="GeneralDoc 4.4 关键点 OCR 缓存子目录",
+    )
+    general_doc_keypoint.add_argument(
+        "--output",
+        help="可选的本地 GeneralDoc 关键点来源覆盖审计 JSON 输出路径",
     )
     ocr_cache = sub.add_parser(
         "ocr-cache",
@@ -604,6 +629,23 @@ def main(argv: list[str] | None = None) -> int:
         report = audit_terminal_coordinate_reference_coverage(
             model,
             load_semantic_diff(Path(args.semantic_diff)),
+        )
+        if args.output:
+            output = Path(args.output).expanduser().resolve()
+            report["output"] = str(output)
+            write_source_gap_audit(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "general-doc-keypoint-audit":
+        raw = _path(args.raw) or detect_paths().raw_root
+        if not raw:
+            raise SystemExit("无法自动检测 424 原始目录，请显式传入 --raw")
+        report = audit_general_document_key_point_reference_coverage(
+            load_naip(raw, include_terminal_documents=False),
+            load_semantic_diff(Path(args.semantic_diff)),
+            source_root=raw,
+            cache_root=Path(args.general_doc_cache).expanduser(),
+            cache_directory=args.general_doc_keypoint_cache_directory,
         )
         if args.output:
             output = Path(args.output).expanduser().resolve()

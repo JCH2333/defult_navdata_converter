@@ -6,8 +6,15 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Mapping
 
+from .general_docs import load_enroute_key_point_evidence
 from .model import NavModel
-from .source import _rows
+from .source import (
+    _EARTH_RADIUS_NM,
+    _angular_distance,
+    _load_fir_polygons,
+    _match_source_fir_region,
+    _rows,
+)
 
 
 class SourceGapAuditError(RuntimeError):
@@ -204,6 +211,121 @@ def audit_terminal_coordinate_reference_coverage(
             "navaids": len(model.navaids),
             "terminal_coordinate_points": len(model.terminal_waypoints),
             "terminal_coordinate_identity_groups": len(grouped),
+        },
+        "reference_only_waypoint_identities": len(keys),
+        "categories": dict(sorted(categories.items())),
+    }
+
+
+def audit_general_document_key_point_reference_coverage(
+    model: NavModel,
+    semantic_report: Mapping[str, object],
+    *,
+    source_root: Path,
+    cache_root: Path,
+    cache_directory: str = "enr-4.4",
+) -> dict[str, object]:
+    """Classify redacted global waypoint gaps against ENR 4.4 source evidence.
+
+    ``model`` must contain only direct structured-source waypoints, before
+    ENR 4.4 OCR points are accepted. The report contains counts only and never
+    serializes reference logical identities or source evidence records.
+    """
+    _require_complete_reader_output(semantic_report)
+    keys = _reference_only_keys(
+        semantic_report,
+        "waypoint",
+        _WAYPOINT_FIELDS,
+    )
+    polygons, vertices_loaded = _load_fir_polygons(source_root)
+    evidence, evidence_report = load_enroute_key_point_evidence(
+        source_root,
+        cache_root,
+        cache_directory=cache_directory,
+    )
+    by_ident: dict[str, list[tuple[object, object]]] = defaultdict(list)
+    for item in evidence:
+        by_ident[_normalized(item.ident)].append((
+            item,
+            _match_source_fir_region(polygons, item.latitude, item.longitude),
+        ))
+    existing: dict[tuple[str, str], list[object]] = defaultdict(list)
+    for point in model.waypoints:
+        if point.country:
+            existing[(_normalized(point.country)[:2], _normalized(point.ident))].append(
+                point
+            )
+
+    categories: Counter[str] = Counter()
+    for key in keys:
+        if key["airport_ident"] not in (None, ""):
+            categories["airport_scoped_reference_only"] += 1
+            continue
+        identity = (
+            _normalized(key["region"])[:2],
+            _normalized(key["ident"]),
+        )
+        candidates = by_ident.get(identity[1], [])
+        if not candidates:
+            categories["general_doc_ident_absent"] += 1
+            continue
+        recovered = [
+            (item, result)
+            for item, result in candidates
+            if result.status == "recovered"
+        ]
+        regional = [
+            (item, result)
+            for item, result in recovered
+            if result.country == identity[0]
+        ]
+        if not regional:
+            if recovered:
+                categories["general_doc_region_mismatch"] += 1
+            else:
+                statuses = {result.status for _, result in candidates}
+                suffix = "mixed" if len(statuses) > 1 else next(iter(statuses))
+                categories[f"general_doc_region_{suffix}"] += 1
+            continue
+        coordinates = {
+            (round(item.latitude, 6), round(item.longitude, 6))
+            for item, _ in regional
+        }
+        if len(coordinates) != 1:
+            categories["general_doc_multiple_coordinates"] += 1
+            continue
+        source_point = regional[0][0]
+        matches = existing.get(identity, [])
+        if matches:
+            if any(
+                _angular_distance(
+                    point.latitude,
+                    point.longitude,
+                    source_point.latitude,
+                    source_point.longitude,
+                ) * _EARTH_RADIUS_NM <= 0.01
+                for point in matches
+            ):
+                categories["general_doc_already_present"] += 1
+            else:
+                categories["general_doc_identity_conflict"] += 1
+            continue
+        categories["general_doc_source_promotable"] += 1
+
+    if sum(categories.values()) != len(keys):
+        raise SourceGapAuditError("GeneralDoc 关键点来源分类未覆盖全部参考缺失航点身份")
+    return {
+        "diagnostic": "general-document-keypoint-reference-coverage-v1",
+        "read_only": True,
+        "reference_values_redacted": True,
+        "source": {
+            "global_waypoints": len(model.waypoints),
+            "fir_polygons": len(polygons),
+            "fir_vertices": vertices_loaded,
+            "document": evidence_report["document"],
+            "source_sha256": evidence_report["source_sha256"],
+            "pages": evidence_report["pages"],
+            "parsed_records": len(evidence),
         },
         "reference_only_waypoint_identities": len(keys),
         "categories": dict(sorted(categories.items())),
