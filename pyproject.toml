@@ -17,5 +17,5 @@ fenix-default-navdata-gui = "fenix_default_navdata.gui:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = [".", "src"]
 asyncio_default_fixture_loop_scope = "function"

@@ -221,6 +221,24 @@ def _select_iap_chart_with_roles(
     return None, None
 
 
+def _select_iap_chart_with_direct_fixes(
+    charts: list[Any],
+    segment: Any,
+) -> tuple[Any | None, str | None]:
+    """Select one existing title match only with a unique complete fix set."""
+    required_fixes = _direct_database_fix_idents(segment)
+    if len(charts) < 2 or len(required_fixes) < 2:
+        return None, None
+    candidates = [
+        chart
+        for chart in charts
+        if required_fixes <= {waypoint.strip().upper() for waypoint in chart.waypoints}
+    ]
+    if len(candidates) == 1:
+        return candidates[0], "direct_fixed_points"
+    return None, None
+
+
 def _select_iap_chart(
     model: NavModel,
     charts: list[Any],
@@ -231,6 +249,11 @@ def _select_iap_chart(
     )
     if direct_chart is not None:
         return direct_chart, direct_selection
+    direct_fix_chart, direct_fix_selection = _select_iap_chart_with_direct_fixes(
+        charts, segment,
+    )
+    if direct_fix_chart is not None:
+        return direct_fix_chart, direct_fix_selection
     if model.iap_ocr_role_evidence is None:
         return None, None
     chart, selection = _select_iap_chart_with_roles(
@@ -385,11 +408,15 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
                 else {}
             )
             matching_roles = _matching_leg_roles(primary[0], roles)
+            direct_fixed_selection = (
+                match_selection == "direct_fixed_points"
+                or selection == "direct_fixed_points"
+            )
             if matching_roles:
                 role_groups += 1
                 status = (
                     "roles_source_fixed_point_chart"
-                    if match_selection == "direct_fixed_points"
+                    if direct_fixed_selection
                     else (
                         "roles_ocr_unique_chart"
                         if selection == "ocr_unique_chart"
@@ -436,19 +463,19 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
                     })
                 for evidence in matching_roles:
                     role_counts.update(evidence["roles"])
-            if match_selection == "direct_fixed_points" and selected_chart is not None:
+            if direct_fixed_selection and selected_chart is not None:
                 source_fixed_point_selections.append({
                     "airport": airport,
                     "label": label,
                     "runway": runway,
-                    "selection": match_selection,
+                    "selection": "direct_fixed_points",
                     "chart_name": selected_chart.chart_name,
                     "source": _source_report(selected_chart.source),
                     "required_fixes": sorted(_direct_database_fix_idents(primary[0])),
                 })
             if not matching_roles and not matching:
                 status = "no_matching_chart"
-            elif not matching_roles and len(matching) == 1:
+            elif not matching_roles and selected_chart is not None:
                 status = "unique_chart_without_roles"
             elif not matching_roles:
                 status = "ambiguous_chart"
@@ -469,7 +496,7 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
     role_evidence_pages = sum(bool(chart.route_fixes) for chart in charts)
     missed_evidence_pages = sum(bool(chart.has_missed_approach) for chart in charts)
     return {
-        "version": 7,
+        "version": 8,
         "chart_pages": {
             "total": len(charts),
             "with_route_role_evidence": role_evidence_pages,
