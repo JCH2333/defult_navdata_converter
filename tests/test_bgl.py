@@ -547,6 +547,7 @@ def test_bgl_projects_same_runway_rnp_and_rnp_ar_from_direct_primary_identity(
     source = SourceRef("database.pdf", 1, 1, "database-hash")
     normal_source = SourceRef("Terminal/ZBCF/ZBCF-4H.pdf", 1, 1, "normal-db")
     ar_source = SourceRef("Terminal/ZBCF/ZBCF-4L.pdf", 1, 1, "ar-db")
+    normal_missed_source = SourceRef("Terminal/ZBCF/ZBCF-4J.pdf", 1, 1, "normal-missed")
     model.airports["airport"] = Airport(
         "airport", "ZBCF", "ZBCF", 35.0, 105.0, 1000, 18000, 180, source,
     )
@@ -576,11 +577,17 @@ def test_bgl_projects_same_runway_rnp_and_rnp_ar_from_direct_primary_identity(
                 ChartTerminalLeg("R03", "03", "TF", "ARMAHF", "fixture", sequence=1),
             ), ar_source, approach_family="RNP_AR",
         ),
+        ProcedureSegment(
+            "ZBCF", "R03", "missed", "03", "", (
+                ChartTerminalLeg("R03", "03", "TF", "NMHF1", "fixture", sequence=1),
+                ChartTerminalLeg("R03", "03", "TF", "NML1", "fixture", sequence=2),
+            ), normal_missed_source,
+        ),
     ])
     model.procedure_charts.extend([
         ProcedureChart(
             "ZBCF", "ZBCF-9A.pdf", 1, "instrument-approach-index", "RNP RWY03",
-            "text", (), ("03",), ("NORMAL1", "NORMAL2"), (), (),
+            "text", (), ("03",), ("NORMAL1", "NORMAL2", "NMHF1", "NML1"), (), (),
             SourceRef("Terminal/ZBCF/ZBCF-9A.pdf", 1, 1, "normal-chart"),
         ),
         ProcedureChart(
@@ -599,6 +606,7 @@ def test_bgl_projects_same_runway_rnp_and_rnp_ar_from_direct_primary_identity(
     normal, ar = approaches
     assert normal.attrib.get("rnpAr") is None
     assert normal.find("Transition[@name='VIA']") is not None
+    assert normal.find("MissedApproachLegs/Leg[@fixIdent='NMHF1']") is not None
     assert ar.attrib["rnpAr"] == "TRUE"
     assert ar.attrib["rnpArMissed"] == "TRUE"
     assert ar.find("Transition") is None

@@ -17,7 +17,7 @@ from pathlib import Path
 
 from .iap_coverage import (
     iap_chart_roles,
-    iap_multi_primary_variants,
+    iap_multi_primary_section_assignments,
     matching_iap_charts,
     shared_iap_section_assignments,
 )
@@ -1336,7 +1336,7 @@ def _approach_sections(model: NavModel, segments: list):
             ).append(segment)
     source_order = {id(segment): index for index, segment in enumerate(segments)}
     shared_assignments = shared_iap_section_assignments(segments)
-    multi_primary_variants = iap_multi_primary_variants(model)
+    multi_primary_section_assignments = iap_multi_primary_section_assignments(model)
 
     for (segment_airport, label, runway), selected in sorted(groups.items()):
         primary = [
@@ -1352,32 +1352,18 @@ def _approach_sections(model: NavModel, segments: list):
             if _iap_section_kind(segment) == "missed"
         ]
         if len(primary) > 1:
-            if not all(id(segment) in multi_primary_variants for segment in primary):
+            if not all(id(segment) in multi_primary_section_assignments for segment in primary):
                 yield label, runway, transitions, primary, missed, None
                 continue
             for primary_segment in primary:
-                variant = multi_primary_variants[id(primary_segment)]
+                variant = multi_primary_section_assignments[id(primary_segment)]
                 local_transitions = [
                     segment for segment in transitions
-                    if (
-                        segment.source.file == primary_segment.source.file
-                        and segment.source.page == primary_segment.source.page
-                        and (
-                            not segment.approach_family
-                            or segment.approach_family == variant.family
-                        )
-                    )
+                    if multi_primary_section_assignments.get(id(segment)) == variant
                 ]
                 local_missed = [
                     segment for segment in missed
-                    if (
-                        segment.source.file == primary_segment.source.file
-                        and segment.source.page == primary_segment.source.page
-                        and (
-                            not segment.approach_family
-                            or segment.approach_family == variant.family
-                        )
-                    )
+                    if multi_primary_section_assignments.get(id(segment)) == variant
                 ]
                 yield (
                     label,

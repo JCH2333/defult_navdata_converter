@@ -387,8 +387,13 @@ def _direct_primary_variant(
 ) -> IapPrimaryVariant | None:
     """Accept a multiple-primary identity only through direct fixed points."""
     matching, match_selection = _matching_iap_charts_with_selection(model, segment)
-    chart, selection = _select_iap_chart(model, matching, segment)
-    selection = selection or match_selection
+    chart, selection = _select_iap_chart_with_direct_fixes(matching, segment)
+    if (
+        chart is None
+        and match_selection == "direct_fixed_points"
+        and len(matching) == 1
+    ):
+        chart, selection = matching[0], match_selection
     if chart is None or selection != "direct_fixed_points":
         return None
     family = _chart_approach_family(chart)
@@ -403,13 +408,73 @@ def _direct_primary_variant(
     )
 
 
-def iap_multi_primary_variants(model: NavModel) -> dict[int, IapPrimaryVariant]:
+def _section_variant_owner(
+    section: Any,
+    primary: list[Any],
+    variants: dict[int, IapPrimaryVariant | None],
+) -> IapPrimaryVariant | None:
+    """Map one non-primary section to an already proven primary identity.
+
+    A same database-coding page is the strongest association.  Some CAAC
+    pages print an otherwise complete missed approach on a separate page, so
+    permit that only when every direct database fixed point appears on exactly
+    one of the already selected source approach plates.  This never creates a
+    chart association from OCR or a partial fixed-point overlap.
+    """
+    source_owners = [
+        candidate
+        for candidate in primary
+        if (
+            section.source.file == candidate.source.file
+            and section.source.page == candidate.source.page
+            and (
+                not section.approach_family
+                or section.approach_family == variants[id(candidate)].family
+            )
+        )
+    ]
+    if len(source_owners) == 1:
+        return variants[id(source_owners[0])]
+
+    if section.approach_family:
+        family_owners = [
+            candidate
+            for candidate in primary
+            if variants[id(candidate)].family == section.approach_family
+        ]
+        if len(family_owners) == 1:
+            return variants[id(family_owners[0])]
+
+    required_fixes = _direct_database_fix_idents(section)
+    if len(required_fixes) < 2:
+        return None
+    fixed_point_owners = [
+        candidate
+        for candidate in primary
+        if (
+            not section.approach_family
+            or section.approach_family == variants[id(candidate)].family
+        )
+        and required_fixes <= {
+            waypoint.strip().upper()
+            for waypoint in variants[id(candidate)].chart.waypoints
+        }
+    ]
+    if len(fixed_point_owners) == 1:
+        return variants[id(fixed_point_owners[0])]
+    return None
+
+
+def iap_multi_primary_section_assignments(
+    model: NavModel,
+) -> dict[int, IapPrimaryVariant]:
     """Resolve a group only when every source section has exactly one owner.
 
     Generic ``Rxx`` rows can represent both RNP and RNP AR.  Each primary must
     have a distinct chart family selected by complete direct fixed points.  A
-    transition or missed section must then share one source page with a
-    compatible target family.  Partial evidence keeps the complete group out.
+    transition or missed section must then share a page with a compatible
+    target family or fully match one selected chart by direct fixed points.
+    Partial evidence keeps the complete group out.
     """
     groups: dict[tuple[str, str, str], list[Any]] = defaultdict(list)
     for segment in model.procedure_segments:
@@ -430,29 +495,31 @@ def iap_multi_primary_variants(model: NavModel) -> dict[int, IapPrimaryVariant]:
         resolved = [variant for variant in variants.values() if variant is not None]
         if len(resolved) != len(primary) or len({variant.family for variant in resolved}) != len(primary):
             continue
+        group_assignments = {
+            id(segment): variants[id(segment)]
+            for segment in primary
+        }
         for section in selected:
             if iap_section_kind(section) == "approach":
                 continue
-            owners = [
-                candidate
-                for candidate in primary
-                if (
-                    section.source.file == candidate.source.file
-                    and section.source.page == candidate.source.page
-                    and (
-                        not section.approach_family
-                        or section.approach_family == variants[id(candidate)].family
-                    )
-                )
-            ]
-            if len(owners) != 1:
+            owner = _section_variant_owner(section, primary, variants)
+            if owner is None:
                 break
+            group_assignments[id(section)] = owner
         else:
-            assignments.update({
-                id(segment): variants[id(segment)]
-                for segment in primary
-            })
+            assignments.update(group_assignments)
     return assignments
+
+
+def iap_multi_primary_variants(model: NavModel) -> dict[int, IapPrimaryVariant]:
+    """Return only proven primary identities for same-label IAP groups."""
+    assignments = iap_multi_primary_section_assignments(model)
+    return {
+        id(segment): variant
+        for segment in model.procedure_segments
+        if iap_section_kind(segment) == "approach"
+        if (variant := assignments.get(id(segment))) is not None
+    }
 
 
 def iap_chart_roles(model: NavModel, segment: Any) -> dict[str, set[str]]:

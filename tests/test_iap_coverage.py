@@ -1,6 +1,9 @@
 from pathlib import Path
 
-from fenix_default_navdata.iap_coverage import analyze_iap_coverage
+from fenix_default_navdata.iap_coverage import (
+    analyze_iap_coverage,
+    iap_multi_primary_section_assignments,
+)
 from fenix_default_navdata.model import (
     Airport,
     ChartRouteFix,
@@ -169,17 +172,32 @@ def test_iap_coverage_splits_same_label_rnp_and_rnp_ar_primaries_by_direct_fixes
                 ChartTerminalLeg("R03", "03", "TF", "ARMAHF", "fixture", sequence=1),
             ), ar_source, approach_family="RNP_AR",
         ),
+        ProcedureSegment(
+            "ZBCF", "R03", "missed", "03", "", (
+                ChartTerminalLeg("R03", "03", "TF", "NMHF1", "fixture", sequence=1),
+                ChartTerminalLeg("R03", "03", "TF", "NML1", "fixture", sequence=2),
+            ), SourceRef("Terminal/ZBCF/ZBCF-4J.pdf", 1, 1, "normal-missed"),
+        ),
+        ProcedureSegment(
+            "ZBCF", "R03", "approach_transition", "03", "OFFPAGE", (
+                ChartTerminalLeg("R03", "03", "IF", "SOURCE1", "fixture", sequence=1),
+                ChartTerminalLeg("R03", "03", "TF", "SOURCE2", "fixture", sequence=2),
+            ), SourceRef("Terminal/ZBCF/ZBCF-4K.pdf", 1, 1, "normal-transition"),
+            approach_family="RNP",
+        ),
     ]
     normal_chart_source = SourceRef("Terminal/ZBCF/ZBCF-9A.pdf", 1, 1, "normal-chart")
     ar_chart_source = SourceRef("Terminal/ZBCF/ZBCF-9C.pdf", 1, 1, "ar-chart")
     model.procedure_charts.extend([
         ProcedureChart(
             "ZBCF", "ZBCF-9A.pdf", 1, "instrument-approach-index", "RNP RWY03",
-            "text", (), ("03",), ("NORMAL1", "NORMAL2"), (), (), normal_chart_source,
+            "text", (), ("03",), ("NORMAL1", "NORMAL2", "NMHF1", "NML1"), (), (), normal_chart_source,
+            route_fixes=(ChartRouteFix("NORMAL1", "FAF"),),
         ),
         ProcedureChart(
             "ZBCF", "ZBCF-9C.pdf", 1, "instrument-approach-index", "RNP RWY03(AR)",
             "text", (), ("03",), ("ARFIX1", "ARFIX2"), (), (), ar_chart_source,
+            route_fixes=(ChartRouteFix("ARFIX1", "FAF"),),
             has_missed_approach=True,
         ),
     ])
@@ -197,6 +215,10 @@ def test_iap_coverage_splits_same_label_rnp_and_rnp_ar_primaries_by_direct_fixes
         ("RNP", False, "Terminal/ZBCF/ZBCF-4H.pdf"),
         ("RNP_AR", True, "Terminal/ZBCF/ZBCF-4L.pdf"),
     ]
+    assignments = iap_multi_primary_section_assignments(model)
+    assert assignments[id(model.procedure_segments[-2])].family == "RNP"
+    assert assignments[id(model.procedure_segments[-2])].chart.chart_name == "RNP RWY03"
+    assert assignments[id(model.procedure_segments[-1])].family == "RNP"
 
 
 def test_iap_coverage_rejects_equal_unqualified_rnp_ar_direct_fix_candidates():
