@@ -293,6 +293,16 @@ BGL 标记。
   可唯一纠正的 OCR 标识误读；不存在未能回链的设施身份。`总则_2.5无线电导航设施表.pdf`
   的唯一页面仅指向 AD 2.19 与 ENR 4.1，未给出设施明细。两份文档都不能作为
   当前 VOR/NDB 缺口的新增投影来源；OCR 只能继续保留为审计证据。
+- 2026-08-17 对 `Terminal/ZJHK/海口美兰.pdf` 与
+  `Terminal/ZJSY/三亚凤凰.pdf` 建立了同一 `markdown`、3 倍
+  `autocontrast-grayscale` 配置的完整 AD 2.19 OCR 缓存，共 66 页，源文件
+  SHA-256 分别为 `3ba4d8f7da01ebe56636559708cfadfda23612e9a5dc3347dd0ee6d75161102b`
+  与 `89447787350793f90f36c4359f54c080c33e53de5ea5883c51d121ca6eb53e1c`。
+  `ad219-ndb-ocr-audit` 仅解析出三亚 `WL/426 kHz`，可唯一回链至
+  `NDB.csv` 第 51 行，但该直接记录缺少 `VAL_ELEV`；海口没有可回链 NDB。
+  因此参考 `ZJ_airports.bgl` 中的机场作用域 `K/ZJSY` 与 `P/ZJHK`
+  不能由允许的 424 CSV/PDF 来源填足名称、磁差、高程与区域，必须保持
+  `projection_allowed=false`，不得按参考身份或机场名称硬编码新增。
 - AD 2.19 机场无线电导航设施表可提供直接打印的 VOR/DME 标识、频率、坐标和
   明确打印的 DME 天线高程，并作为带页码与 SHA-256 的审计证据保留。它没有可验证的设施
   磁差；2026-08-14 对 346 条可按服务机场关联的直接 `VOR.csv` 记录与
