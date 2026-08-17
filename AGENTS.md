@@ -73,6 +73,8 @@
 - 终端坐标页缺口审计（默认通用数据、2608R1，证据：`terminal-coordinate-audit`、r70 完整脱敏差分、同一 r35 PDF 缓存与 `test_terminal_coordinate_audit_keeps_source_categories_redacted`，2026-08-17）：该只读命令必须复用与候选相同的 424 全局模型和 PDF 缓存，只输出类别计数，严禁输出或保存参考身份。r70 的 1,019 个参考缺失全局航点中，862 个未出现在终端坐标页、146 个仅单机场发布、11 个有多个源坐标，`terminal_source_promotable=0`。因此禁止放宽单机场或多坐标条件来追随参考差分；只有未来独立的 424 来源规则与最小 fixture 都成立后才可改变投影。
 - ENR 4.4 关键点缺口审计（默认通用数据、2608R1，证据：`general-doc-keypoint-audit`、r70 完整脱敏差分、已校验 GeneralDoc OCR 缓存与 `test_general_doc_keypoint_audit_keeps_source_categories_redacted`，2026-08-17）：该只读命令必须使用 ENR 4.4 的 SHA-256 校验缓存和构建同一套 424 FIR 几何规则，只输出类别计数，严禁输出或保存参考身份。r70 的 1,019 个参考缺失全局航点中，816 个不在关键点表、154 个同名但区域不同、39 个在 FIR 边界 5 海里内、9 个在 FIR 外、1 个区域歧义，`general_doc_source_promotable=0`。因此禁止放宽 FIR 边界、区域或身份冲突条件追随参考差分；只有未来独立的 424 来源规则与最小 fixture 都成立后才可改变投影。
 
+- 无固定点限定 RNP AR 单角色选择（默认通用数据、2608R1，证据：424 `Terminal/ZUNP/ZUNP-4Z03.pdf`、`ZUNP-9A.pdf`、`ZUNP-9B.pdf` 的直接图页角色，r88 隔离 SDK 构建、独立 `validate` 与 `tests/test_iap_coverage.py`、`tests/test_bgl.py`，2026-08-17）：只有所有标题候选都是无非跑道固定点限定的 RNP AR 图，且恰好一张图把数据库主进近腿标为 `IAF`、`IF`、`FAF`、`MAP` 或 `MAPT` 时，才可选择该图页；任一图题带固定点限定、混入非 RNP AR 图、没有命中或多个候选命中时继续拒绝。r88 只新增 `ZUNP/R06 -> ZUNP-9B.pdf -> LIP/IAF`，IAP 未决由 43 降至 42；相对 r87 只改变两个覆盖包的 `ZU_airports.bgl`、相应索引/布局与报告。选择必须记录为 `source_unqualified_rnp_ar_direct_role_selections`，并且只投影与数据库腿相交的直接图页角色；规则不读取 OCR、参考成品或 Fenix。自动化测试：`test_iap_coverage_selects_unqualified_rnp_ar_chart_by_unique_direct_role`、`test_iap_coverage_rejects_qualified_or_nonunique_rnp_ar_direct_role_matches`、`test_bgl_iap_chart_roles_reuse_unqualified_rnp_ar_direct_role_selection`。
+
 ## 3.2 航路最低高度 OCR（开发中）
 
 - 来源限定为 `GeneralDoc/航路_3.2.1A系列航路.pdf` 至 `航路_3.2.9X系列航路.pdf`。缓存必须逐页完整、PDF SHA-256 匹配且运行时描述与本地 OCR 服务一致；不完整缓存仅可续跑，不得投影。

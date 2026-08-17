@@ -196,7 +196,7 @@ PDF 缓存载荷带有提取器版本。修改可影响证据解释的规则时�
 `_EVIDENCE_CACHE_VERSION`，并以新缓存进行冷读与热读一致性复核；不得依据旧缓存
 中的统计或程序分类作出发布、部署或数据覆盖决定。
 
-IAP 覆盖报告由 `iap_coverage.version=10` 标记。所有角色投影必须满足：数据库编码页
+IAP 覆盖报告由 `iap_coverage.version=11` 标记。所有角色投影必须满足：数据库编码页
 提供有序腿，仪表进近图页提供明确角色，且同一机场、跑道、程序标签的图页唯一；多图
 时优先要求主进近最后定位点在恰好一张图上明确为 `MAP/MAPT`。若该定位点不能消歧，
 仅当恰好一张候选图页对至少两个不同数据库腿给出 `IAF`、`IF`、`FAF`、`MAP` 或
@@ -237,6 +237,15 @@ SHA-256、OCR 运行时标识、命令、后端、模式、图像预处理、渲
 `test_iap_coverage_selects_unique_rnp_ar_title_qualifier_matching_primary_leg`、
 `test_iap_coverage_rejects_nonunique_or_mixed_rnp_ar_title_qualifier_matches` 和
 `test_bgl_iap_chart_roles_reuse_rnp_ar_title_qualifier_selection`。
+
+另一项同样受限的直接文本规则仅适用于图题没有非跑道固定点限定的 RNP AR 候选：所有候选
+都必须为 RNP AR 图，且只有一张图明确把数据库主进近腿标为 `IAF`、`IF`、`FAF`、`MAP`
+或 `MAPT`，才可选择该图页。多个候选命中、没有命中、混入非 RNP AR 图或图题含固定点
+限定时一律拒绝。选择写入 `source_unqualified_rnp_ar_direct_role_selections`，只投影
+与数据库腿相交的直接图页角色；该规则不使用 OCR、参考成品或 Fenix。自动化测试：
+`test_iap_coverage_selects_unqualified_rnp_ar_chart_by_unique_direct_role`、
+`test_iap_coverage_rejects_qualified_or_nonunique_rnp_ar_direct_role_matches` 和
+`test_bgl_iap_chart_roles_reuse_unqualified_rnp_ar_direct_role_selection`。
 
 覆盖报告的 `role_evidence_used`、`role_evidence_counts` 和角色类状态同样只统计上述交集。
 同页的共享过渡、复飞或其他路径角色不能因图页已经选中而计入当前主进近，更不能生成

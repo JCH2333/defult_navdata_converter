@@ -141,6 +141,10 @@ python -m fenix_default_navdata.gui
 无关的窄例外是未标变体的同机场同跑道 RNP AR 图题：当唯一图页的直接文本航点集合完整
 包含数据库主进近至少两个不同固定点时，转换器会记录
 `source_fixed_point_selections` 并关联该图页；缺点、同分或显式图题变体仍拒绝。
+对于同样没有固定点限定的 RNP AR 图题，若只有一张图明确把数据库主进近腿标为
+`IAF`、`IF`、`FAF`、`MAP` 或 `MAPT`，转换器会记录
+`source_unqualified_rnp_ar_direct_role_selections`；多个候选命中、没有命中或图题带固定点
+限定时仍拒绝。
 
 当前候选构建使用 `bounded-max4096-ocr-r80-a/b/c-20260817` 三份独立缓存。三者都记录了
 内置 `llamacpp-direct` 适配器、`max_tokens=4096`、完整运行时描述、角色-航点对和相邻
