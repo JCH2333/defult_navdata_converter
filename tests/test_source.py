@@ -252,30 +252,30 @@ def test_projects_same_page_rnp_primary_to_ils_without_rnp_missed_legs() -> None
     )
     model.procedure_segments.extend((
         ProcedureSegment(
-            "ZPLJ", "R02-Z", "approach", "02", "", (
+            "ZPLJ", "R02", "approach", "02", "", (
                 ChartTerminalLeg(
-                    "R02-Z", "02", "IF", "LJ601", "fixture",
+                    "R02", "02", "IF", "LJ601", "fixture",
                     procedure_kind="approach", approach_family="RNP",
                 ),
                 ChartTerminalLeg(
-                    "R02-Z", "02", "TF", "RW02", "fixture",
+                    "R02", "02", "TF", "RW02", "fixture",
                     procedure_kind="approach", approach_family="RNP",
                 ),
             ),
             database_source,
         ),
         ProcedureSegment(
-            "ZPLJ", "R02-Z", "missed", "02", "", (
+            "ZPLJ", "R02", "missed", "02", "", (
                 ChartTerminalLeg(
-                    "R02-Z", "02", "DF", "RNPMA", "fixture",
+                    "R02", "02", "DF", "RNPMA", "fixture",
                     procedure_kind="missed", approach_family="RNP",
                 ),
             ), database_source, approach_family="RNP",
         ),
         ProcedureSegment(
-            "ZPLJ", "I02-Z", "missed", "02", "", (
+            "ZPLJ", "I02", "missed", "02", "", (
                 ChartTerminalLeg(
-                    "I02-Z", "02", "DF", "ILSMA", "fixture",
+                    "I02", "02", "DF", "ILSMA", "fixture",
                     procedure_kind="missed", approach_family="ILS",
                 ),
             ), database_source, approach_family="ILS",
@@ -286,26 +286,31 @@ def test_projects_same_page_rnp_primary_to_ils_without_rnp_missed_legs() -> None
         "RNP ILS/DME z RWY02", "text", (), ("02",), (), (), (),
         ils_chart_source,
     ))
+    model.procedure_charts.append(ProcedureChart(
+        "ZPLJ", "ZPLJ-5Z03.pdf", 1, "instrument-approach-index",
+        "ILS/DME y RWY02", "text", (), ("02",), (), (), (),
+        SourceRef("Terminal/ZPLJ/ZPLJ-5Z03.pdf", 1, 1, "ils-y-chart-hash"),
+    ))
 
     _project_same_page_rnp_primary_to_ils(model)
 
     projected = [
         segment
         for segment in model.procedure_segments
-        if segment.label == "I02-Z" and segment.kind == "approach"
+        if segment.label == "I02" and segment.kind == "approach"
     ]
     assert len(projected) == 1
     assert projected[0].approach_family == "ILS"
     assert [leg.fix_ident for leg in projected[0].legs] == ["LJ601", "RW02"]
-    assert all(leg.procedure_label == "I02-Z" for leg in projected[0].legs)
+    assert all(leg.procedure_label == "I02" for leg in projected[0].legs)
     assert all(leg.approach_family == "ILS" for leg in projected[0].legs)
     assert "RNPMA" not in [leg.fix_ident for leg in projected[0].legs]
     assert model.shared_ils_primary_projections == [{
         "airport": "ZPLJ",
-        "label": "I02-Z",
+        "label": "I02",
         "runway": "02",
         "selection": "same_database_page_unique_rnp_primary",
-        "rnp_label": "R02-Z",
+        "rnp_label": "R02",
         "rnp_approach_family": "implicit_rnp_label",
         "primary_legs": 2,
         "database_source": {

@@ -2207,9 +2207,21 @@ def _project_same_page_rnp_primary_to_ils(model: NavModel) -> None:
                 )
             )
         ]
-        if len(matching_ils_charts) != 1:
+        shared_primary_charts = [
+            chart
+            for chart in matching_ils_charts
+            if rnp_label in approach_procedure_name_candidates(
+                chart.chart_name,
+                chart.runways,
+                chart.airport,
+            )
+        ]
+        # A plain ILS variant plate can share the Ixx identity but cannot
+        # establish that this Rxx primary is also the ILS primary. The combined
+        # source title must explicitly resolve to both database identities.
+        if len(shared_primary_charts) != 1:
             continue
-        chart = matching_ils_charts[0]
+        chart = shared_primary_charts[0]
         legs = tuple(
             replace(
                 leg,
