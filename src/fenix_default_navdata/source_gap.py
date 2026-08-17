@@ -130,6 +130,86 @@ def _waypoint_categories(
     return dict(sorted(categories.items()))
 
 
+def audit_terminal_coordinate_reference_coverage(
+    model: NavModel,
+    semantic_report: Mapping[str, object],
+) -> dict[str, object]:
+    """Classify redacted missing global waypoints against source PDF coordinates.
+
+    The caller must populate ``model.terminal_waypoints`` from source coordinate
+    pages before calling this function. The report contains category totals
+    only, so reference identities never become conversion inputs.
+    """
+    _require_complete_reader_output(semantic_report)
+    keys = _reference_only_keys(
+        semantic_report,
+        "waypoint",
+        _WAYPOINT_FIELDS,
+    )
+    grouped: dict[tuple[str, str], list[object]] = defaultdict(list)
+    for point in model.terminal_waypoints:
+        grouped[(
+            _normalized(point.country or point.airport[:2])[:2],
+            _normalized(point.ident),
+        )].append(point)
+    existing_identities = {
+        (_normalized(point.country)[:2], _normalized(point.ident))
+        for point in model.waypoints
+    }
+    existing_identities.update(
+        (_normalized(navaid.country)[:2], _normalized(navaid.ident))
+        for navaid in model.navaids
+    )
+    categories: Counter[str] = Counter()
+    for key in keys:
+        if key["airport_ident"] not in (None, ""):
+            categories["airport_scoped_reference_only"] += 1
+            continue
+        identity = (
+            _normalized(key["region"])[:2],
+            _normalized(key["ident"]),
+        )
+        candidates = grouped.get(identity, [])
+        if not candidates:
+            categories["not_present_in_terminal_coordinate_pages"] += 1
+            continue
+        raw_idents = {point.ident.strip() for point in candidates}
+        coordinates = {
+            (round(point.latitude, 6), round(point.longitude, 6))
+            for point in candidates
+        }
+        airports = {point.airport.upper() for point in candidates}
+        if not identity[1]:
+            categories["terminal_empty_identifier"] += 1
+        elif len(raw_idents) != 1:
+            categories["terminal_identifier_variants"] += 1
+        elif len(next(iter(raw_idents))) > 8:
+            categories["terminal_identifier_too_long"] += 1
+        elif len(coordinates) != 1:
+            categories["terminal_multiple_coordinates"] += 1
+        elif len(airports) < 2:
+            categories["terminal_single_airport"] += 1
+        elif identity in existing_identities:
+            categories["terminal_existing_global_identity"] += 1
+        else:
+            categories["terminal_source_promotable"] += 1
+    if sum(categories.values()) != len(keys):
+        raise SourceGapAuditError("终端坐标页来源分类未覆盖全部参考缺失航点身份")
+    return {
+        "diagnostic": "terminal-coordinate-reference-coverage-v1",
+        "read_only": True,
+        "reference_values_redacted": True,
+        "source": {
+            "global_waypoints": len(model.waypoints),
+            "navaids": len(model.navaids),
+            "terminal_coordinate_points": len(model.terminal_waypoints),
+            "terminal_coordinate_identity_groups": len(grouped),
+        },
+        "reference_only_waypoint_identities": len(keys),
+        "categories": dict(sorted(categories.items())),
+    }
+
+
 def _airway_categories(
     model: NavModel,
     keys: tuple[dict[str, object], ...],

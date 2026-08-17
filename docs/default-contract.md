@@ -325,6 +325,13 @@ SHA-256、OCR 运行时标识、命令、后端、模式、图像预处理、渲
   分为：538 个同名同序号源段已在候选连通图表达、41 个因端点区域为空未投影、123 个
   同名不同序号、484 个不在 `RTE_SEG.csv`。这些分类只用于下一步来源追溯，不能从
   参考 BGL/SQLite 反向补写内容。r70 仍是测试候选，尚未达到字节一致或实机验证门槛。
+- `terminal-coordinate-audit`（2026-08-17，证据：完整 r70 脱敏差分、相同的 r35
+  PDF 缓存、`terminal-coordinate-r70-reference-coverage-20260817.json` 与
+  `test_terminal_coordinate_audit_keeps_source_categories_redacted`）进一步只读审计了
+  1,019 个参考缺失全局航点。862 个根本未出现在终端坐标页；146 个只由一个机场
+  发布；11 个同一“区域 + 标识”拥有多个源坐标；没有现成全局冲突或额外可提升的
+  `terminal_source_promotable` 组。因此跨机场坐标页提升规则在当前 2608 来源上已无
+  其他安全扩展空间，不能为了缩小参考差分而放宽单机场或多坐标拒绝条件。
 - 对当前剩余 47 个无区域航路端点，`RTE_SEG.POINT_START_ID/POINT_END_ID` 的
   只读回链没有提供新增可投影区域：40 个 ID 指向的当期 424 源点本身仍为空区域，
   6 个端点类型与同 ID 源表类型矛盾，1 个 ID 没有对应源点。端点类型不得跨表放宽，

@@ -30,11 +30,17 @@ from .paths import detect_paths
 from .profile import DEFAULT_CYCLE
 from .semantic_diff import SUPPORTED_TABLES, semantic_diff, write_semantic_diff
 from .source import (
+    _load_terminal_coordinate_pages,
     audit_enroute_key_point_ocr_rerun,
     audit_enroute_navaid_ocr_source,
     load_naip,
 )
-from .source_gap import audit_source_gaps, load_semantic_diff, write_source_gap_audit
+from .source_gap import (
+    audit_source_gaps,
+    audit_terminal_coordinate_reference_coverage,
+    load_semantic_diff,
+    write_source_gap_audit,
+)
 from .validation import validate_candidate
 
 
@@ -145,6 +151,33 @@ def build_parser() -> argparse.ArgumentParser:
         help="可选的候选 BGL XML；仅用于区分源航路段未投影和片段连通性差异",
     )
     source_gap.add_argument("--output", help="可选的本地来源缺口审计 JSON 输出路径")
+    terminal_coordinate = sub.add_parser(
+        "terminal-coordinate-audit",
+        help="只读分类参考缺失全局航点在 424 终端坐标页中的来源覆盖",
+    )
+    terminal_coordinate.add_argument("--raw", help="2608 原始 CSV/PDF 目录")
+    terminal_coordinate.add_argument(
+        "--semantic-diff",
+        required=True,
+        help="完整、只读且已脱敏的 semantic-diff JSON",
+    )
+    terminal_coordinate.add_argument(
+        "--pdf-cache",
+        help="可复用的终端 PDF 解析缓存目录；省略时直接只读解析源 PDF",
+    )
+    terminal_coordinate.add_argument(
+        "--general-doc-cache",
+        help="可选：与候选构建相同的 GeneralDoc OCR 缓存根目录",
+    )
+    terminal_coordinate.add_argument(
+        "--general-doc-keypoint-cache-directory",
+        default="enr-4.4",
+        help="与候选构建相同的 GeneralDoc 4.4 缓存子目录",
+    )
+    terminal_coordinate.add_argument(
+        "--output",
+        help="可选的本地终端坐标页来源覆盖审计 JSON 输出路径",
+    )
     ocr_cache = sub.add_parser(
         "ocr-cache",
         help="将原始 PDF 逐物理页 OCR 为带 SHA-256 清单、可断点续跑的本地缓存",
@@ -546,6 +579,31 @@ def main(argv: list[str] | None = None) -> int:
             load_naip(raw, include_terminal_documents=False),
             load_semantic_diff(Path(args.semantic_diff)),
             candidate_xml=_path(args.candidate_xml),
+        )
+        if args.output:
+            output = Path(args.output).expanduser().resolve()
+            report["output"] = str(output)
+            write_source_gap_audit(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "terminal-coordinate-audit":
+        raw = _path(args.raw) or detect_paths().raw_root
+        if not raw:
+            raise SystemExit("无法自动检测 424 原始目录，请显式传入 --raw")
+        pdf_cache = _path(args.pdf_cache)
+        model = load_naip(
+            raw,
+            pdf_cache=pdf_cache,
+            general_doc_cache=_path(args.general_doc_cache),
+            general_doc_key_point_cache_directory=(
+                args.general_doc_keypoint_cache_directory
+            ),
+            include_terminal_documents=False,
+        )
+        _load_terminal_coordinate_pages(model, pdf_cache)
+        report = audit_terminal_coordinate_reference_coverage(
+            model,
+            load_semantic_diff(Path(args.semantic_diff)),
         )
         if args.output:
             output = Path(args.output).expanduser().resolve()

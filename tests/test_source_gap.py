@@ -6,8 +6,18 @@ from pathlib import Path
 import pytest
 
 from fenix_default_navdata.cli import main
-from fenix_default_navdata.model import AirwayLeg, NavModel, SourceRef, Waypoint
-from fenix_default_navdata.source_gap import SourceGapAuditError, audit_source_gaps
+from fenix_default_navdata.model import (
+    AirwayLeg,
+    NavModel,
+    SourceRef,
+    TerminalWaypoint,
+    Waypoint,
+)
+from fenix_default_navdata.source_gap import (
+    SourceGapAuditError,
+    audit_source_gaps,
+    audit_terminal_coordinate_reference_coverage,
+)
 
 
 def _semantic_report(
@@ -186,6 +196,50 @@ def test_source_gap_audit_rejects_truncated_reference_gap_samples(tmp_path: Path
 
     with pytest.raises(SourceGapAuditError, match="截断"):
         audit_source_gaps(_model(tmp_path), report)
+
+
+def test_terminal_coordinate_audit_keeps_source_categories_redacted(
+    tmp_path: Path,
+) -> None:
+    model = _model(tmp_path)
+    source = SourceRef("Terminal/ZBAA/coordinate-page.pdf", page=1)
+    model.terminal_waypoints.extend((
+        TerminalWaypoint("single", "ZBAA", "LOCAL", 40.1, 116.1, source, "ZB"),
+        TerminalWaypoint("ambig-one", "ZBAA", "AMBIG", 40.2, 116.2, source, "ZB"),
+        TerminalWaypoint("ambig-two", "ZBAD", "AMBIG", 40.3, 116.2, source, "ZB"),
+        TerminalWaypoint("global-one", "ZBAA", "GLOBAL", 40.4, 116.4, source, "ZB"),
+        TerminalWaypoint("global-two", "ZBAD", "GLOBAL", 40.4, 116.4, source, "ZB"),
+        TerminalWaypoint("new-one", "ZBAA", "NEW", 40.5, 116.5, source, "ZB"),
+        TerminalWaypoint("new-two", "ZBAD", "NEW", 40.5, 116.5, source, "ZB"),
+    ))
+    model.waypoints.append(Waypoint(
+        "global", "GLOBAL", "", 35.0, 105.0, source, "ZB",
+    ))
+    report = _semantic_report(
+        waypoint_samples=[
+            {"logical_key": {"ident": "LOCAL", "region": "ZB", "airport_ident": None}},
+            {"logical_key": {"ident": "AMBIG", "region": "ZB", "airport_ident": None}},
+            {"logical_key": {"ident": "GLOBAL", "region": "ZB", "airport_ident": None}},
+            {"logical_key": {"ident": "NEW", "region": "ZB", "airport_ident": None}},
+            {"logical_key": {"ident": "NONE", "region": "ZB", "airport_ident": None}},
+            {"logical_key": {"ident": "AIRPORT", "region": "ZB", "airport_ident": "ZBAA"}},
+        ],
+        airway_samples=[],
+    )
+
+    result = audit_terminal_coordinate_reference_coverage(model, report)
+
+    assert result["categories"] == {
+        "airport_scoped_reference_only": 1,
+        "not_present_in_terminal_coordinate_pages": 1,
+        "terminal_existing_global_identity": 1,
+        "terminal_multiple_coordinates": 1,
+        "terminal_single_airport": 1,
+        "terminal_source_promotable": 1,
+    }
+    serialized = json.dumps(result)
+    for value in ("LOCAL", "AMBIG", "GLOBAL", "NEW", "NONE", "AIRPORT"):
+        assert value not in serialized
 
 
 def test_source_gap_audit_records_airline_points_as_existing_rte_references(
