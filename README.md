@@ -150,6 +150,11 @@ python -m fenix_default_navdata.gui
 `source_unqualified_rnp_ar_direct_role_selections`；多个候选命中、没有命中或图题带固定点
 限定时仍拒绝。
 
+当多个标题兼容候选中只有一张图的直接 `IAF`、`IF`、`FAF`、`MAP` 或 `MAPT` 标记与
+来源主进近腿相交时，转换器会记录 `source_unique_direct_role_selections`。该规则不使用
+OCR、参考成品或 Fenix；RNP AR 不能与非 AR 图题混用，带固定点限定与不带限定的 RNP AR
+候选也不能混用，候选标题标准化后必须彼此不同；其余多个命中或零命中继续拒绝。
+
 当前候选构建使用 `bounded-max4096-ocr-r80-a/b/c-20260817` 三份独立缓存。三者都记录了
 内置 `llamacpp-direct` 适配器、`max_tokens=4096`、完整运行时描述、角色-航点对和相邻
 关系，并通过严格共识。旧 `ocr-3x-deterministic-a/b/d/f-20260815` 即使角色证据相同，

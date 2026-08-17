@@ -92,7 +92,7 @@ def test_iap_coverage_counts_unique_map_disambiguation():
 
     report = analyze_iap_coverage(model)
 
-    assert report["version"] == 11
+    assert report["version"] == 12
     assert report["chart_pages"]["total"] == 2
     assert report["chart_pages"]["matched_to_primary_group"] == 2
     assert report["chart_pages"]["selected_for_role_projection"] == 1
@@ -503,6 +503,83 @@ def test_iap_coverage_rejects_qualified_or_nonunique_rnp_ar_direct_role_matches(
         "ambiguous_chart": 1,
     }
     assert qualified_report["source_unqualified_rnp_ar_direct_role_selections"] == []
+
+
+def test_iap_coverage_selects_unique_direct_source_role_without_ar_title_mixing():
+    model = _model_with_iap_segments()
+    source = SourceRef("Terminal/ZBCF/ZBCF-4L.pdf", 1, 1, "database-hash")
+    model.procedure_segments[0] = ProcedureSegment(
+        "ZBCF", "R03", "approach", "03", "", (
+            ChartTerminalLeg("R03", "03", "TF", "DIRECT", "fixture", sequence=1),
+        ), source,
+    )
+    model.procedure_charts.extend([
+        ProcedureChart(
+            "ZBCF", "ils.pdf", 1, "instrument-approach-index",
+            "RNP ILS/DME z RWY03", "text", (), ("03",), (), (), (), source,
+            route_fixes=(ChartRouteFix("OTHER", "IF"),),
+        ),
+        ProcedureChart(
+            "ZBCF", "rnp.pdf", 1, "instrument-approach-index",
+            "RNP RWY03", "text", (), ("03",), (), (), (), source,
+            route_fixes=(ChartRouteFix("DIRECT", "IF"),),
+        ),
+    ])
+
+    report = analyze_iap_coverage(model)
+
+    assert report["procedure_groups"]["status_counts"] == {
+        "roles_source_unique_direct_role_chart": 1,
+    }
+    assert report["role_evidence_counts"] == {"IF": 1}
+    assert report["source_unique_direct_role_selections"] == [{
+        "airport": "ZBCF",
+        "label": "R03",
+        "runway": "03",
+        "selection": "unique_direct_role",
+        "matching_charts": 2,
+        "chart_name": "RNP RWY03",
+        "source": {
+            "file": "Terminal/ZBCF/ZBCF-4L.pdf",
+            "row": 1,
+            "page": 1,
+            "sha256": "database-hash",
+        },
+        "matching_roles": [{"ident": "DIRECT", "roles": ["IF"]}],
+    }]
+    assert report["unresolved_groups"] == []
+
+
+def test_iap_coverage_selects_uniform_qualified_rnp_ar_by_unique_direct_role():
+    model = _model_with_iap_segments()
+    source = SourceRef("Terminal/ZBCF/ZBCF-4L.pdf", 1, 1, "database-hash")
+    model.procedure_segments[0] = ProcedureSegment(
+        "ZBCF", "R03", "approach", "03", "", (
+            ChartTerminalLeg("R03", "03", "TF", "DIRECT", "fixture", sequence=1),
+        ), source,
+    )
+    model.procedure_charts.extend([
+        ProcedureChart(
+            "ZBCF", "first.pdf", 1, "instrument-approach-index",
+            "RNP RWY03(AR)(FIRST)", "text", (), ("03",), (), (), (), source,
+            route_fixes=(ChartRouteFix("DIRECT", "IAF"),),
+        ),
+        ProcedureChart(
+            "ZBCF", "second.pdf", 1, "instrument-approach-index",
+            "RNP RWY03(AR)(SECOND)", "text", (), ("03",), (), (), (), source,
+            route_fixes=(ChartRouteFix("SECOND", "IAF"),),
+        ),
+    ])
+
+    report = analyze_iap_coverage(model)
+
+    assert report["procedure_groups"]["status_counts"] == {
+        "roles_source_unique_direct_role_chart": 1,
+    }
+    assert report["source_unique_direct_role_selections"][0]["chart_name"] == (
+        "RNP RWY03(AR)(FIRST)"
+    )
+    assert report["unresolved_groups"] == []
 
 
 def test_iap_coverage_prefers_direct_role_selection_before_complete_direct_fixes():

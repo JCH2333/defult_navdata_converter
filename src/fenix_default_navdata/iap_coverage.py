@@ -390,6 +390,16 @@ def _title_qualifier_matching_fixes(chart: Any, segment: Any) -> tuple[str, ...]
     )
 
 
+def _direct_chart_roles_for_segment(chart: Any, segment: Any) -> dict[str, set[str]]:
+    """Return direct printed role labels that intersect source primary legs."""
+    required_fixes = _direct_database_fix_idents(segment)
+    return {
+        ident: roles & _CHART_ROLE_EVIDENCE
+        for ident, roles in _chart_roles(chart).items()
+        if ident in required_fixes and roles & _CHART_ROLE_EVIDENCE
+    }
+
+
 def _select_iap_chart_with_rnp_ar_title_qualifier(
     charts: list[Any],
     segment: Any,
@@ -428,12 +438,7 @@ def _unqualified_rnp_ar_direct_roles(chart: Any, segment: Any) -> dict[str, set[
         or _rnp_ar_title_qualifier_idents(chart)
     ):
         return {}
-    required_fixes = _direct_database_fix_idents(segment)
-    return {
-        ident: roles & _CHART_ROLE_EVIDENCE
-        for ident, roles in _chart_roles(chart).items()
-        if ident in required_fixes and roles & _CHART_ROLE_EVIDENCE
-    }
+    return _direct_chart_roles_for_segment(chart, segment)
 
 
 def _select_iap_chart_with_unqualified_rnp_ar_direct_role(
@@ -466,6 +471,40 @@ def _select_iap_chart_with_unqualified_rnp_ar_direct_role(
     return None, None
 
 
+def _select_iap_chart_with_unique_direct_role(
+    charts: list[Any],
+    segment: Any,
+) -> tuple[Any | None, str | None]:
+    """Select one title-compatible plate by a unique direct source-role match.
+
+    A direct role label is usable when exactly one distinct title candidate
+    intersects the source primary legs. RNP AR candidates must not be mixed
+    with non-AR titles, and qualified/unqualified AR plates remain separate
+    categories.
+    """
+    if len(charts) < 2:
+        return None, None
+    titles = {
+        re.sub(r"\s+", " ", chart.chart_name or "").strip().upper()
+        for chart in charts
+    }
+    if len(titles) != len(charts):
+        return None, None
+    rnp_ar = ["RNP" in chart.chart_name.upper() and "(AR)" in chart.chart_name.upper() for chart in charts]
+    if any(rnp_ar) and not all(rnp_ar):
+        return None, None
+    if all(rnp_ar) and len({bool(_rnp_ar_title_qualifier_idents(chart)) for chart in charts}) != 1:
+        return None, None
+    matching = [
+        chart
+        for chart in charts
+        if _direct_chart_roles_for_segment(chart, segment)
+    ]
+    if len(matching) == 1:
+        return matching[0], "unique_direct_role"
+    return None, None
+
+
 def _select_iap_chart(
     model: NavModel,
     charts: list[Any],
@@ -491,6 +530,11 @@ def _select_iap_chart(
     )
     if direct_role_chart is not None:
         return direct_role_chart, direct_role_selection
+    unique_direct_role_chart, unique_direct_role_selection = (
+        _select_iap_chart_with_unique_direct_role(charts, segment)
+    )
+    if unique_direct_role_chart is not None:
+        return unique_direct_role_chart, unique_direct_role_selection
     if model.iap_ocr_role_evidence is None:
         return None, None
     chart, selection = _select_iap_chart_with_roles(
@@ -670,6 +714,8 @@ def _iap_role_status(selection: str | None, direct_fixed_selection: bool) -> str
         return "roles_source_title_qualifier_chart"
     if selection == "rnp_ar_unique_direct_role":
         return "roles_source_unqualified_rnp_ar_direct_role_chart"
+    if selection == "unique_direct_role":
+        return "roles_source_unique_direct_role_chart"
     return {
         "ocr_unique_chart": "roles_ocr_unique_chart",
         "unique_chart": "roles_unique_chart",
@@ -749,6 +795,7 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
     source_fixed_point_selections: list[dict[str, object]] = []
     source_title_qualifier_selections: list[dict[str, object]] = []
     source_unqualified_rnp_ar_direct_role_selections: list[dict[str, object]] = []
+    source_unique_direct_role_selections: list[dict[str, object]] = []
     selected_role_pages: set[tuple[str, str, int]] = set()
     matched_pages: set[tuple[str, str, int]] = set()
     complete_primary_groups = 0
@@ -832,6 +879,7 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
             unqualified_rnp_ar_direct_role_selection = (
                 selection == "rnp_ar_unique_direct_role"
             )
+            unique_direct_role_selection = selection == "unique_direct_role"
             if matching_roles:
                 role_groups += 1
                 status = _iap_role_status(selection, direct_fixed_selection)
@@ -895,6 +943,27 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
                         )
                     ],
                 })
+            if unique_direct_role_selection and selected_chart is not None:
+                source_unique_direct_role_selections.append({
+                    "airport": airport,
+                    "label": label,
+                    "runway": runway,
+                    "selection": "unique_direct_role",
+                    "matching_charts": len(matching),
+                    "chart_name": selected_chart.chart_name,
+                    "source": _source_report(selected_chart.source),
+                    "matching_roles": [
+                        {
+                            "ident": ident,
+                            "roles": sorted(roles),
+                        }
+                        for ident, roles in sorted(
+                            _direct_chart_roles_for_segment(
+                                selected_chart, primary[0],
+                            ).items()
+                        )
+                    ],
+                })
             if not matching_roles and not matching:
                 status = "no_matching_chart"
             elif not matching_roles and selected_chart is not None:
@@ -918,7 +987,7 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
     role_evidence_pages = sum(bool(chart.route_fixes) for chart in charts)
     missed_evidence_pages = sum(bool(chart.has_missed_approach) for chart in charts)
     return {
-        "version": 11,
+        "version": 12,
         "chart_pages": {
             "total": len(charts),
             "with_route_role_evidence": role_evidence_pages,
@@ -973,5 +1042,6 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
         "source_unqualified_rnp_ar_direct_role_selections": (
             source_unqualified_rnp_ar_direct_role_selections
         ),
+        "source_unique_direct_role_selections": source_unique_direct_role_selections,
         "unresolved_groups": unresolved,
     }
