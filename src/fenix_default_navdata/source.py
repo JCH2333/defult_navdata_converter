@@ -1625,11 +1625,13 @@ def _load_terminal_database_charts(model: NavModel, pdf_cache: Path | None = Non
 
 
 def _retain_database_referenced_terminal_waypoints(model: NavModel) -> None:
-    """Keep coordinate-page points only when a database-coded segment uses them.
+    """Keep coordinate-page points only when structured procedure evidence uses them.
 
     A coordinate page is an airport-wide catalogue, not a procedure sequence.
-    Restricting it to explicitly printed legs prevents decorative, runway and
-    unused catalogue labels from consuming Fenix waypoint IDs.
+    Database-coded legs, holding fixes, and fully printed standard SID/STAR
+    route-table entries establish an explicit source sequence.  Other chart
+    labels, including IAP role and vector evidence, remain insufficient because
+    they do not establish a complete procedure route.
     """
     used = {
         (chart.airport, identifier)
@@ -1639,6 +1641,14 @@ def _retain_database_referenced_terminal_waypoints(model: NavModel) -> None:
         if identifier
     }
     used.update((holding.fix_region, holding.fix_ident) for holding in model.holdings)
+    used.update(
+        (chart.airport, identifier)
+        for chart in model.procedure_charts
+        if chart.chart_type == "standard-terminal-procedure"
+        for route in chart.standard_routes + chart.table_standard_routes
+        for identifier in route.fixes
+        if identifier
+    )
     model.terminal_waypoints[:] = [
         point for point in model.terminal_waypoints
         if (point.airport, point.ident) in used

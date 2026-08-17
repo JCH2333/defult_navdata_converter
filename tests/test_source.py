@@ -25,6 +25,7 @@ from fenix_default_navdata.model import (
     Ad219Vor,
     AirwayLeg,
     ChartRouteFix,
+    ChartStandardProcedureRoute,
     NavModel,
     Navaid,
     ProcedureChart,
@@ -235,6 +236,28 @@ def test_direct_iap_role_alone_does_not_retain_terminal_coordinate_waypoint() ->
     _retain_database_referenced_terminal_waypoints(model)
 
     assert model.terminal_waypoints == []
+
+
+def test_standard_route_table_retains_matching_terminal_coordinate_waypoint() -> None:
+    model = NavModel(Path("raw"))
+    source = SourceRef("Terminal/ZBAA/Charts.csv", page=1)
+    model.terminal_waypoints.extend((
+        TerminalWaypoint("route", "ZBAA", "ROUTE01", 40.1, 116.1, source, "ZB"),
+        TerminalWaypoint("unused", "ZBAA", "UNUSED", 40.2, 116.2, source, "ZB"),
+    ))
+    model.procedure_charts.append(ProcedureChart(
+        "ZBAA", "ZBAA-2P-1.pdf", 1, "standard-terminal-procedure",
+        "标准仪表离场图", "text", (), (), (), (), (), source,
+        standard_routes=(
+            ChartStandardProcedureRoute(
+                "ROUTE01-01", "ROUTE011", ("ROUTE01", "GLOBAL01"),
+            ),
+        ),
+    ))
+
+    _retain_database_referenced_terminal_waypoints(model)
+
+    assert [point.ident for point in model.terminal_waypoints] == ["ROUTE01"]
 
 
 @pytest.mark.parametrize("kind", ("waypoint", "navaid"))
