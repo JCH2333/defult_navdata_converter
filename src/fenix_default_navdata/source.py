@@ -2152,8 +2152,11 @@ def _project_same_page_rnp_primary_to_ils(model: NavModel) -> None:
     Some 2608 database coding pages print one RNP main approach followed by a
     distinct RNP ILS/DME missed section.  The ILS group has no main section,
     but its indexed ILS plate and the same database page establish that the
-    RNP primary is shared.  This is deliberately narrower than generic shared
-    IAP section assignment: it never carries a RNP missed section to ILS.
+    RNP primary is shared. A separately printed database page is also accepted
+    only when that same unique combined chart explicitly names both labels and
+    exposes exactly one non-AR RNP primary. This is deliberately narrower than
+    generic shared IAP section assignment: it never carries a RNP missed
+    section to ILS.
     """
     groups: dict[tuple[str, str, str], list[ProcedureSegment]] = {}
     for segment in model.procedure_segments:
@@ -2224,12 +2227,21 @@ def _project_same_page_rnp_primary_to_ils(model: NavModel) -> None:
                 # both its base and suffix variants, while RNP AR remains
                 # excluded.
                 and segment.approach_family.upper() in {"", "RNP"}
-                and _source_page_key(segment.source) in source_pages
             )
         ]
-        if len(rnp_candidates) != 1:
+        same_page_rnp_candidates = [
+            segment
+            for segment in rnp_candidates
+            if _source_page_key(segment.source) in source_pages
+        ]
+        if len(same_page_rnp_candidates) == 1:
+            rnp_primary = same_page_rnp_candidates[0]
+            selection = "same_database_page_unique_rnp_primary"
+        elif len(rnp_candidates) == 1:
+            rnp_primary = rnp_candidates[0]
+            selection = "cross_database_page_unique_rnp_primary"
+        else:
             continue
-        rnp_primary = rnp_candidates[0]
         rnp_label = rnp_primary.label
         legs = tuple(
             replace(
@@ -2258,7 +2270,7 @@ def _project_same_page_rnp_primary_to_ils(model: NavModel) -> None:
             "airport": airport,
             "label": ils_label,
             "runway": runway,
-            "selection": "same_database_page_unique_rnp_primary",
+            "selection": selection,
             "rnp_label": rnp_primary.label,
             "rnp_approach_family": (
                 rnp_primary.approach_family or "implicit_rnp_label"
