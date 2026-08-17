@@ -22,7 +22,7 @@ from pypdf import PdfReader
 from .model import Ad219NdbEvidence, Ad219Vor, ChartFixCoordinate, ChartHoldingEvidence, ChartRouteFix, ChartStandardProcedureRoute, ChartTerminalLeg, Ils, ProcedureChart, SourceRef
 
 
-_EVIDENCE_CACHE_VERSION = 37
+_EVIDENCE_CACHE_VERSION = 38
 
 
 _PROCEDURE = re.compile(r"\b([A-Z0-9]{2,6}-\d{2}[AD])\b")
@@ -86,6 +86,10 @@ _DATABASE_BARE_APPROACH_TRANSITION = re.compile(
     r"\bRWY\s?(?P<runway>\d{2}[LRC]?)\s*\u8fc7\u6e21\s*(?P<transition>[A-Z][A-Z0-9]{0,5})\b",
     re.IGNORECASE,
 )
+_DATABASE_LEG_TYPES = frozenset({
+    "CF", "DF", "TF", "CA", "IF", "HM", "RF", "AF", "FA", "FC", "FD",
+    "FM", "HA", "HF", "PI", "VI", "VM",
+})
 _DATABASE_LEG = re.compile(r"\b(?P<leg_type>CF|DF|TF|CA|IF|HM|RF|AF|FA|FC|FD|FM|HA|HF|PI|VI|VM)\b(?:\s+(?P<fix>[A-Z][A-Z0-9]{0,5}))?")
 _DATABASE_RF_LEG = re.compile(r"\bRF\s*\[\s*(?P<center>[A-Z][A-Z0-9]{0,5})\s*,\s*\d+(?:\.\d+)?\s*\]\s*(?P<fix>[A-Z][A-Z0-9]{0,5})?")
 _DATABASE_SPEED = re.compile(r"^MAX(?P<speed>\d{2,3})$", re.IGNORECASE)
@@ -852,10 +856,17 @@ def extract_terminal_leg_evidence(text: str) -> tuple[ChartTerminalLeg, ...]:
                     "\u8fdb\u8fd1\u590d\u98de",
                 }
                 active_kind = "\u8fdb\u8fd1" if split_combined_approach_missed else normalized_kind
-                active_transition = (
+                transition = (
                     approach_heading.groupdict().get("transition")
                     or approach_heading.groupdict().get("via_transition")
                     or ""
+                )
+                # A leg type printed immediately after an approach heading is
+                # part of the table row, never a named approach transition.
+                active_transition = (
+                    ""
+                    if transition.upper() in _DATABASE_LEG_TYPES
+                    else transition
                 )
                 # Approach pages can begin with a hold continuation, which is
                 # not attributable to the next approach transition.

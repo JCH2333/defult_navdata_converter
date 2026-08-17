@@ -168,3 +168,27 @@ def test_database_combined_approach_missed_without_separator_splits_at_missed_le
         ("R09-Z", "复飞", "CA", None),
         ("R09-Z", "复飞", "DF", "TL101"),
     ]
+
+
+def test_database_approach_leg_type_is_not_a_transition_name():
+    text = """
+    RWY12R RNP 进近 TF
+    IF CC406 900 RNP1
+    TF CC311 800 RNP0.3
+    """
+
+    legs = extract_terminal_leg_evidence(text)
+
+    assert [
+        (
+            leg.procedure_label,
+            leg.procedure_kind,
+            leg.transition,
+            leg.leg_type,
+            leg.fix_ident,
+        )
+        for leg in legs
+    ] == [
+        ("R12R", "进近", "", "IF", "CC406"),
+        ("R12R", "进近", "", "TF", "CC311"),
+    ]
