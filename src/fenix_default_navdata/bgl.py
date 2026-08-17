@@ -15,7 +15,11 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from .iap_coverage import iap_chart_roles, matching_iap_charts
+from .iap_coverage import (
+    iap_chart_roles,
+    matching_iap_charts,
+    shared_iap_section_assignments,
+)
 from .model import Navaid, NavModel, Runway, is_china_icao
 from .profile import Cycle
 from .source import romanize_name
@@ -1322,13 +1326,15 @@ def _split_iap_at_explicit_runway_map(model: NavModel, segment):
 
 
 def _approach_sections(model: NavModel, segments: list):
-    """Group source approach sections and retain only same-page sharing."""
+    """Group source approach sections and attach uniquely evidenced base parts."""
     groups: dict[tuple[str, str, str], list] = {}
     for segment in segments:
         if _iap_section_kind(segment) in _IAP_KINDS:
             groups.setdefault(
                 (segment.airport, segment.label, segment.runway), [],
             ).append(segment)
+    source_order = {id(segment): index for index, segment in enumerate(segments)}
+    shared_assignments = shared_iap_section_assignments(segments)
 
     for (segment_airport, label, runway), selected in sorted(groups.items()):
         primary = [
@@ -1344,21 +1350,19 @@ def _approach_sections(model: NavModel, segments: list):
             if _iap_section_kind(segment) == "missed"
         ]
         if "-" in label and len(primary) == 1:
-            base_label = label.split("-", 1)[0]
-            shared = groups.get((segment_airport, base_label, runway), [])
-            source = primary[0].source
+            target = (segment_airport, label, runway)
             transitions.extend(
-                segment for segment in shared
+                segment for segment in segments
                 if _iap_section_kind(segment) == "approach_transition"
-                and segment.source.file == source.file
-                and segment.source.page == source.page
+                and shared_assignments.get(id(segment), (None, ""))[0] == target
             )
             missed.extend(
-                segment for segment in shared
+                segment for segment in segments
                 if _iap_section_kind(segment) == "missed"
-                and segment.source.file == source.file
-                and segment.source.page == source.page
+                and shared_assignments.get(id(segment), (None, ""))[0] == target
             )
+            transitions.sort(key=lambda segment: source_order[id(segment)])
+            missed.sort(key=lambda segment: source_order[id(segment)])
         yield label, runway, transitions, primary, missed
 
 

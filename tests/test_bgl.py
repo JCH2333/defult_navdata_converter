@@ -380,6 +380,8 @@ def test_airport_projection_maps_raw_chinese_procedure_kinds_and_iap_sections(
 ):
     model = NavModel(Path("source"))
     source = SourceRef("approach.pdf", 1, 1, "hash")
+    primary_source = SourceRef("approach-continuation.pdf", 1, 1, "hash")
+    missed_source = SourceRef("approach-missed.pdf", 1, 1, "hash")
     model.airports["a"] = Airport(
         "a", "ZBCF", "ZBCF", 35.0, 105.0, 1000, 18000, 180, source,
     )
@@ -435,7 +437,7 @@ def test_airport_projection_maps_raw_chinese_procedure_kinds_and_iap_sections(
                     sequence=3, fix_region="ZB", fix_type="TERMINAL_WAYPOINT",
                     fix_latitude=35.06, fix_longitude=105.0,
                 ),
-            ), source,
+            ), primary_source,
         ),
         ProcedureSegment(
             "ZBCF", "R03", "复飞", "03", "", (
@@ -444,7 +446,7 @@ def test_airport_projection_maps_raw_chinese_procedure_kinds_and_iap_sections(
                     sequence=1, fix_region="ZB", fix_type="TERMINAL_WAYPOINT",
                     fix_latitude=35.06, fix_longitude=105.0,
                 ),
-            ), source,
+            ), missed_source,
         ),
     ])
     model.procedure_charts.append(ProcedureChart(

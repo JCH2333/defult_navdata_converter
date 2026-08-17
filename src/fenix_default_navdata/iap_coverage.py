@@ -42,6 +42,100 @@ def iap_section_kind(segment: Any) -> str:
     return kind
 
 
+def shared_iap_section_assignments(
+    segments: list[Any],
+) -> dict[int, tuple[tuple[str, str, str], str]]:
+    """Map source-labelled base sections to one uniquely ordered variant.
+
+    CAAC database coding pages often print common transitions or missed
+    sections under a base label such as ``R18L``, while the immediately
+    following or preceding primary section is explicitly labelled ``R18L-Y``.
+    A same-page singleton primary is already sufficient evidence.  When a
+    page contains several variants, or the table continues onto the next PDF,
+    retain an assignment only if contiguous database-table order reaches one
+    primary whose label is the base label plus a suffix.  Any unrelated
+    procedure, runway, airport, or non-IAP segment terminates the search.
+    """
+    groups: dict[tuple[str, str, str], list[Any]] = defaultdict(list)
+    for segment in segments:
+        if iap_section_kind(segment) in IAP_KINDS:
+            groups[(segment.airport, segment.label, segment.runway)].append(segment)
+    primary_by_group = {
+        key: [
+            segment for segment in selected
+            if iap_section_kind(segment) == "approach"
+        ]
+        for key, selected in groups.items()
+    }
+    assignments: dict[int, tuple[tuple[str, str, str], str]] = {}
+
+    def ordered_variant_primary(
+        index: int,
+        segment: Any,
+        direction: int,
+    ) -> tuple[Any | None, str | None]:
+        cursor = index + direction
+        while 0 <= cursor < len(segments):
+            candidate = segments[cursor]
+            if iap_section_kind(candidate) not in IAP_KINDS:
+                return None, None
+            if candidate.airport != segment.airport:
+                return None, None
+            if candidate.runway != segment.runway:
+                return None, None
+            if candidate.label == segment.label:
+                cursor += direction
+                continue
+            if (
+                candidate.label.startswith(segment.label + "-")
+                and iap_section_kind(candidate) == "approach"
+            ):
+                return candidate, (
+                    "ordered_next" if direction > 0 else "ordered_previous"
+                )
+            return None, None
+        return None, None
+
+    for index, segment in enumerate(segments):
+        kind = iap_section_kind(segment)
+        key = (segment.airport, segment.label, segment.runway)
+        if (
+            kind not in {"approach_transition", "missed"}
+            or key not in groups
+            or primary_by_group[key]
+        ):
+            continue
+        variants = [
+            primary
+            for (airport, label, runway), primary_segments in primary_by_group.items()
+            if airport == segment.airport
+            and runway == segment.runway
+            and label.startswith(segment.label + "-")
+            for primary in primary_segments
+        ]
+        same_page = [
+            primary for primary in variants
+            if (
+                primary.source.file == segment.source.file
+                and primary.source.page == segment.source.page
+            )
+        ]
+        if len(same_page) == 1:
+            selected, selection = same_page[0], "same_page_unique"
+        else:
+            selected, selection = ordered_variant_primary(
+                index,
+                segment,
+                1 if kind == "approach_transition" else -1,
+            )
+        if selected is not None and selection is not None:
+            assignments[id(segment)] = (
+                (selected.airport, selected.label, selected.runway),
+                selection,
+            )
+    return assignments
+
+
 def _direct_database_fix_idents(segment: Any) -> set[str]:
     return {
         leg.fix_ident.strip().upper()
@@ -309,43 +403,15 @@ def _matching_leg_roles(segment: Any, roles: dict[str, set[str]]) -> list[dict[s
 
 def _shared_section_group_keys(
     groups: dict[tuple[str, str, str], list[Any]],
+    assignments: dict[int, tuple[tuple[str, str, str], str]],
 ) -> set[tuple[str, str, str]]:
-    """Identify base-label sections already consumed by same-page variants."""
-    primary_by_group = {
-        key: [
-            segment for segment in selected
-            if iap_section_kind(segment) == "approach"
-        ]
-        for key, selected in groups.items()
+    """Identify base groups whose every source section has a unique target."""
+    return {
+        key for key, selected in groups.items()
+        if not any(iap_section_kind(segment) == "approach" for segment in selected)
+        and bool(selected)
+        and all(id(segment) in assignments for segment in selected)
     }
-    shared: set[tuple[str, str, str]] = set()
-    for (airport, label, runway), selected in groups.items():
-        if primary_by_group[(airport, label, runway)]:
-            continue
-        source_pages = {
-            (segment.source.file, segment.source.page)
-            for segment in selected
-            if iap_section_kind(segment) in {
-                "approach_transition",
-                "missed",
-            }
-        }
-        if source_pages and all(
-            any(
-                candidate_airport == airport
-                and candidate_runway == runway
-                and candidate_label.startswith(label + "-")
-                and len(primary_by_group[(candidate_airport, candidate_label, candidate_runway)]) == 1
-                and (
-                    primary_by_group[(candidate_airport, candidate_label, candidate_runway)][0].source.file,
-                    primary_by_group[(candidate_airport, candidate_label, candidate_runway)][0].source.page,
-                ) == source_page
-                for candidate_airport, candidate_label, candidate_runway in groups
-            )
-            for source_page in source_pages
-        ):
-            shared.add((airport, label, runway))
-    return shared
 
 
 def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
@@ -354,7 +420,8 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
     for segment in model.procedure_segments:
         if iap_section_kind(segment) in IAP_KINDS:
             groups[(segment.airport, segment.label, segment.runway)].append(segment)
-    shared_section_groups = _shared_section_group_keys(groups)
+    shared_assignments = shared_iap_section_assignments(model.procedure_segments)
+    shared_section_groups = _shared_section_group_keys(groups, shared_assignments)
 
     charts = sorted(
         (
@@ -496,7 +563,7 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
     role_evidence_pages = sum(bool(chart.route_fixes) for chart in charts)
     missed_evidence_pages = sum(bool(chart.has_missed_approach) for chart in charts)
     return {
-        "version": 8,
+        "version": 9,
         "chart_pages": {
             "total": len(charts),
             "with_route_role_evidence": role_evidence_pages,
@@ -514,6 +581,20 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
             "unresolved": len(unresolved),
         },
         "role_evidence_counts": dict(sorted(role_counts.items())),
+        "shared_section_assignments": [
+            {
+                "airport": segment.airport,
+                "label": segment.label,
+                "runway": segment.runway,
+                "section": iap_section_kind(segment),
+                "target_label": target[1],
+                "selection": selection,
+                "source": _source_report(segment.source),
+            }
+            for segment in model.procedure_segments
+            if (assignment := shared_assignments.get(id(segment))) is not None
+            for target, selection in (assignment,)
+        ],
         "ocr_role_selections": ocr_role_selections,
         "source_fixed_point_selections": source_fixed_point_selections,
         "unresolved_groups": unresolved,

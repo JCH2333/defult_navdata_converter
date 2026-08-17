@@ -89,7 +89,7 @@ def test_iap_coverage_counts_unique_map_disambiguation():
 
     report = analyze_iap_coverage(model)
 
-    assert report["version"] == 8
+    assert report["version"] == 9
     assert report["chart_pages"]["total"] == 2
     assert report["chart_pages"]["matched_to_primary_group"] == 2
     assert report["chart_pages"]["selected_for_role_projection"] == 1
@@ -573,7 +573,7 @@ def test_iap_coverage_does_not_reject_same_page_shared_variant_sections():
     assert report["unresolved_groups"] == []
 
 
-def test_iap_coverage_keeps_base_sections_when_variant_is_from_another_page():
+def test_iap_coverage_resolves_ordered_cross_page_base_sections():
     model = _model_with_iap_segments()
     base_source = SourceRef("approach.pdf", 1, 1, "hash")
     variant_source = SourceRef("approach.pdf", 2, 2, "hash")
@@ -598,14 +598,25 @@ def test_iap_coverage_keeps_base_sections_when_variant_is_from_another_page():
 
     report = analyze_iap_coverage(model)
 
-    assert report["procedure_groups"]["shared_section_groups"] == 0
+    assert report["procedure_groups"]["shared_section_groups"] == 1
     assert report["procedure_groups"]["status_counts"] == {
-        "no_unique_primary": 1,
         "unique_chart_without_roles": 1,
     }
-    assert [item["status"] for item in report["unresolved_groups"]] == [
-        "no_unique_primary",
-    ]
+    assert report["unresolved_groups"] == []
+    assert report["shared_section_assignments"] == [{
+        "airport": "ZBCF",
+        "label": "R03",
+        "runway": "03",
+        "section": "approach_transition",
+        "target_label": "R03-Z",
+        "selection": "ordered_next",
+        "source": {
+            "file": "approach.pdf",
+            "row": 1,
+            "page": 1,
+            "sha256": "hash",
+        },
+    }]
 
 
 def test_iap_coverage_keeps_ambiguous_and_missing_primary_groups_auditable():
