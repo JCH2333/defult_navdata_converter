@@ -192,3 +192,30 @@ def test_database_approach_leg_type_is_not_a_transition_name():
         ("R12R", "进近", "", "IF", "CC406"),
         ("R12R", "进近", "", "TF", "CC311"),
     ]
+
+
+def test_database_trailing_family_and_variant_are_not_misread_as_a_transition():
+    text = """
+    RWY02 \u8fdb\u8fd1 RNP ILS/DME x
+    IF LJ511 10600 RNP0.3
+    RF[RLJ08, 14.8] LJ510 R 9500 RNP0.3
+    CF LJ662 018 9100 MAX165 RNP0.3
+    """
+
+    legs = extract_terminal_leg_evidence(text)
+
+    assert [
+        (
+            leg.procedure_label,
+            leg.procedure_kind,
+            leg.transition,
+            leg.approach_family,
+            leg.leg_type,
+            leg.fix_ident,
+        )
+        for leg in legs
+    ] == [
+        ("I02-X", "\u8fdb\u8fd1", "", "ILS", "IF", "LJ511"),
+        ("I02-X", "\u8fdb\u8fd1", "", "ILS", "RF", "LJ510"),
+        ("I02-X", "\u8fdb\u8fd1", "", "ILS", "CF", "LJ662"),
+    ]

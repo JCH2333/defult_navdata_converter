@@ -22,7 +22,7 @@ from pypdf import PdfReader
 from .model import Ad219NdbEvidence, Ad219Vor, ChartFixCoordinate, ChartHoldingEvidence, ChartRouteFix, ChartStandardProcedureRoute, ChartTerminalLeg, Ils, ProcedureChart, SourceRef
 
 
-_EVIDENCE_CACHE_VERSION = 38
+_EVIDENCE_CACHE_VERSION = 39
 
 
 _PROCEDURE = re.compile(r"\b([A-Z0-9]{2,6}-\d{2}[AD])\b")
@@ -70,6 +70,13 @@ _DATABASE_TARGET_FAMILY_APPROACH = re.compile(
     r"(?P<kind>\u8fdb\u8fd1\s*\u8fc7\u6e21|\u8fdb\u8fd1(?:\u53ca|\u3001)?\s*\u590d\u98de|\u8fdb\u8fd1|\u590d\u98de)"
     r"(?:\s*-?\s*(?P<variant>[WXYZ]))?"
     r"(?:\s+(?P<transition>[A-Z][A-Z0-9]{0,5})|\s*VIA\s*(?P<via_transition>[A-Z][A-Z0-9]{0,5}))?\b",
+    re.IGNORECASE,
+)
+_DATABASE_TRAILING_FAMILY_APPROACH = re.compile(
+    r"\bRWY\s?(?P<runway>\d{2}[LRC]?)\s*"
+    r"(?P<kind>\u8fdb\u8fd1\s*\u8fc7\u6e21|\u8fdb\u8fd1(?:\u53ca|\u3001)?\s*\u590d\u98de|\u8fdb\u8fd1|\u590d\u98de)\s*"
+    r"(?P<family>(?:RNP\s+)?ILS(?:\s*/\s*DME)?|RNP(?:\s+AR)?)"
+    r"(?:\s*-?\s*(?P<variant>[WXYZ]))?\b",
     re.IGNORECASE,
 )
 _AR_APPROACH_PREFIX = re.compile(
@@ -816,8 +823,10 @@ def extract_terminal_leg_evidence(text: str) -> tuple[ChartTerminalLeg, ...]:
         heading = compound_heading or _DATABASE_PROCEDURE.search(line) or _DATABASE_NUMERIC_PROCEDURE.search(line)
         adjacent_transition_heading = _DATABASE_ADJACENT_APPROACH_TRANSITION.search(line) or _DATABASE_BARE_APPROACH_TRANSITION.search(line)
         target_family_heading = _DATABASE_TARGET_FAMILY_APPROACH.search(line)
+        trailing_family_heading = _DATABASE_TRAILING_FAMILY_APPROACH.search(line)
         approach_heading = (
             target_family_heading
+            or trailing_family_heading
             or adjacent_transition_heading
             or _DATABASE_APPROACH_PROCEDURE.search(line)
         )
@@ -919,8 +928,16 @@ def extract_terminal_leg_evidence(text: str) -> tuple[ChartTerminalLeg, ...]:
                 read_following_rows=len(legs) == 1,
             )
             row = (* (leg_type, fix_ident, raw), course, altitude, turn, speed, rf_leg["center"] if rf_leg else None)
-            if (leg_type in {"CF", "CA"} and active_rows and active_rows[-1][0] != "CA"
-                    and not active_label.startswith("R")):
+            if (
+                leg_type in {"CF", "CA"}
+                and active_rows
+                and active_rows[-1][0] != "CA"
+                and active_kind not in {"进近", "进近过渡", "复飞"}
+            ):
+                # The leading-row exception applies to SID/STAR tables whose
+                # text extraction can put a CF/CA row before its heading.  An
+                # active approach or missed-approach table owns every later
+                # observable leg regardless of whether its label begins I or R.
                 pending_rows.append(row)
             elif active_label:
                 active_rows.append(row)
