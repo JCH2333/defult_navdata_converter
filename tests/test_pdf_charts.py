@@ -133,3 +133,38 @@ def test_unnamed_runway_transition_does_not_become_numeric_procedure_label():
         ("SAREX-3", "进场", "34R", "SAREX"),
         ("SAREX-3", "进场", "34R", "SZ405"),
     ]
+
+
+def test_database_combined_approach_missed_without_separator_splits_at_missed_legs():
+    text = """
+    RWY09 进近复飞Y
+    IF TL916 900 RNP1
+    TF TL104 800 RNP1
+    TF RW09 RNP0.3
+    CF TL501 087 600 RNP1
+    DF TL908 L 1500 RNP1
+    RWY09 进近复飞Z
+    IF TL103 900 RNP1
+    TF TL104 800 RNP1
+    TF RW09 RNP0.3
+    CA 087 600 RNP1
+    DF TL101 R 1200 RNP1
+    """
+
+    legs = extract_terminal_leg_evidence(text)
+
+    assert [
+        (leg.procedure_label, leg.procedure_kind, leg.leg_type, leg.fix_ident)
+        for leg in legs
+    ] == [
+        ("R09-Y", "进近", "IF", "TL916"),
+        ("R09-Y", "进近", "TF", "TL104"),
+        ("R09-Y", "进近", "TF", "RW09"),
+        ("R09-Y", "复飞", "CF", "TL501"),
+        ("R09-Y", "复飞", "DF", "TL908"),
+        ("R09-Z", "进近", "IF", "TL103"),
+        ("R09-Z", "进近", "TF", "TL104"),
+        ("R09-Z", "进近", "TF", "RW09"),
+        ("R09-Z", "复飞", "CA", None),
+        ("R09-Z", "复飞", "DF", "TL101"),
+    ]
