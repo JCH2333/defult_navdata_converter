@@ -92,7 +92,7 @@ def test_iap_coverage_counts_unique_map_disambiguation():
 
     report = analyze_iap_coverage(model)
 
-    assert report["version"] == 13
+    assert report["version"] == 14
     assert report["chart_pages"]["total"] == 2
     assert report["chart_pages"]["matched_to_primary_group"] == 2
     assert report["chart_pages"]["selected_for_role_projection"] == 1
@@ -319,6 +319,65 @@ def test_iap_coverage_prefers_unique_plain_ils_title_for_database_i_label():
         "unique_chart_without_roles": 1,
     }
     assert report["unresolved_groups"] == []
+
+
+def test_iap_coverage_prefers_plain_rnp_title_after_stronger_rules_fail():
+    model = _model_with_iap_segments()
+    source = SourceRef("Terminal/ZBDH/ZBDH-4H.pdf", 1, 1, "database-hash")
+    model.procedure_segments[:] = [
+        ProcedureSegment(
+            "ZBDH", "R26", "approach", "26", "", (
+                ChartTerminalLeg("R26", "26", "IF", "DH503", "fixture", sequence=1),
+            ), source, approach_family="RNP",
+        ),
+    ]
+    rnp_ils_source = SourceRef("Terminal/ZBDH/ZBDH-5B.pdf", 1, 1, "rnp-ils-hash")
+    plain_rnp_source = SourceRef("Terminal/ZBDH/ZBDH-9B.pdf", 1, 1, "plain-rnp-hash")
+    model.procedure_charts.extend([
+        ProcedureChart(
+            "ZBDH", "ZBDH-5B.pdf", 1, "instrument-approach-index",
+            "RNP ILS/DME y RWY26", "text", (), ("26",), (), (), (),
+            rnp_ils_source, route_fixes=(ChartRouteFix("DH503", "IF"),),
+        ),
+        ProcedureChart(
+            "ZBDH", "ZBDH-9B.pdf", 1, "instrument-approach-index",
+            "RNP RWY26", "text", (), ("26",), (), (), (),
+            plain_rnp_source, route_fixes=(ChartRouteFix("DH503", "IF"),),
+        ),
+    ])
+
+    report = analyze_iap_coverage(model)
+
+    assert report["procedure_groups"]["status_counts"] == {
+        "roles_source_plain_rnp_title_chart": 1,
+    }
+    assert report["source_plain_rnp_title_selections"] == [{
+        "airport": "ZBDH",
+        "label": "R26",
+        "runway": "26",
+        "selection": "plain_rnp_title",
+        "matching_charts": 2,
+        "chart_name": "RNP RWY26",
+        "source": {
+            "file": "Terminal/ZBDH/ZBDH-9B.pdf",
+            "row": 1,
+            "page": 1,
+            "sha256": "plain-rnp-hash",
+        },
+    }]
+    assert report["unresolved_groups"] == []
+
+    model.procedure_charts[1] = ProcedureChart(
+        "ZBDH", "ZBDH-9B.pdf", 1, "instrument-approach-index",
+        "RNP RWY26(AR)", "text", (), ("26",), (), (), (),
+        plain_rnp_source, route_fixes=(ChartRouteFix("DH503", "IF"),),
+    )
+    ar_report = analyze_iap_coverage(model)
+
+    assert ar_report["procedure_groups"]["status_counts"] == {
+        "ambiguous_chart": 1,
+    }
+    assert ar_report["source_plain_rnp_title_selections"] == []
 
 
 def test_iap_coverage_selects_unique_rnp_ar_title_qualifier_matching_primary_leg():

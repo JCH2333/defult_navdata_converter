@@ -675,6 +675,31 @@ def test_bgl_iap_chart_roles_reuse_unqualified_rnp_ar_direct_role_selection(
     assert leg.attrib["isIAF"] == "TRUE"
 
 
+def test_bgl_iap_chart_roles_reuse_plain_rnp_title_selection():
+    model = NavModel(Path("source"))
+    source = SourceRef("Terminal/ZBDH/ZBDH-4H.pdf", 1, 1, "database-hash")
+    primary = ProcedureSegment(
+        "ZBDH", "R26", "approach", "26", "", (
+            ChartTerminalLeg("R26", "26", "IF", "DH503", "fixture", sequence=1),
+        ), source,
+    )
+    model.procedure_segments.append(primary)
+    model.procedure_charts.extend([
+        ProcedureChart(
+            "ZBDH", "ZBDH-5B.pdf", 1, "instrument-approach-index",
+            "RNP ILS/DME y RWY26", "text", (), ("26",), (), (), (), source,
+            route_fixes=(ChartRouteFix("DH503", "IF"),),
+        ),
+        ProcedureChart(
+            "ZBDH", "ZBDH-9B.pdf", 1, "instrument-approach-index",
+            "RNP RWY26", "text", (), ("26",), (), (), (), source,
+            route_fixes=(ChartRouteFix("DH503", "IF"),),
+        ),
+    ])
+
+    assert _iap_chart_roles(model, primary) == {"DH503": {"IF"}}
+
+
 def test_bgl_projects_same_runway_rnp_and_rnp_ar_from_direct_primary_identity(
     tmp_path: Path,
 ):

@@ -159,6 +159,11 @@ OCR、参考成品或 Fenix；RNP AR 不能与非 AR 图题混用，带固定点
 记录 `source_dominant_direct_role_selections`。这同样只使用直接 424 文本；集合相同、
 不可比较、重复标题或混合 AR 类别仍拒绝。
 
+当此前所有直接角色、固定点和 RNP AR 规则均无法选择时，数据库主标签为 `Rxx`、候选
+恰为一张非 AR 的 `RNP` 图和一张非 AR 的 `RNP ILS` 图时，转换器只选择前者，并记录
+`source_plain_rnp_title_selections`。两图与来源腿相交的直接角色-固定点集合还必须相同且
+非空；含 AR、额外候选、角色集合不一致或非 `R` 标签一律继续拒绝。
+
 当前候选构建使用 `bounded-max4096-ocr-r80-a/b/c-20260817` 三份独立缓存。三者都记录了
 内置 `llamacpp-direct` 适配器、`max_tokens=4096`、完整运行时描述、角色-航点对和相邻
 关系，并通过严格共识。旧 `ocr-3x-deterministic-a/b/d/f-20260815` 即使角色证据相同，
