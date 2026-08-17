@@ -540,6 +540,56 @@ def test_iap_chart_roles_select_unique_map_chart_and_project_role_flags(tmp_path
     assert legs[2].attrib["isMAP"] == "TRUE"
 
 
+def test_bgl_iap_chart_roles_reuse_rnp_ar_title_qualifier_selection(tmp_path: Path):
+    model = NavModel(Path("source"))
+    source = SourceRef("Terminal/ZUNZ/ZUNZ-4G05.pdf", 1, 1, "database-hash")
+    model.airports["a"] = Airport(
+        "a", "ZUNZ", "ZUNZ", 35.0, 105.0, 1000, 18000, 180, source,
+    )
+    model.runways.append(Runway(
+        "r", "a", "05", 50.0, 10000, 150, "ASP", 1000, source,
+    ))
+    model.terminal_waypoints.extend([
+        TerminalWaypoint("first", "ZUNZ", "LZ250", 35.10, 105.0, source, "ZU"),
+        TerminalWaypoint("qualifier", "ZUNZ", "LZ302", 35.05, 105.0, source, "ZU"),
+    ])
+    primary = ProcedureSegment(
+        "ZUNZ", "R05", "approach", "05", "", (
+            ChartTerminalLeg(
+                "R05", "05", "TF", "LZ250", "fixture", sequence=1,
+                fix_region="ZU", fix_type="TERMINAL_WAYPOINT",
+                fix_latitude=35.10, fix_longitude=105.0,
+            ),
+            ChartTerminalLeg(
+                "R05", "05", "TF", "LZ302", "fixture", sequence=2,
+                fix_region="ZU", fix_type="TERMINAL_WAYPOINT",
+                fix_latitude=35.05, fix_longitude=105.0,
+            ),
+        ), source,
+    )
+    model.procedure_segments.append(primary)
+    model.procedure_charts.extend([
+        ProcedureChart(
+            "ZUNZ", "ZUNZ-9A.pdf", 1, "instrument-approach-index",
+            "RNP RWY05(AR)(DUMIX)", "text", (), ("05",), (), (), (), source,
+        ),
+        ProcedureChart(
+            "ZUNZ", "ZUNZ-9C.pdf", 1, "instrument-approach-index",
+            "RNP RWY05(AR)(LZ302)", "text", (), ("05",), (), (), (), source,
+            route_fixes=(ChartRouteFix("LZ302", "IAF"),),
+        ),
+    ])
+
+    assert _iap_chart_roles(model, primary) == {"LZ302": {"IAF"}}
+
+    output = tmp_path / "iap-title-qualifier.xml"
+    write_bglcomp_xml(model, DEFAULT_CYCLE, output, scope="airports")
+
+    leg = ET.parse(output).getroot().find("Airport/Approach/ApproachLegs/Leg[@fixIdent='LZ302']")
+    assert leg is not None
+    assert leg.attrib["isIAF"] == "TRUE"
+
+
 def test_bgl_projects_same_runway_rnp_and_rnp_ar_from_direct_primary_identity(
     tmp_path: Path,
 ):

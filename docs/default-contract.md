@@ -196,7 +196,7 @@ PDF 缓存载荷带有提取器版本。修改可影响证据解释的规则时�
 `_EVIDENCE_CACHE_VERSION`，并以新缓存进行冷读与热读一致性复核；不得依据旧缓存
 中的统计或程序分类作出发布、部署或数据覆盖决定。
 
-IAP 覆盖报告由 `iap_coverage.version=9` 标记。所有角色投影必须满足：数据库编码页
+IAP 覆盖报告由 `iap_coverage.version=10` 标记。所有角色投影必须满足：数据库编码页
 提供有序腿，仪表进近图页提供明确角色，且同一机场、跑道、程序标签的图页唯一；多图
 时优先要求主进近最后定位点在恰好一张图上明确为 `MAP/MAPT`。若该定位点不能消歧，
 仅当恰好一张候选图页对至少两个不同数据库腿给出 `IAF`、`IF`、`FAF`、`MAP` 或
@@ -227,6 +227,16 @@ SHA-256、OCR 运行时标识、命令、后端、模式、图像预处理、渲
 选择写入 `source_fixed_point_selections`，供构建和差分审计。图页关联本身不能制造角色
 证据：只有图页的直接 `IAF`、`IF`、`FAF`、`MAP` 或 `MAPT` 标识与主进近腿实际相交时，
 才可计入角色覆盖或投影到 BGL。
+
+另一项更窄的 424 直接文本规则只适用于彼此标题兼容的多张 RNP AR 图页：每一张候选
+图题都必须在 `(AR)` 后印刷至少一个非跑道限定固定点，且恰好一张图题中的限定点与该
+有序主进近数据库腿相同，才可选择该图页。候选中任一图不是这种带限定点的 RNP AR 图、
+没有命中或有多张命中时一律继续拒绝。该规则不使用 OCR、参考成品或 Fenix，选择必须
+写入 `source_title_qualifier_selections`，并且同样只有与数据库腿实际相交的图页角色
+可以写入 BGL。自动化测试：
+`test_iap_coverage_selects_unique_rnp_ar_title_qualifier_matching_primary_leg`、
+`test_iap_coverage_rejects_nonunique_or_mixed_rnp_ar_title_qualifier_matches` 和
+`test_bgl_iap_chart_roles_reuse_rnp_ar_title_qualifier_selection`。
 
 覆盖报告的 `role_evidence_used`、`role_evidence_counts` 和角色类状态同样只统计上述交集。
 同页的共享过渡、复飞或其他路径角色不能因图页已经选中而计入当前主进近，更不能生成

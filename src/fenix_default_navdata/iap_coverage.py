@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
+import re
 from typing import Any
 
 from .model import NavModel
@@ -30,6 +31,10 @@ _UNRESOLVED_STATUSES = frozenset({
     "no_matching_chart",
     "ambiguous_chart",
 })
+_RNP_AR_TITLE_QUALIFIER = re.compile(
+    r"\((?P<idents>[A-Z][A-Z0-9]{1,7}(?:/[A-Z][A-Z0-9]{1,7})*)\)",
+)
+_RUNWAY_FIX_IDENT = re.compile(r"RW\d{2}[LRC]?$")
 
 
 @dataclass(frozen=True)
@@ -345,6 +350,58 @@ def _select_iap_chart_with_direct_fixes(
     return None, None
 
 
+def _rnp_ar_title_qualifier_idents(chart: Any) -> tuple[str, ...]:
+    """Return explicit non-runway fix names printed after a RNP AR marker."""
+    title = chart.chart_name.upper()
+    marker = title.find("(AR)")
+    if "RNP" not in title or marker < 0:
+        return ()
+    return tuple(
+        ident
+        for match in _RNP_AR_TITLE_QUALIFIER.finditer(title[marker + len("(AR)"):])
+        for ident in match["idents"].split("/")
+        if not _RUNWAY_FIX_IDENT.fullmatch(ident)
+    )
+
+
+def _title_qualifier_matching_fixes(chart: Any, segment: Any) -> tuple[str, ...]:
+    required_fixes = _direct_database_fix_idents(segment)
+    return tuple(
+        ident
+        for ident in _rnp_ar_title_qualifier_idents(chart)
+        if ident in required_fixes
+    )
+
+
+def _select_iap_chart_with_rnp_ar_title_qualifier(
+    charts: list[Any],
+    segment: Any,
+) -> tuple[Any | None, str | None]:
+    """Select only one RNP AR chart whose printed qualifier is a source leg.
+
+    Some RNP AR chart titles distinguish otherwise title-compatible plates by
+    an additional parenthesized terminal fix.  This is usable only when every
+    candidate is an RNP AR title carrying such a qualifier, and exactly one
+    candidate's qualifier occurs in the ordered primary database legs.
+    """
+    if len(charts) < 2:
+        return None, None
+    qualifiers = {
+        id(chart): _rnp_ar_title_qualifier_idents(chart)
+        for chart in charts
+    }
+    if not all(qualifiers[id(chart)] for chart in charts):
+        return None, None
+    matching = [
+        chart
+        for chart in charts
+        if _title_qualifier_matching_fixes(chart, segment)
+    ]
+    if len(matching) == 1:
+        return matching[0], "rnp_ar_title_qualifier"
+    return None, None
+
+
 def _select_iap_chart(
     model: NavModel,
     charts: list[Any],
@@ -360,6 +417,11 @@ def _select_iap_chart(
     )
     if direct_fix_chart is not None:
         return direct_fix_chart, direct_fix_selection
+    title_qualifier_chart, title_qualifier_selection = (
+        _select_iap_chart_with_rnp_ar_title_qualifier(charts, segment)
+    )
+    if title_qualifier_chart is not None:
+        return title_qualifier_chart, title_qualifier_selection
     if model.iap_ocr_role_evidence is None:
         return None, None
     chart, selection = _select_iap_chart_with_roles(
@@ -532,6 +594,22 @@ def iap_chart_roles(model: NavModel, segment: Any) -> dict[str, set[str]]:
     return _chart_roles_for_segment(model, chart, segment)
 
 
+def _iap_role_status(selection: str | None, direct_fixed_selection: bool) -> str:
+    if direct_fixed_selection:
+        return "roles_source_fixed_point_chart"
+    if selection == "rnp_ar_title_qualifier":
+        return "roles_source_title_qualifier_chart"
+    return {
+        "ocr_unique_chart": "roles_ocr_unique_chart",
+        "unique_chart": "roles_unique_chart",
+        "ocr_final_mapt": "roles_ocr_final_mapt_disambiguated",
+        "final_mapt": "roles_final_mapt_disambiguated",
+        "ocr_multi_role": "roles_ocr_multi_role_disambiguated",
+        "multi_role": "roles_multi_role_disambiguated",
+        "ocr_dominant_multi_role": "roles_ocr_dominant_multi_role_disambiguated",
+    }.get(selection, "roles_dominant_multi_role_disambiguated")
+
+
 def _source_report(source: Any) -> dict[str, object]:
     return {
         "file": source.file,
@@ -598,6 +676,7 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
     unresolved: list[dict[str, object]] = []
     ocr_role_selections: list[dict[str, object]] = []
     source_fixed_point_selections: list[dict[str, object]] = []
+    source_title_qualifier_selections: list[dict[str, object]] = []
     selected_role_pages: set[tuple[str, str, int]] = set()
     matched_pages: set[tuple[str, str, int]] = set()
     complete_primary_groups = 0
@@ -677,41 +756,10 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
                 match_selection == "direct_fixed_points"
                 or selection == "direct_fixed_points"
             )
+            title_qualifier_selection = selection == "rnp_ar_title_qualifier"
             if matching_roles:
                 role_groups += 1
-                status = (
-                    "roles_source_fixed_point_chart"
-                    if direct_fixed_selection
-                    else (
-                        "roles_ocr_unique_chart"
-                        if selection == "ocr_unique_chart"
-                        else (
-                            "roles_unique_chart"
-                            if selection == "unique_chart"
-                            else (
-                                "roles_ocr_final_mapt_disambiguated"
-                                if selection == "ocr_final_mapt"
-                                else (
-                                    "roles_final_mapt_disambiguated"
-                                    if selection == "final_mapt"
-                                    else (
-                                        "roles_ocr_multi_role_disambiguated"
-                                        if selection == "ocr_multi_role"
-                                        else (
-                                            "roles_multi_role_disambiguated"
-                                            if selection == "multi_role"
-                                            else (
-                                                "roles_ocr_dominant_multi_role_disambiguated"
-                                                if selection == "ocr_dominant_multi_role"
-                                                else "roles_dominant_multi_role_disambiguated"
-                                            )
-                                        )
-                                    )
-                                )
-                            )
-                        )
-                    )
-                )
+                status = _iap_role_status(selection, direct_fixed_selection)
                 selected_role_pages.add(
                     (selected_chart.airport, selected_chart.filename, selected_chart.page)
                 )
@@ -738,6 +786,19 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
                     "source": _source_report(selected_chart.source),
                     "required_fixes": sorted(_direct_database_fix_idents(primary[0])),
                 })
+            if title_qualifier_selection and selected_chart is not None:
+                source_title_qualifier_selections.append({
+                    "airport": airport,
+                    "label": label,
+                    "runway": runway,
+                    "selection": "rnp_ar_title_qualifier",
+                    "matching_charts": len(matching),
+                    "chart_name": selected_chart.chart_name,
+                    "source": _source_report(selected_chart.source),
+                    "title_qualifier_fixes": list(
+                        _title_qualifier_matching_fixes(selected_chart, primary[0])
+                    ),
+                })
             if not matching_roles and not matching:
                 status = "no_matching_chart"
             elif not matching_roles and selected_chart is not None:
@@ -761,7 +822,7 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
     role_evidence_pages = sum(bool(chart.route_fixes) for chart in charts)
     missed_evidence_pages = sum(bool(chart.has_missed_approach) for chart in charts)
     return {
-        "version": 9,
+        "version": 10,
         "chart_pages": {
             "total": len(charts),
             "with_route_role_evidence": role_evidence_pages,
@@ -812,5 +873,6 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
         ],
         "ocr_role_selections": ocr_role_selections,
         "source_fixed_point_selections": source_fixed_point_selections,
+        "source_title_qualifier_selections": source_title_qualifier_selections,
         "unresolved_groups": unresolved,
     }

@@ -108,14 +108,14 @@ python -m fenix_default_navdata.cli iap-ocr-consensus `
   --source-root "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
   --pdf-cache "$env:LOCALAPPDATA\default_navdata_converter\pdf-evidence-cache-2608r1-r35" `
   --cache-roots `
-    "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\bounded-max4096-ocr-a-20260816" `
-    "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\bounded-max4096-ocr-b-20260816" `
-    "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\bounded-max4096-ocr-c-20260816" `
+    "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\bounded-max4096-ocr-r80-a-20260817" `
+    "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\bounded-max4096-ocr-r80-b-20260817" `
+    "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\bounded-max4096-ocr-r80-c-20260817" `
   --require-agreement `
-  --output diagnostics\iap-ocr-role-consensus-bounded-max4096.json
+  --output diagnostics\iap-ocr-role-consensus-bounded-max4096-r80.json
 ```
 
-2608R1 当前候选只能使用上述三份 `bounded-max4096` 缓存。它们均由
+2608R1 当前候选只能使用上述三份 `bounded-max4096-ocr-r80` 缓存。它们均由
 `llamacpp-direct` 生成，并完整记录适配器、`max_tokens=4096`、运行时描述、渲染设置、
 角色-航点对和邻接关系。旧 `ocr-3x-deterministic-a/b/d/f-20260815` 的角色内容虽然一致，
 但缺少完整识别设置元数据；严格共识会拒绝它们，禁止在候选构建中降级使用或与当前缓存混用。
@@ -123,7 +123,7 @@ python -m fenix_default_navdata.cli iap-ocr-consensus `
 2026-08-17 使用相同的受限配置新建了
 `bounded-max4096-ocr-r80-a/b/c-20260817` 三份完整独立缓存：34 份候选 PDF 的 34 页
 均完整重跑且未复用页面。三份缓存对候选集、源 SHA-256、运行时描述、识别设置、角色-航点
-对和邻接关系达到 `agreement_ratio=1.0`，得到 13 条角色证据、7 个分组和 8 个候选页。
+对和邻接关系达到 `agreement_ratio=1.0`，得到 14 条角色证据、8 个分组和 9 个候选页。
 以 r80 构建的 IAP 投影与使用 2026-08-16 受限缓存的 r78 逐文件 SHA-256 相同，因此不得
 在未改变可测试解析规则或运行时配置的前提下重复执行这 34 页 OCR。
 
@@ -133,7 +133,7 @@ python -m fenix_default_navdata.cli iap-ocr-consensus `
 它不接受 `no_matching_chart` 或 `no_unique_primary` 作为可投影结果，不创建程序或航段，
 且不会解除测试版、参考字节比对或实机验证门禁。
 
-2608R1 的 A/B/D 三份独立缓存通过了严格共识：22 个分组、50 个候选页和 17 条
+历史 2608R1 的 A/B/D 三份独立缓存曾通过严格共识：22 个分组、50 个候选页和 17 条
 角色-航点证据及其相邻关系完全一致。历史 C 缓存虽然角色证据相同，但其识别设置将
 命令记录为 `E:\python\3.12\Scripts\ocr-skill.exe`，而 A/B 使用 `ocr-skill`，
 因此被完整识别设置门禁排除。D 在 `ZWHJ-5B` 页遇到本地引擎默认 300 秒内部等待后，

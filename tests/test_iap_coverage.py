@@ -92,7 +92,7 @@ def test_iap_coverage_counts_unique_map_disambiguation():
 
     report = analyze_iap_coverage(model)
 
-    assert report["version"] == 9
+    assert report["version"] == 10
     assert report["chart_pages"]["total"] == 2
     assert report["chart_pages"]["matched_to_primary_group"] == 2
     assert report["chart_pages"]["selected_for_role_projection"] == 1
@@ -285,6 +285,96 @@ def test_iap_coverage_selects_ambiguous_title_match_by_complete_direct_fixes():
         "required_fixes": ["FINAL", "FIRST"],
     }]
     assert report["unresolved_groups"] == []
+
+
+def test_iap_coverage_selects_unique_rnp_ar_title_qualifier_matching_primary_leg():
+    model = _model_with_iap_segments()
+    source = SourceRef("Terminal/ZUNZ/ZUNZ-4G05.pdf", 1, 1, "database-hash")
+    model.procedure_segments[0] = ProcedureSegment(
+        "ZUNZ", "R05", "approach", "05", "", (
+            ChartTerminalLeg("R05", "05", "TF", "LZ250", "fixture", sequence=1),
+            ChartTerminalLeg("R05", "05", "TF", "LZ302", "fixture", sequence=2),
+        ), source,
+    )
+    model.procedure_segments[1] = ProcedureSegment(
+        "ZUNZ", "R05", "missed", "05", "", (), source,
+    )
+    other_source = SourceRef("Terminal/ZUNZ/ZUNZ-9A.pdf", 1, 1, "other-hash")
+    selected_source = SourceRef("Terminal/ZUNZ/ZUNZ-9C.pdf", 1, 1, "selected-hash")
+    model.procedure_charts.extend([
+        ProcedureChart(
+            "ZUNZ", "ZUNZ-9A.pdf", 1, "instrument-approach-index",
+            "RNP RWY05(AR)(DUMIX)", "text", (), ("05",), (), (), (), other_source,
+        ),
+        ProcedureChart(
+            "ZUNZ", "ZUNZ-9C.pdf", 1, "instrument-approach-index",
+            "RNP RWY05(AR)(LZ302)", "text", (), ("05",), (), (), (), selected_source,
+            route_fixes=(ChartRouteFix("LZ302", "IAF"),),
+        ),
+    ])
+
+    report = analyze_iap_coverage(model)
+
+    assert report["procedure_groups"]["status_counts"] == {
+        "roles_source_title_qualifier_chart": 1,
+    }
+    assert report["role_evidence_counts"] == {"IAF": 1}
+    assert report["source_title_qualifier_selections"] == [{
+        "airport": "ZUNZ",
+        "label": "R05",
+        "runway": "05",
+        "selection": "rnp_ar_title_qualifier",
+        "matching_charts": 2,
+        "chart_name": "RNP RWY05(AR)(LZ302)",
+        "source": {
+            "file": "Terminal/ZUNZ/ZUNZ-9C.pdf",
+            "row": 1,
+            "page": 1,
+            "sha256": "selected-hash",
+        },
+        "title_qualifier_fixes": ["LZ302"],
+    }]
+    assert report["unresolved_groups"] == []
+
+
+def test_iap_coverage_rejects_nonunique_or_mixed_rnp_ar_title_qualifier_matches():
+    model = _model_with_iap_segments()
+    source = SourceRef("Terminal/ZUNZ/ZUNZ-4G05.pdf", 1, 1, "database-hash")
+    model.procedure_segments[0] = ProcedureSegment(
+        "ZUNZ", "R05", "approach", "05", "", (
+            ChartTerminalLeg("R05", "05", "TF", "LZ250", "fixture", sequence=1),
+            ChartTerminalLeg("R05", "05", "TF", "LZ302", "fixture", sequence=2),
+        ), source,
+    )
+    model.procedure_segments[1] = ProcedureSegment(
+        "ZUNZ", "R05", "missed", "05", "", (), source,
+    )
+    model.procedure_charts.extend([
+        ProcedureChart(
+            "ZUNZ", "first.pdf", 1, "instrument-approach-index",
+            "RNP RWY05(AR)(LZ250)", "text", (), ("05",), (), (), (), source,
+        ),
+        ProcedureChart(
+            "ZUNZ", "second.pdf", 1, "instrument-approach-index",
+            "RNP RWY05(AR)(LZ302)", "text", (), ("05",), (), (), (), source,
+        ),
+    ])
+
+    report = analyze_iap_coverage(model)
+
+    assert report["procedure_groups"]["status_counts"] == {"ambiguous_chart": 1}
+    assert report["source_title_qualifier_selections"] == []
+    assert report["unresolved_groups"][0]["status"] == "ambiguous_chart"
+
+    model.procedure_charts[1] = ProcedureChart(
+        "ZUNZ", "second.pdf", 1, "instrument-approach-index",
+        "RNP RWY05", "text", (), ("05",), (), (), (), source,
+    )
+    mixed_report = analyze_iap_coverage(model)
+    assert mixed_report["procedure_groups"]["status_counts"] == {
+        "ambiguous_chart": 1,
+    }
+    assert mixed_report["source_title_qualifier_selections"] == []
 
 
 def test_iap_coverage_prefers_direct_role_selection_before_complete_direct_fixes():
