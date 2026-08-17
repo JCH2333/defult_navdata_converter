@@ -8,6 +8,7 @@ from fenix_default_navdata.source import (
     _load_general_document_airway_minimum_altitudes,
     _load_terminal_landing_aids,
     _promote_shared_terminal_coordinate_waypoints,
+    _project_same_page_rnp_primary_to_ils,
     _retain_database_referenced_terminal_waypoints,
     _surface,
     audit_enroute_navaid_ocr_source,
@@ -26,13 +27,16 @@ from fenix_default_navdata.model import (
     AirwayLeg,
     ChartRouteFix,
     ChartStandardProcedureRoute,
+    ChartTerminalLeg,
     NavModel,
     Navaid,
     ProcedureChart,
+    ProcedureSegment,
     SourceRef,
     TerminalWaypoint,
     Waypoint,
 )
+from fenix_default_navdata.iap_coverage import analyze_iap_coverage
 
 
 def test_general_document_airway_minimum_altitude_projects_only_unique_424_leg(
@@ -238,6 +242,176 @@ def test_direct_iap_role_alone_does_not_retain_terminal_coordinate_waypoint() ->
     assert model.terminal_waypoints == []
 
 
+def test_projects_same_page_rnp_primary_to_ils_without_rnp_missed_legs() -> None:
+    model = NavModel(Path("raw"))
+    database_source = SourceRef(
+        "Terminal/ZPLJ/ZPLJ-0C-04.pdf", 1, 1, "database-hash",
+    )
+    ils_chart_source = SourceRef(
+        "Terminal/ZPLJ/ZPLJ-5Z02.pdf", 1, 1, "ils-chart-hash",
+    )
+    model.procedure_segments.extend((
+        ProcedureSegment(
+            "ZPLJ", "R02-Z", "approach", "02", "", (
+                ChartTerminalLeg(
+                    "R02-Z", "02", "IF", "LJ601", "fixture",
+                    procedure_kind="approach", approach_family="RNP",
+                ),
+                ChartTerminalLeg(
+                    "R02-Z", "02", "TF", "RW02", "fixture",
+                    procedure_kind="approach", approach_family="RNP",
+                ),
+            ), database_source, approach_family="RNP",
+        ),
+        ProcedureSegment(
+            "ZPLJ", "R02-Z", "missed", "02", "", (
+                ChartTerminalLeg(
+                    "R02-Z", "02", "DF", "RNPMA", "fixture",
+                    procedure_kind="missed", approach_family="RNP",
+                ),
+            ), database_source, approach_family="RNP",
+        ),
+        ProcedureSegment(
+            "ZPLJ", "I02-Z", "missed", "02", "", (
+                ChartTerminalLeg(
+                    "I02-Z", "02", "DF", "ILSMA", "fixture",
+                    procedure_kind="missed", approach_family="ILS",
+                ),
+            ), database_source, approach_family="ILS",
+        ),
+    ))
+    model.procedure_charts.append(ProcedureChart(
+        "ZPLJ", "ZPLJ-5Z02.pdf", 1, "instrument-approach-index",
+        "RNP ILS/DME z RWY02", "text", (), ("02",), (), (), (),
+        ils_chart_source,
+    ))
+
+    _project_same_page_rnp_primary_to_ils(model)
+
+    projected = [
+        segment
+        for segment in model.procedure_segments
+        if segment.label == "I02-Z" and segment.kind == "approach"
+    ]
+    assert len(projected) == 1
+    assert projected[0].approach_family == "ILS"
+    assert [leg.fix_ident for leg in projected[0].legs] == ["LJ601", "RW02"]
+    assert all(leg.procedure_label == "I02-Z" for leg in projected[0].legs)
+    assert all(leg.approach_family == "ILS" for leg in projected[0].legs)
+    assert "RNPMA" not in [leg.fix_ident for leg in projected[0].legs]
+    assert model.shared_ils_primary_projections == [{
+        "airport": "ZPLJ",
+        "label": "I02-Z",
+        "runway": "02",
+        "selection": "same_database_page_unique_rnp_primary",
+        "rnp_label": "R02-Z",
+        "primary_legs": 2,
+        "database_source": {
+            "file": "Terminal/ZPLJ/ZPLJ-0C-04.pdf",
+            "row": 1,
+            "page": 1,
+            "sha256": "database-hash",
+        },
+        "ils_missed_source": {
+            "file": "Terminal/ZPLJ/ZPLJ-0C-04.pdf",
+            "row": 1,
+            "page": 1,
+            "sha256": "database-hash",
+        },
+        "chart_name": "RNP ILS/DME z RWY02",
+        "chart_source": {
+            "file": "Terminal/ZPLJ/ZPLJ-5Z02.pdf",
+            "row": 1,
+            "page": 1,
+            "sha256": "ils-chart-hash",
+        },
+    }]
+    report = analyze_iap_coverage(model)
+    assert report["shared_ils_primary_projection_count"] == 1
+    assert report["unresolved_groups"] == []
+
+
+@pytest.mark.parametrize(
+    ("rnp_source", "add_second_rnp", "add_ils_chart", "add_ils_primary"),
+    (
+        (
+            SourceRef("Terminal/ZPLJ/ZPLJ-0C-04.pdf", 1, 2, "database-hash"),
+            False,
+            True,
+            False,
+        ),
+        (
+            SourceRef("Terminal/ZPLJ/ZPLJ-0C-04.pdf", 1, 1, "database-hash"),
+            True,
+            True,
+            False,
+        ),
+        (
+            SourceRef("Terminal/ZPLJ/ZPLJ-0C-04.pdf", 1, 1, "database-hash"),
+            False,
+            False,
+            False,
+        ),
+        (
+            SourceRef("Terminal/ZPLJ/ZPLJ-0C-04.pdf", 1, 1, "database-hash"),
+            False,
+            True,
+            True,
+        ),
+    ),
+)
+def test_same_page_rnp_primary_to_ils_rejects_nonunique_or_incomplete_evidence(
+    rnp_source: SourceRef,
+    add_second_rnp: bool,
+    add_ils_chart: bool,
+    add_ils_primary: bool,
+) -> None:
+    model = NavModel(Path("raw"))
+    ils_source = SourceRef(
+        "Terminal/ZPLJ/ZPLJ-0C-04.pdf", 1, 1, "database-hash",
+    )
+    model.procedure_segments.extend((
+        ProcedureSegment(
+            "ZPLJ", "R02-Z", "approach", "02", "", (
+                ChartTerminalLeg("R02-Z", "02", "TF", "RW02", "fixture"),
+            ), rnp_source, approach_family="RNP",
+        ),
+        ProcedureSegment(
+            "ZPLJ", "I02-Z", "missed", "02", "", (
+                ChartTerminalLeg("I02-Z", "02", "DF", "ILSMA", "fixture"),
+            ), ils_source, approach_family="ILS",
+        ),
+    ))
+    if add_second_rnp:
+        model.procedure_segments.append(ProcedureSegment(
+            "ZPLJ", "R02-Z", "approach", "02", "", (
+                ChartTerminalLeg("R02-Z", "02", "TF", "RW02B", "fixture"),
+            ), ils_source, approach_family="RNP",
+        ))
+    if add_ils_primary:
+        model.procedure_segments.append(ProcedureSegment(
+            "ZPLJ", "I02-Z", "approach", "02", "", (
+                ChartTerminalLeg("I02-Z", "02", "TF", "RW02", "fixture"),
+            ), ils_source, approach_family="ILS",
+        ))
+    if add_ils_chart:
+        model.procedure_charts.append(ProcedureChart(
+            "ZPLJ", "ZPLJ-5Z02.pdf", 1, "instrument-approach-index",
+            "RNP ILS/DME z RWY02", "text", (), ("02",), (), (), (),
+            SourceRef("Terminal/ZPLJ/ZPLJ-5Z02.pdf", 1, 1, "ils-chart-hash"),
+        ))
+
+    existing_ils_primaries = [
+        segment for segment in model.procedure_segments
+        if segment.label == "I02-Z" and segment.kind == "approach"
+    ]
+    _project_same_page_rnp_primary_to_ils(model)
+
+    assert [
+        segment for segment in model.procedure_segments
+        if segment.label == "I02-Z" and segment.kind == "approach"
+    ] == existing_ils_primaries
+    assert model.shared_ils_primary_projections == []
 def test_standard_route_table_retains_matching_terminal_coordinate_waypoint() -> None:
     model = NavModel(Path("raw"))
     source = SourceRef("Terminal/ZBAA/Charts.csv", page=1)

@@ -29,6 +29,7 @@ from fenix_default_navdata.model import (
     Waypoint,
 )
 from fenix_default_navdata.profile import DEFAULT_CYCLE
+from fenix_default_navdata.source import _project_same_page_rnp_primary_to_ils
 
 
 def test_bgl_xml_is_deterministic(tmp_path: Path):
@@ -501,6 +502,80 @@ def test_airport_projection_maps_raw_chinese_procedure_kinds_and_iap_sections(
     missed = approach.find("MissedApproachLegs")
     assert missed is not None
     assert [leg.attrib["fixIdent"] for leg in missed.findall("Leg")] == ["MISSED", "MAHF"]
+
+
+def test_bgl_projects_shared_rnp_primary_as_ils_without_rnp_missed_legs(
+    tmp_path: Path,
+):
+    model = NavModel(Path("source"))
+    database_source = SourceRef(
+        "Terminal/ZPLJ/ZPLJ-0C-04.pdf", 1, 1, "database-hash",
+    )
+    model.airports["airport"] = Airport(
+        "airport", "ZPLJ", "ZPLJ", 26.6, 100.2, 1000, 18000, 180,
+        database_source,
+    )
+    model.runways.append(Runway(
+        "runway", "airport", "02", 20.0, 10000, 150, "ASP", 1000,
+        database_source,
+    ))
+    model.terminal_waypoints.extend((
+        TerminalWaypoint(
+            "initial", "ZPLJ", "LJ601", 26.61, 100.21, database_source, "ZP",
+        ),
+        TerminalWaypoint(
+            "runway", "ZPLJ", "RW02", 26.60, 100.20, database_source, "ZP",
+        ),
+        TerminalWaypoint(
+            "rnp-missed", "ZPLJ", "RNPMA", 26.62, 100.22, database_source, "ZP",
+        ),
+        TerminalWaypoint(
+            "ils-missed", "ZPLJ", "ILSMA", 26.63, 100.23, database_source, "ZP",
+        ),
+    ))
+    model.procedure_segments.extend((
+        ProcedureSegment(
+            "ZPLJ", "R02-Z", "approach", "02", "", (
+                ChartTerminalLeg("R02-Z", "02", "IF", "LJ601", "fixture"),
+                ChartTerminalLeg("R02-Z", "02", "TF", "RW02", "fixture"),
+            ), database_source, approach_family="RNP",
+        ),
+        ProcedureSegment(
+            "ZPLJ", "R02-Z", "missed", "02", "", (
+                ChartTerminalLeg("R02-Z", "02", "DF", "RNPMA", "fixture"),
+            ), database_source, approach_family="RNP",
+        ),
+        ProcedureSegment(
+            "ZPLJ", "I02-Z", "missed", "02", "", (
+                ChartTerminalLeg("I02-Z", "02", "DF", "ILSMA", "fixture"),
+            ), database_source, approach_family="ILS",
+        ),
+    ))
+    model.procedure_charts.append(ProcedureChart(
+        "ZPLJ", "ZPLJ-5Z02.pdf", 1, "instrument-approach-index",
+        "RNP ILS/DME z RWY02", "text", (), ("02",), (), (), (),
+        SourceRef("Terminal/ZPLJ/ZPLJ-5Z02.pdf", 1, 1, "ils-chart-hash"),
+    ))
+
+    _project_same_page_rnp_primary_to_ils(model)
+    output = tmp_path / "shared-rnp-ils.xml"
+    write_bglcomp_xml(model, DEFAULT_CYCLE, output, scope="airports")
+
+    airport = ET.parse(output).getroot().find("Airport")
+    assert airport is not None
+    ils = next(
+        approach
+        for approach in airport.findall("Approach")
+        if approach.attrib["type"] == "ILS" and approach.attrib.get("suffix") == "Z"
+    )
+    assert [
+        leg.attrib["fixIdent"]
+        for leg in ils.findall("ApproachLegs/Leg")
+    ] == ["LJ601", "RW02"]
+    assert [
+        leg.attrib["fixIdent"]
+        for leg in ils.findall("MissedApproachLegs/Leg")
+    ] == ["ILSMA"]
 
 
 def test_iap_chart_roles_select_unique_map_chart_and_project_role_flags(tmp_path: Path):

@@ -1162,7 +1162,7 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
     role_evidence_pages = sum(bool(chart.route_fixes) for chart in charts)
     missed_evidence_pages = sum(bool(chart.has_missed_approach) for chart in charts)
     return {
-        "version": 15,
+        "version": 16,
         "chart_pages": {
             "total": len(charts),
             "with_route_role_evidence": role_evidence_pages,
@@ -1221,5 +1221,9 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
         "source_dominant_direct_role_selections": source_dominant_direct_role_selections,
         "source_plain_rnp_title_selections": source_plain_rnp_title_selections,
         "source_unique_first_if_selections": source_unique_first_if_selections,
+        "shared_ils_primary_projection_count": len(
+            model.shared_ils_primary_projections,
+        ),
+        "shared_ils_primary_projections": model.shared_ils_primary_projections,
         "unresolved_groups": unresolved,
     }

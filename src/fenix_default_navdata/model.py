@@ -415,6 +415,11 @@ class NavModel:
     # Audit-only summary of source-backed IAP coverage.  Target adapters must
     # not treat role evidence as proof that every chart leg was decoded.
     iap_coverage: dict[str, object] = field(default_factory=dict)
+    # Source-only ILS primaries projected from a same-page RNP database
+    # primary when the ILS database group explicitly contains only missed legs.
+    shared_ils_primary_projections: list[dict[str, object]] = field(
+        default_factory=list,
+    )
     # Optional source-PDF OCR role evidence accepted through independent cache
     # consensus. It can only distinguish an existing matching IAP chart page.
     iap_ocr_role_evidence: IapOcrRoleEvidence | None = None

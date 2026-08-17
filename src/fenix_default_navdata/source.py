@@ -11,7 +11,7 @@ from pathlib import Path
 from pypinyin import lazy_pinyin
 import pymupdf
 
-from .iap_coverage import analyze_iap_coverage
+from .iap_coverage import analyze_iap_coverage, iap_section_kind
 from .general_docs import (
     ENROUTE_KEY_POINT_CACHE_DIRECTORY,
     ENROUTE_KEY_POINT_DOCUMENT,
@@ -32,6 +32,7 @@ from .pdf_charts import (
     extract_airport_coordinate_pages,
     extract_airport_database_charts,
     extract_airport_standard_procedure_charts,
+    approach_procedure_name_candidates,
 )
 
 
@@ -60,6 +61,7 @@ _AIRWAY_ENDPOINT_SOURCE_TYPES = {
 _ACC_NAME = re.compile(r"([\u4e00-\u9fff]+)ACC")
 _EARTH_RADIUS_NM = 3440.065
 _FIR_BOUNDARY_MIN_DISTANCE_NM = 5.0
+_ILS_APPROACH_LABEL = re.compile(r"^I\d{2}[LRC]?(?:-?[WXYZ])?$")
 
 
 @dataclass(frozen=True)
@@ -1676,6 +1678,7 @@ def load_naip(
         _build_database_holdings(model)
         _retain_database_referenced_terminal_waypoints(model)
         _load_terminal_approach_charts(model, pdf_cache)
+        _project_same_page_rnp_primary_to_ils(model)
         _reject_unparsed_charts(model)
     return model
 
@@ -2136,6 +2139,126 @@ def _load_terminal_approach_charts(model: NavModel, pdf_cache: Path | None = Non
     for airport_directory in sorted(path for path in terminal.iterdir() if path.is_dir()):
         extractor = extract_airport_approach_charts
         model.procedure_charts.extend(extractor(airport_directory) if pdf_cache is None else extractor(airport_directory, pdf_cache))
+
+
+def _source_page_key(source: SourceRef) -> tuple[str, int | None, str | None]:
+    """Compare a database-code page without treating row positions as identity."""
+    return source.file, source.page, source.sha256
+
+
+def _project_same_page_rnp_primary_to_ils(model: NavModel) -> None:
+    """Project a strictly shared RNP primary into an explicit ILS missed group.
+
+    Some 2608 database coding pages print one RNP main approach followed by a
+    distinct RNP ILS/DME missed section.  The ILS group has no main section,
+    but its indexed ILS plate and the same database page establish that the
+    RNP primary is shared.  This is deliberately narrower than generic shared
+    IAP section assignment: it never carries a RNP missed section to ILS.
+    """
+    groups: dict[tuple[str, str, str], list[ProcedureSegment]] = {}
+    for segment in model.procedure_segments:
+        if iap_section_kind(segment) in {"approach_transition", "approach", "missed"}:
+            groups.setdefault(
+                (segment.airport, segment.label, segment.runway), [],
+            ).append(segment)
+
+    additions: list[ProcedureSegment] = []
+    projections: list[dict[str, object]] = []
+    for (airport, ils_label, runway), ils_sections in sorted(groups.items()):
+        if not _ILS_APPROACH_LABEL.fullmatch(ils_label):
+            continue
+        if not ils_sections or any(
+            iap_section_kind(segment) != "missed"
+            or segment.approach_family.upper() != "ILS"
+            for segment in ils_sections
+        ):
+            continue
+
+        source_pages = {_source_page_key(segment.source) for segment in ils_sections}
+        if len(source_pages) != 1:
+            continue
+        rnp_label = "R" + ils_label[1:]
+        rnp_candidates = [
+            segment
+            for segment in groups.get((airport, rnp_label, runway), [])
+            if (
+                iap_section_kind(segment) == "approach"
+                and segment.approach_family.upper() == "RNP"
+                and _source_page_key(segment.source) in source_pages
+            )
+        ]
+        if len(rnp_candidates) != 1:
+            continue
+        rnp_primary = rnp_candidates[0]
+
+        matching_ils_charts = [
+            chart
+            for chart in model.procedure_charts
+            if (
+                chart.airport == airport
+                and chart.chart_type == "instrument-approach-index"
+                and runway in chart.runways
+                and ils_label
+                in approach_procedure_name_candidates(
+                    chart.chart_name, chart.runways, chart.airport,
+                )
+            )
+        ]
+        if len(matching_ils_charts) != 1:
+            continue
+        chart = matching_ils_charts[0]
+        legs = tuple(
+            replace(
+                leg,
+                procedure_label=ils_label,
+                procedure_kind=rnp_primary.kind,
+                runway=runway,
+                approach_family="ILS",
+            )
+            for leg in rnp_primary.legs
+        )
+        if not legs:
+            continue
+        additions.append(ProcedureSegment(
+            airport,
+            ils_label,
+            rnp_primary.kind,
+            runway,
+            rnp_primary.transition,
+            legs,
+            rnp_primary.source,
+            rnp_primary.fenix_name,
+            "ILS",
+        ))
+        projections.append({
+            "airport": airport,
+            "label": ils_label,
+            "runway": runway,
+            "selection": "same_database_page_unique_rnp_primary",
+            "rnp_label": rnp_primary.label,
+            "primary_legs": len(legs),
+            "database_source": {
+                "file": rnp_primary.source.file,
+                "row": rnp_primary.source.row,
+                "page": rnp_primary.source.page,
+                "sha256": rnp_primary.source.sha256,
+            },
+            "ils_missed_source": {
+                "file": ils_sections[0].source.file,
+                "row": ils_sections[0].source.row,
+                "page": ils_sections[0].source.page,
+                "sha256": ils_sections[0].source.sha256,
+            },
+            "chart_name": chart.chart_name,
+            "chart_source": {
+                "file": chart.source.file,
+                "row": chart.source.row,
+                "page": chart.source.page,
+                "sha256": chart.source.sha256,
+            },
+        })
+    model.procedure_segments.extend(additions)
+    model.shared_ils_primary_projections.extend(projections)
 
 
 def _load_terminal_standard_procedure_charts(model: NavModel, pdf_cache: Path | None = None) -> None:
