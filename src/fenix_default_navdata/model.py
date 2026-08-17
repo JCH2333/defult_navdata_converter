@@ -199,6 +199,7 @@ class AirwayLeg:
     # the source PBN value in RTE_SEG.CODE_TYPE because the two vocabularies
     # have different meanings.
     source_code_type: str = ""
+    source_airspace_remark: str = ""
     source_segment_rnp_designator: str = ""
     source_enroute_location_type: str = ""
     source_segment_minimum_crossing_altitude: str = ""

@@ -847,9 +847,9 @@ def test_load_naip_separates_source_pbn_from_target_route_type_and_links_airway_
 ) -> None:
     root = _minimal_naip_root(tmp_path, "沥青")
     _write_csv(root, "RTE_SEG.csv", "\n".join((
-        "RTE_SEG_ID,EN_ROUTE_RTE_ID,SEGMENT_ID,TXT_DESIG,VAL_SORT,CODE_POINT_START,CODE_POINT_END,GEO_LAT_START_ACCURACY,GEO_LONG_START_ACCURACY,GEO_LAT_END_ACCURACY,GEO_LONG_END_ACCURACY,CODE_FIR_START,CODE_FIR_END,CODE_DIR,CODE_TYPE,CODE_TYPE_START,CODE_TYPE_END",
-        "rte-seg-1,route-1,segment-1,R1,1,DP01,DP02,N350000,E1050000,N360000,E1060000,,,B,RNAV2,DESIGNATED_POINT,DESIGNATED_POINT",
-        "rte-seg-2,route-1,missing-segment,R1,2,DP02,DP03,N360000,E1060000,N370000,E1070000,,,B,RNP4,DESIGNATED_POINT,DESIGNATED_POINT",
+        "RTE_SEG_ID,EN_ROUTE_RTE_ID,SEGMENT_ID,TXT_DESIG,VAL_SORT,CODE_POINT_START,CODE_POINT_END,GEO_LAT_START_ACCURACY,GEO_LONG_START_ACCURACY,GEO_LAT_END_ACCURACY,GEO_LONG_END_ACCURACY,CODE_FIR_START,CODE_FIR_END,CODE_DIR,CODE_TYPE,CODE_TYPE_START,CODE_TYPE_END,Airspace_Remark",
+        "rte-seg-1,route-1,segment-1,R1,1,DP01,DP02,N350000,E1050000,N360000,E1060000,,,B,RNAV2,DESIGNATED_POINT,DESIGNATED_POINT,ACC-A",
+        "rte-seg-2,route-1,missing-segment,R1,2,DP02,DP03,N360000,E1060000,N370000,E1070000,,,B,RNP4,DESIGNATED_POINT,DESIGNATED_POINT,",
     )))
     _write_csv(root, "SEGMENT.csv", "\n".join((
         "SEGMENT_ID,TXT_DESIG_RNP,VAL_MTCA",
@@ -865,6 +865,7 @@ def test_load_naip_separates_source_pbn_from_target_route_type_and_links_airway_
     first, second = model.airway_legs
     assert first.route_type == ""
     assert first.source_code_type == "RNAV2"
+    assert first.source_airspace_remark == "ACC-A"
     assert first.source_segment_rnp_designator == "P4"
     assert first.source_enroute_location_type == "国际区域导航航路"
     assert first.source_segment_minimum_crossing_altitude == "2300"
@@ -880,6 +881,11 @@ def test_load_naip_separates_source_pbn_from_target_route_type_and_links_airway_
     summary = summarize_airway_source_metadata(model)
     assert summary["source_code_type"] == {"RNAV2": 1, "RNP4": 1}
     assert summary["target_route_type_hint"] == {"<unresolved>": 2}
+    assert summary["source_airspace_remark"] == {
+        "populated": 1,
+        "blank": 1,
+        "distinct_nonblank": 1,
+    }
     assert summary["links"] == {
         "segment_found": 1,
         "segment_missing": 1,

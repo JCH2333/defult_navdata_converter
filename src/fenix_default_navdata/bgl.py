@@ -1815,13 +1815,16 @@ def _append_enroute(
             waypointRegion=identity[1],
             waypointIdent=identity[2],
         ))
-        grouped_routes: dict[str, tuple[str, list[tuple[str, dict[str, str]]]]] = {}
+        grouped_routes: dict[
+            tuple[str, str],
+            list[tuple[str, dict[str, str]]],
+        ] = {}
         for route_name, route_type, direction, attrs in route_children.get(identity, []):
-            grouped_routes.setdefault(route_name, (route_type, []))[1].append(
+            grouped_routes.setdefault((route_name, route_type), []).append(
                 (direction, attrs)
             )
-        for route_name in sorted(grouped_routes):
-            route_type, children = grouped_routes[route_name]
+        for route_name, route_type in sorted(grouped_routes):
+            children = grouped_routes[(route_name, route_type)]
             route = ET.SubElement(point_element, "Route", _attrs(
                 name=route_name,
                 routeType=route_type,

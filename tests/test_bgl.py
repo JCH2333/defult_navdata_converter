@@ -110,6 +110,38 @@ def test_enroute_projection_does_not_reduce_links_from_raw_424_code_dir(
         assert [child.tag for child in end_route] == ["Previous"]
 
 
+def test_enroute_projection_keeps_same_name_route_types_separate(tmp_path: Path):
+    model = NavModel(Path("source"))
+    source = SourceRef("RTE_SEG.csv", 2)
+    model.airway_legs.extend((
+        AirwayLeg(
+            "MIX1", 1, "MIXA", "MIXB", source, route_type="BOTH",
+            start_latitude=35.0, start_longitude=105.0,
+            end_latitude=35.1, end_longitude=105.1,
+            start_country="ZB", end_country="ZB",
+        ),
+        AirwayLeg(
+            "MIX1", 2, "MIXA", "MIXC", source, route_type="VICTOR",
+            start_latitude=35.0, start_longitude=105.0,
+            end_latitude=35.2, end_longitude=105.2,
+            start_country="ZB", end_country="ZB",
+        ),
+    ))
+
+    output = tmp_path / "mixed-route-types.xml"
+    write_bglcomp_xml(model, DEFAULT_CYCLE, output, scope="enroute")
+
+    root = ET.parse(output).getroot()
+    routes = root.findall("./Waypoint[@waypointIdent='MIXA']/Route[@name='MIX1']")
+    assert [
+        (route.attrib["routeType"], [child.tag for child in route])
+        for route in routes
+    ] == [
+        ("BOTH", ["Next"]),
+        ("VICTOR", ["Next"]),
+    ]
+
+
 def test_enroute_projection_romanizes_chinese_navaid_names(tmp_path: Path):
     model = NavModel(Path("source"))
     source = SourceRef("VOR.csv", 2)

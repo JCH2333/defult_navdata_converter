@@ -168,6 +168,10 @@ def summarize_airway_source_metadata(model: NavModel) -> dict[str, object]:
         leg.source_enroute_location_type or "<blank>"
         for leg in model.airway_legs
     )
+    airspace_remarks = [
+        leg.source_airspace_remark.strip()
+        for leg in model.airway_legs
+    ]
     target_hints = Counter(
         leg.route_type or "<unresolved>" for leg in model.airway_legs
     )
@@ -176,6 +180,11 @@ def summarize_airway_source_metadata(model: NavModel) -> dict[str, object]:
         "source_code_type": dict(sorted(code_types.items())),
         "source_segment_rnp_designator": dict(sorted(segment_rnp.items())),
         "source_enroute_location_type": dict(sorted(location_types.items())),
+        "source_airspace_remark": {
+            "populated": sum(bool(value) for value in airspace_remarks),
+            "blank": sum(not value for value in airspace_remarks),
+            "distinct_nonblank": len({value for value in airspace_remarks if value}),
+        },
         "target_route_type_hint": dict(sorted(target_hints.items())),
         "links": {
             "segment_found": sum(leg.source_segment_found for leg in model.airway_legs),
@@ -1425,6 +1434,9 @@ def load_naip(
                 start_type=row.get("CODE_TYPE_START") or "",
                 end_type=row.get("CODE_TYPE_END") or "",
                 source_code_type=(row.get("CODE_TYPE") or "").strip(),
+                source_airspace_remark=(
+                    row.get("Airspace_Remark") or ""
+                ).strip(),
                 source_segment_rnp_designator=(
                     (segment.get("TXT_DESIG_RNP") or "").strip()
                     if segment is not None else ""
