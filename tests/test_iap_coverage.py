@@ -92,7 +92,7 @@ def test_iap_coverage_counts_unique_map_disambiguation():
 
     report = analyze_iap_coverage(model)
 
-    assert report["version"] == 14
+    assert report["version"] == 15
     assert report["chart_pages"]["total"] == 2
     assert report["chart_pages"]["matched_to_primary_group"] == 2
     assert report["chart_pages"]["selected_for_role_projection"] == 1
@@ -378,6 +378,75 @@ def test_iap_coverage_prefers_plain_rnp_title_after_stronger_rules_fail():
         "ambiguous_chart": 1,
     }
     assert ar_report["source_plain_rnp_title_selections"] == []
+
+
+def test_iap_coverage_selects_unique_first_source_if_chart():
+    model = _model_with_iap_segments()
+    source = SourceRef("Terminal/ZWTK/ZWTK-0C-3.pdf", 1, 1, "database-hash")
+    model.procedure_segments[:] = [
+        ProcedureSegment(
+            "ZWTK", "R33-Z", "approach", "33", "", (
+                ChartTerminalLeg("R33-Z", "33", "IF", "TK802", "fixture", sequence=1),
+                ChartTerminalLeg("R33-Z", "33", "RF", "TK801", "fixture", sequence=2),
+                ChartTerminalLeg("R33-Z", "33", "TF", "TK808", "fixture", sequence=3),
+            ), source, approach_family="RNP_AR",
+        ),
+    ]
+    ils_source = SourceRef("Terminal/ZWTK/ZWTK-5L-1.pdf", 1, 1, "ils-hash")
+    rnp_source = SourceRef("Terminal/ZWTK/ZWTK-5R-3.pdf", 1, 1, "rnp-hash")
+    model.procedure_charts.extend([
+        ProcedureChart(
+            "ZWTK", "ZWTK-5L-1.pdf", 1, "instrument-approach-index",
+            "RNP ILS z RWY33(AR)", "text", (), ("33",), (), (), (), ils_source,
+            route_fixes=(
+                ChartRouteFix("TK801", "IF"),
+                ChartRouteFix("TK808", "IAF"),
+            ),
+        ),
+        ProcedureChart(
+            "ZWTK", "ZWTK-5R-3.pdf", 1, "instrument-approach-index",
+            "RNP z RWY33(AR)", "text", (), ("33",), (), (), (), rnp_source,
+            route_fixes=(
+                ChartRouteFix("TK802", "IF"),
+                ChartRouteFix("TK808", "IAF"),
+            ),
+        ),
+    ])
+
+    report = analyze_iap_coverage(model)
+
+    assert report["procedure_groups"]["status_counts"] == {
+        "roles_source_unique_first_if_chart": 1,
+    }
+    assert report["source_unique_first_if_selections"] == [{
+        "airport": "ZWTK",
+        "label": "R33-Z",
+        "runway": "33",
+        "selection": "unique_first_if",
+        "matching_charts": 2,
+        "chart_name": "RNP z RWY33(AR)",
+        "source": {
+            "file": "Terminal/ZWTK/ZWTK-5R-3.pdf",
+            "row": 1,
+            "page": 1,
+            "sha256": "rnp-hash",
+        },
+        "first_leg": {"type": "IF", "ident": "TK802"},
+    }]
+    assert report["unresolved_groups"] == []
+
+    model.procedure_charts[0] = ProcedureChart(
+        "ZWTK", "ZWTK-5L-1.pdf", 1, "instrument-approach-index",
+        "RNP ILS z RWY33(AR)", "text", (), ("33",), (), (), (), ils_source,
+        route_fixes=(
+            ChartRouteFix("TK802", "IF"),
+            ChartRouteFix("TK808", "IAF"),
+        ),
+    )
+    tied_report = analyze_iap_coverage(model)
+
+    assert tied_report["procedure_groups"]["status_counts"] == {"ambiguous_chart": 1}
+    assert tied_report["source_unique_first_if_selections"] == []
 
 
 def test_iap_coverage_selects_unique_rnp_ar_title_qualifier_matching_primary_leg():

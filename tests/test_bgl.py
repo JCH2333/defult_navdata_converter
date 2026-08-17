@@ -700,6 +700,42 @@ def test_bgl_iap_chart_roles_reuse_plain_rnp_title_selection():
     assert _iap_chart_roles(model, primary) == {"DH503": {"IF"}}
 
 
+def test_bgl_iap_chart_roles_reuse_unique_first_if_selection():
+    model = NavModel(Path("source"))
+    source = SourceRef("Terminal/ZWTK/ZWTK-0C-3.pdf", 1, 1, "database-hash")
+    primary = ProcedureSegment(
+        "ZWTK", "R33-Z", "approach", "33", "", (
+            ChartTerminalLeg("R33-Z", "33", "IF", "TK802", "fixture", sequence=1),
+            ChartTerminalLeg("R33-Z", "33", "RF", "TK801", "fixture", sequence=2),
+            ChartTerminalLeg("R33-Z", "33", "TF", "TK808", "fixture", sequence=3),
+        ), source,
+    )
+    model.procedure_segments.append(primary)
+    model.procedure_charts.extend([
+        ProcedureChart(
+            "ZWTK", "ZWTK-5L-1.pdf", 1, "instrument-approach-index",
+            "RNP ILS z RWY33(AR)", "text", (), ("33",), (), (), (), source,
+            route_fixes=(
+                ChartRouteFix("TK801", "IF"),
+                ChartRouteFix("TK808", "IAF"),
+            ),
+        ),
+        ProcedureChart(
+            "ZWTK", "ZWTK-5R-3.pdf", 1, "instrument-approach-index",
+            "RNP z RWY33(AR)", "text", (), ("33",), (), (), (), source,
+            route_fixes=(
+                ChartRouteFix("TK802", "IF"),
+                ChartRouteFix("TK808", "IAF"),
+            ),
+        ),
+    ])
+
+    assert _iap_chart_roles(model, primary) == {
+        "TK802": {"IF"},
+        "TK808": {"IAF"},
+    }
+
+
 def test_bgl_projects_same_runway_rnp_and_rnp_ar_from_direct_primary_identity(
     tmp_path: Path,
 ):

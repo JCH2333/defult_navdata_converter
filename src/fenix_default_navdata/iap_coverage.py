@@ -551,6 +551,29 @@ def _select_iap_chart_with_dominant_direct_role(
     return None, None
 
 
+def _select_iap_chart_with_unique_first_if(
+    charts: list[Any],
+    segment: Any,
+) -> tuple[Any | None, str | None]:
+    """Select only one chart that directly marks the first source IF leg."""
+    if len(charts) < 2 or not segment.legs:
+        return None, None
+    first_leg = segment.legs[0]
+    first_ident = (first_leg.fix_ident or "").strip().upper()
+    if first_leg.leg_type != "IF" or not first_ident:
+        return None, None
+    matches = [
+        chart
+        for chart in charts
+        if "IF" in _direct_chart_roles_for_segment(chart, segment).get(
+            first_ident, set(),
+        )
+    ]
+    if len(matches) == 1:
+        return matches[0], "unique_first_if"
+    return None, None
+
+
 def _select_iap_chart_with_plain_rnp_title(
     charts: list[Any],
     segment: Any,
@@ -620,6 +643,11 @@ def _select_iap_chart(
     )
     if dominant_direct_role_chart is not None:
         return dominant_direct_role_chart, dominant_direct_role_selection
+    first_if_chart, first_if_selection = _select_iap_chart_with_unique_first_if(
+        charts, segment,
+    )
+    if first_if_chart is not None:
+        return first_if_chart, first_if_selection
     plain_rnp_chart, plain_rnp_selection = _select_iap_chart_with_plain_rnp_title(
         charts, segment,
     )
@@ -810,6 +838,8 @@ def _iap_role_status(selection: str | None, direct_fixed_selection: bool) -> str
         return "roles_source_dominant_direct_role_chart"
     if selection == "plain_rnp_title":
         return "roles_source_plain_rnp_title_chart"
+    if selection == "unique_first_if":
+        return "roles_source_unique_first_if_chart"
     return {
         "ocr_unique_chart": "roles_ocr_unique_chart",
         "unique_chart": "roles_unique_chart",
@@ -892,6 +922,7 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
     source_unique_direct_role_selections: list[dict[str, object]] = []
     source_dominant_direct_role_selections: list[dict[str, object]] = []
     source_plain_rnp_title_selections: list[dict[str, object]] = []
+    source_unique_first_if_selections: list[dict[str, object]] = []
     selected_role_pages: set[tuple[str, str, int]] = set()
     matched_pages: set[tuple[str, str, int]] = set()
     complete_primary_groups = 0
@@ -978,6 +1009,7 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
             unique_direct_role_selection = selection == "unique_direct_role"
             dominant_direct_role_selection = selection == "dominant_direct_role"
             plain_rnp_title_selection = selection == "plain_rnp_title"
+            unique_first_if_selection = selection == "unique_first_if"
             if matching_roles:
                 role_groups += 1
                 status = _iap_role_status(selection, direct_fixed_selection)
@@ -1093,6 +1125,20 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
                     "chart_name": selected_chart.chart_name,
                     "source": _source_report(selected_chart.source),
                 })
+            if unique_first_if_selection and selected_chart is not None:
+                source_unique_first_if_selections.append({
+                    "airport": airport,
+                    "label": label,
+                    "runway": runway,
+                    "selection": "unique_first_if",
+                    "matching_charts": len(matching),
+                    "chart_name": selected_chart.chart_name,
+                    "source": _source_report(selected_chart.source),
+                    "first_leg": {
+                        "type": primary[0].legs[0].leg_type,
+                        "ident": primary[0].legs[0].fix_ident,
+                    },
+                })
             if not matching_roles and not matching:
                 status = "no_matching_chart"
             elif not matching_roles and selected_chart is not None:
@@ -1116,7 +1162,7 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
     role_evidence_pages = sum(bool(chart.route_fixes) for chart in charts)
     missed_evidence_pages = sum(bool(chart.has_missed_approach) for chart in charts)
     return {
-        "version": 14,
+        "version": 15,
         "chart_pages": {
             "total": len(charts),
             "with_route_role_evidence": role_evidence_pages,
@@ -1174,5 +1220,6 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
         "source_unique_direct_role_selections": source_unique_direct_role_selections,
         "source_dominant_direct_role_selections": source_dominant_direct_role_selections,
         "source_plain_rnp_title_selections": source_plain_rnp_title_selections,
+        "source_unique_first_if_selections": source_unique_first_if_selections,
         "unresolved_groups": unresolved,
     }
