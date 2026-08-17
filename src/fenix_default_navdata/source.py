@@ -2177,22 +2177,7 @@ def _project_same_page_rnp_primary_to_ils(model: NavModel) -> None:
         source_pages = {_source_page_key(segment.source) for segment in ils_sections}
         if len(source_pages) != 1:
             continue
-        rnp_label = "R" + ils_label[1:]
-        rnp_candidates = [
-            segment
-            for segment in groups.get((airport, rnp_label, runway), [])
-            if (
-                iap_section_kind(segment) == "approach"
-                # The Rxx database label is the source identity for a plain
-                # RNP primary. Some coding-table headings omit that repeated
-                # family text, while RNP AR remains explicit and excluded.
-                and segment.approach_family.upper() in {"", "RNP"}
-                and _source_page_key(segment.source) in source_pages
-            )
-        ]
-        if len(rnp_candidates) != 1:
-            continue
-        rnp_primary = rnp_candidates[0]
+        requested_rnp_label = "R" + ils_label[1:]
 
         matching_ils_charts = [
             chart
@@ -2210,7 +2195,7 @@ def _project_same_page_rnp_primary_to_ils(model: NavModel) -> None:
         shared_primary_charts = [
             chart
             for chart in matching_ils_charts
-            if rnp_label in approach_procedure_name_candidates(
+            if requested_rnp_label in approach_procedure_name_candidates(
                 chart.chart_name,
                 chart.runways,
                 chart.airport,
@@ -2222,6 +2207,30 @@ def _project_same_page_rnp_primary_to_ils(model: NavModel) -> None:
         if len(shared_primary_charts) != 1:
             continue
         chart = shared_primary_charts[0]
+        chart_labels = approach_procedure_name_candidates(
+            chart.chart_name,
+            chart.runways,
+            chart.airport,
+        )
+        rnp_candidates = [
+            segment
+            for candidate_label in chart_labels
+            if candidate_label.startswith("R")
+            for segment in groups.get((airport, candidate_label, runway), [])
+            if (
+                iap_section_kind(segment) == "approach"
+                # The Rxx database label is the source identity for a plain
+                # RNP primary. A combined source title can explicitly expose
+                # both its base and suffix variants, while RNP AR remains
+                # excluded.
+                and segment.approach_family.upper() in {"", "RNP"}
+                and _source_page_key(segment.source) in source_pages
+            )
+        ]
+        if len(rnp_candidates) != 1:
+            continue
+        rnp_primary = rnp_candidates[0]
+        rnp_label = rnp_primary.label
         legs = tuple(
             replace(
                 leg,

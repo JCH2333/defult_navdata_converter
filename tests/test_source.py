@@ -338,6 +338,86 @@ def test_projects_same_page_rnp_primary_to_ils_without_rnp_missed_legs() -> None
     assert report["unresolved_groups"] == []
 
 
+def test_projects_same_page_ils_suffix_from_unique_combined_rnp_candidate() -> None:
+    model = NavModel(Path("raw"))
+    database_source = SourceRef(
+        "Terminal/ZPLJ/ZPLJ-0C-04.pdf", 1, 1, "database-hash",
+    )
+    model.procedure_segments.extend((
+        ProcedureSegment(
+            "ZPLJ", "R02", "approach", "02", "", (
+                ChartTerminalLeg("R02", "02", "IF", "LJ601", "fixture"),
+                ChartTerminalLeg("R02", "02", "TF", "RW02", "fixture"),
+            ),
+            database_source,
+        ),
+        ProcedureSegment(
+            "ZPLJ", "I02-Z", "missed", "02", "", (
+                ChartTerminalLeg("I02-Z", "02", "DF", "ILSMA", "fixture"),
+            ),
+            database_source,
+            approach_family="ILS",
+        ),
+    ))
+    model.procedure_charts.append(ProcedureChart(
+        "ZPLJ", "ZPLJ-5Z02.pdf", 1, "instrument-approach-index",
+        "RNP ILS/DME z RWY02", "text", (), ("02",), (), (), (),
+        SourceRef("Terminal/ZPLJ/ZPLJ-5Z02.pdf", 1, 1, "ils-chart-hash"),
+    ))
+
+    _project_same_page_rnp_primary_to_ils(model)
+
+    projected = [
+        segment
+        for segment in model.procedure_segments
+        if segment.label == "I02-Z" and segment.kind == "approach"
+    ]
+    assert len(projected) == 1
+    assert projected[0].approach_family == "ILS"
+    assert [leg.fix_ident for leg in projected[0].legs] == ["LJ601", "RW02"]
+    assert model.shared_ils_primary_projections[0]["rnp_label"] == "R02"
+
+
+def test_same_page_ils_suffix_rejects_multiple_combined_rnp_candidates() -> None:
+    model = NavModel(Path("raw"))
+    source = SourceRef("Terminal/ZPLJ/ZPLJ-0C-04.pdf", 1, 1, "database-hash")
+    model.procedure_segments.extend((
+        ProcedureSegment(
+            "ZPLJ", "R02", "approach", "02", "", (
+                ChartTerminalLeg("R02", "02", "TF", "RW02", "fixture"),
+            ),
+            source,
+        ),
+        ProcedureSegment(
+            "ZPLJ", "R02-Z", "approach", "02", "", (
+                ChartTerminalLeg("R02-Z", "02", "TF", "RW02Z", "fixture"),
+            ),
+            source,
+        ),
+        ProcedureSegment(
+            "ZPLJ", "I02-Z", "missed", "02", "", (
+                ChartTerminalLeg("I02-Z", "02", "DF", "ILSMA", "fixture"),
+            ),
+            source,
+            approach_family="ILS",
+        ),
+    ))
+    model.procedure_charts.append(ProcedureChart(
+        "ZPLJ", "ZPLJ-5Z02.pdf", 1, "instrument-approach-index",
+        "RNP ILS/DME z RWY02", "text", (), ("02",), (), (), (),
+        SourceRef("Terminal/ZPLJ/ZPLJ-5Z02.pdf", 1, 1, "ils-chart-hash"),
+    ))
+
+    _project_same_page_rnp_primary_to_ils(model)
+
+    assert [
+        segment
+        for segment in model.procedure_segments
+        if segment.label == "I02-Z" and segment.kind == "approach"
+    ] == []
+    assert model.shared_ils_primary_projections == []
+
+
 @pytest.mark.parametrize(
     ("rnp_source", "add_second_rnp", "add_ils_chart", "add_ils_primary"),
     (
