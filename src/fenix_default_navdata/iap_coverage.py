@@ -50,6 +50,7 @@ class IapPrimaryVariant:
     rnp_ar: bool
     rnp_ar_missed: bool
     selection: str
+    charts: tuple[Any, ...] = ()
 
 
 def procedure_kind(kind: str) -> str:
@@ -970,6 +971,158 @@ def _section_variant_owner(
     return None
 
 
+
+def _owned_variant_charts(variant: IapPrimaryVariant) -> tuple[Any, ...]:
+    return variant.charts or ((variant.chart,) if variant.chart is not None else ())
+
+
+def _roles_from_owned_charts(charts: tuple[Any, ...] | list[Any], segment: Any) -> dict[str, set[str]]:
+    """Project roles from charts already owned by one partitioned primary.
+
+    A single owned plate contributes its printed roles. Two or more plates may
+    only contribute identical consensus roles or, failing that, the non-empty
+    intersection of direct primary-leg roles. This never selects a chart.
+    """
+    owned = list(charts)
+    if not owned:
+        return {}
+    if len(owned) == 1:
+        return _direct_chart_roles_for_segment(owned[0], segment)
+    consensus = _consensus_direct_chart_roles(owned, segment)
+    if consensus:
+        return consensus
+    return _intersecting_direct_chart_roles(owned, segment)
+
+
+def _qualifier_owned_rnp_ar_variants(
+    model: NavModel,
+    primary: list[Any],
+    selected: list[Any],
+) -> dict[int, IapPrimaryVariant] | None:
+    """Partition same-label RNP AR primaries by unique title-qualifier owners.
+
+    Every matching plate must be an ILS-free RNP AR chart whose title names a
+    non-runway fix, and each of those fixes may appear on exactly one chart.
+    Each primary must occupy a distinct database page. Each named transition
+    must sit on one of those pages and uniquely own one chart, every chart
+    must be owned, and remaining IAP sections must share a primary page.
+    Overlapping ownership, leftover charts, mixed ILS, or two primaries on
+    the same page keep the complete group unresolved.
+    """
+    if len(primary) < 2 or any(not segment.legs for segment in primary):
+        return None
+    if any(
+        segment.approach_family and segment.approach_family != "RNP_AR"
+        for segment in selected
+    ):
+        return None
+    primary_pages = {
+        (segment.source.file, segment.source.page): segment
+        for segment in primary
+    }
+    if len(primary_pages) != len(primary):
+        return None
+    matching = matching_iap_charts(model, primary[0])
+    if not matching or any(
+        matching_iap_charts(model, segment) != matching for segment in primary[1:]
+    ):
+        return None
+    if any(
+        "RNP" not in chart.chart_name.upper()
+        or "ILS" in chart.chart_name.upper()
+        or "(AR)" not in chart.chart_name.upper()
+        or not _rnp_ar_title_qualifier_idents(chart)
+        for chart in matching
+    ):
+        return None
+    ident_to_charts: dict[str, list[Any]] = {}
+    for chart in matching:
+        for ident in _rnp_ar_title_qualifier_idents(chart):
+            ident_to_charts.setdefault(ident, []).append(chart)
+    if any(len(charts) != 1 for charts in ident_to_charts.values()):
+        return None
+    ident_to_chart = {ident: charts[0] for ident, charts in ident_to_charts.items()}
+    transitions = [
+        section for section in selected
+        if iap_section_kind(section) == "approach_transition"
+    ]
+    claimed_charts: dict[int, int] = {}
+    owned_by_primary: dict[int, list[Any]] = {id(segment): [] for segment in primary}
+    seen_names: set[str] = set()
+    for transition in transitions:
+        name = (transition.transition or "").strip().upper()
+        page = (transition.source.file, transition.source.page)
+        if (
+            not name
+            or name in seen_names
+            or name not in ident_to_chart
+            or page not in primary_pages
+        ):
+            return None
+        seen_names.add(name)
+        owner = primary_pages[page]
+        chart = ident_to_chart[name]
+        previous = claimed_charts.get(id(chart))
+        if previous is not None and previous != id(owner):
+            return None
+        claimed_charts[id(chart)] = id(owner)
+        if chart not in owned_by_primary[id(owner)]:
+            owned_by_primary[id(owner)].append(chart)
+    if len(claimed_charts) != len(matching):
+        return None
+    if any(not owned_by_primary[id(segment)] for segment in primary):
+        return None
+    for section in selected:
+        if iap_section_kind(section) == "approach":
+            continue
+        if (section.source.file, section.source.page) not in primary_pages:
+            return None
+    assignments: dict[int, IapPrimaryVariant] = {}
+    for segment in primary:
+        owned = tuple(
+            sorted(
+                owned_by_primary[id(segment)],
+                key=lambda chart: (chart.filename, chart.chart_name),
+            )
+        )
+        assignments[id(segment)] = IapPrimaryVariant(
+            chart=owned[0],
+            family="RNP_AR",
+            rnp_ar=True,
+            rnp_ar_missed=any(chart.has_missed_approach for chart in owned),
+            selection="rnp_ar_title_qualifier",
+            charts=owned,
+        )
+    for section in selected:
+        if iap_section_kind(section) == "approach":
+            continue
+        owner = primary_pages[(section.source.file, section.source.page)]
+        assignments[id(section)] = assignments[id(owner)]
+    return assignments
+
+
+def _variant_for_segment(model: NavModel, segment: Any) -> IapPrimaryVariant | None:
+    """Recover a partitioned identity without depending on object identity.
+
+    BGL projection copies primary segments with replace(), so callers must
+    match airport, label, runway, and the original database page.
+    """
+    assignments = iap_multi_primary_section_assignments(model)
+    for assigned in model.procedure_segments:
+        variant = assignments.get(id(assigned))
+        if variant is None:
+            continue
+        if (
+            assigned.airport == segment.airport
+            and assigned.label == segment.label
+            and assigned.runway == segment.runway
+            and assigned.source.file == segment.source.file
+            and assigned.source.page == segment.source.page
+        ):
+            return variant
+    return None
+
+
 def iap_multi_primary_section_assignments(
     model: NavModel,
 ) -> dict[int, IapPrimaryVariant]:
@@ -979,7 +1132,9 @@ def iap_multi_primary_section_assignments(
     have a distinct chart family selected by complete direct fixed points.  A
     transition or missed section must then share a page with a compatible
     target family or fully match one selected chart by direct fixed points.
-    Partial evidence keeps the complete group out.
+    Same-label RNP AR primaries may instead be partitioned by unique chart
+    title qualifiers and same-page ownership. Partial evidence keeps the
+    complete group out.
     """
     groups: dict[tuple[str, str, str], list[Any]] = defaultdict(list)
     for segment in model.procedure_segments:
@@ -999,6 +1154,9 @@ def iap_multi_primary_section_assignments(
         }
         resolved = [variant for variant in variants.values() if variant is not None]
         if len(resolved) != len(primary) or len({variant.family for variant in resolved}) != len(primary):
+            qualifier = _qualifier_owned_rnp_ar_variants(model, primary, selected)
+            if qualifier is not None:
+                assignments.update(qualifier)
             continue
         group_assignments = {
             id(segment): variants[id(segment)]
@@ -1013,6 +1171,10 @@ def iap_multi_primary_section_assignments(
             group_assignments[id(section)] = owner
         else:
             assignments.update(group_assignments)
+            continue
+        qualifier = _qualifier_owned_rnp_ar_variants(model, primary, selected)
+        if qualifier is not None:
+            assignments.update(qualifier)
     return assignments
 
 
@@ -1029,6 +1191,9 @@ def iap_multi_primary_variants(model: NavModel) -> dict[int, IapPrimaryVariant]:
 
 def iap_chart_roles(model: NavModel, segment: Any) -> dict[str, set[str]]:
     """Return roles only when one printed approach plate is identifiable."""
+    variant = _variant_for_segment(model, segment)
+    if variant is not None and variant.selection == "rnp_ar_title_qualifier":
+        return _roles_from_owned_charts(_owned_variant_charts(variant), segment)
     charts = matching_iap_charts(model, segment)
     consensus = _consensus_direct_chart_roles(charts, segment)
     if consensus:
@@ -1188,27 +1353,41 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
             donor, _inherited_selection = inherited
             primary = [replace(donor, label=label)]
         if resolved_multi_primary:
-            status = "multiple_primary_direct_fixed_points"
+            title_qualifier_partition = all(
+                multi_primary_variants[id(segment)].selection == "rnp_ar_title_qualifier"
+                for segment in primary
+            )
+            status = (
+                "multiple_primary_rnp_ar_title_qualifier"
+                if title_qualifier_partition
+                else "multiple_primary_direct_fixed_points"
+            )
             complete_primary_groups += len(primary)
             for segment in primary:
                 variant = multi_primary_variants[id(segment)]
+                owned_charts = _owned_variant_charts(variant)
                 selected_chart = variant.chart
-                matched_pages.add((
-                    selected_chart.airport,
-                    selected_chart.filename,
-                    selected_chart.page,
-                ))
-                roles = _chart_roles_for_segment(model, selected_chart, segment)
+                matched_pages.update(
+                    (chart.airport, chart.filename, chart.page)
+                    for chart in owned_charts
+                )
+                if title_qualifier_partition:
+                    roles = _roles_from_owned_charts(owned_charts, segment)
+                else:
+                    roles = _chart_roles_for_segment(model, selected_chart, segment)
                 matching_roles = _matching_leg_roles(segment, roles)
                 if matching_roles:
                     role_groups += 1
-                    selected_role_pages.add((
-                        selected_chart.airport,
-                        selected_chart.filename,
-                        selected_chart.page,
-                    ))
+                    if not title_qualifier_partition:
+                        selected_role_pages.add((
+                            selected_chart.airport,
+                            selected_chart.filename,
+                            selected_chart.page,
+                        ))
                     for evidence in matching_roles:
                         role_counts.update(evidence["roles"])
+                if title_qualifier_partition:
+                    continue
                 source_fixed_point_selections.append({
                     "airport": airport,
                     "label": label,
@@ -1521,7 +1700,7 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
     role_evidence_pages = sum(bool(chart.route_fixes) for chart in charts)
     missed_evidence_pages = sum(bool(chart.has_missed_approach) for chart in charts)
     return {
-        "version": 22,
+        "version": 23,
         "chart_pages": {
             "total": len(charts),
             "with_route_role_evidence": role_evidence_pages,
@@ -1577,6 +1756,10 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
                 "rnp_ar_missed": variant.rnp_ar_missed,
                 "selection": variant.selection,
                 "chart_name": variant.chart.chart_name,
+                "chart_names": [
+                    chart.chart_name
+                    for chart in _owned_variant_charts(variant)
+                ],
                 "source": _source_report(segment.source),
                 "chart_source": _source_report(variant.chart.source),
                 "required_fixes": sorted(_direct_database_fix_idents(segment)),

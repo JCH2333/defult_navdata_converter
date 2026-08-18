@@ -1172,6 +1172,97 @@ def test_bgl_projects_same_runway_rnp_and_rnp_ar_from_direct_primary_identity(
     assert ar.find("MissedApproachLegs/Leg[@fixIdent='ARMAHF']") is not None
 
 
+
+def test_bgl_projects_same_label_rnp_ar_primaries_partitioned_by_title_qualifiers(
+    tmp_path: Path,
+):
+    model = NavModel(Path("source"))
+    source = SourceRef("database.pdf", 1, 1, "database-hash")
+    primary_a = SourceRef("Terminal/ZUNZ/ZUNZ-4G06.pdf", 1, 1, "db-a")
+    primary_b = SourceRef("Terminal/ZUNZ/ZUNZ-4G07.pdf", 1, 1, "db-b")
+    model.airports["airport"] = Airport(
+        "airport", "ZUNZ", "ZUNZ", 29.0, 94.0, 1000, 18000, 180, source,
+    )
+    model.runways.append(Runway(
+        "runway", "airport", "23", 230.0, 10000, 150, "ASP", 1000, source,
+    ))
+    model.terminal_waypoints.extend([
+        TerminalWaypoint("if-a", "ZUNZ", "LZ306", 29.12, 94.0, source, "ZU"),
+        TerminalWaypoint("faf", "ZUNZ", "LZ295", 29.10, 94.0, source, "ZU"),
+        TerminalWaypoint("map", "ZUNZ", "RW23", 29.08, 94.0, source, "ZU"),
+        TerminalWaypoint("if-b", "ZUNZ", "LZ404", 29.14, 94.0, source, "ZU"),
+        TerminalWaypoint("dumix", "ZUNZ", "DUMIX", 29.20, 94.0, source, "ZU"),
+        TerminalWaypoint("gomon", "ZUNZ", "GOMON", 29.22, 94.0, source, "ZU"),
+    ])
+
+    def _leg(ident: str, latitude: float, sequence: int, leg_type: str = "TF"):
+        return ChartTerminalLeg(
+            "R23", "23", leg_type, ident, "fixture", sequence=sequence,
+            fix_region="ZU", fix_type="TERMINAL_WAYPOINT",
+            fix_latitude=latitude, fix_longitude=94.0,
+        )
+
+    model.procedure_segments.extend([
+        ProcedureSegment(
+            "ZUNZ", "R23", "approach_transition", "23", "DUMIX", (
+                _leg("DUMIX", 29.20, 1, "IF"),
+            ), primary_a, approach_family="RNP_AR",
+        ),
+        ProcedureSegment(
+            "ZUNZ", "R23", "approach", "23", "", (
+                _leg("LZ306", 29.12, 1, "IF"),
+                _leg("LZ295", 29.10, 2),
+                _leg("RW23", 29.08, 3),
+            ), primary_a, approach_family="RNP_AR",
+        ),
+        ProcedureSegment(
+            "ZUNZ", "R23", "approach_transition", "23", "GOMON", (
+                _leg("GOMON", 29.22, 1, "IF"),
+            ), primary_b, approach_family="RNP_AR",
+        ),
+        ProcedureSegment(
+            "ZUNZ", "R23", "approach", "23", "", (
+                _leg("LZ404", 29.14, 1, "IF"),
+                _leg("RW23", 29.08, 2),
+            ), primary_b, approach_family="RNP_AR",
+        ),
+    ])
+    model.procedure_charts.extend([
+        ProcedureChart(
+            "ZUNZ", "ZUNZ-9D.pdf", 1, "instrument-approach-index",
+            "RNP RWY23(AR)(DUMIX)", "text", (), ("23",), (), (), (),
+            SourceRef("Terminal/ZUNZ/ZUNZ-9D.pdf", 1, 1, "dumix-hash"),
+            route_fixes=(ChartRouteFix("LZ295", "FAF"),),
+            has_missed_approach=True,
+        ),
+        ProcedureChart(
+            "ZUNZ", "ZUNZ-9G.pdf", 1, "instrument-approach-index",
+            "RNP RWY23(AR)(GOMON)", "text", (), ("23",), (), (), (),
+            SourceRef("Terminal/ZUNZ/ZUNZ-9G.pdf", 1, 1, "gomon-hash"),
+        ),
+    ])
+
+    output = tmp_path / "rnp-ar-title-qualifier-partition.xml"
+    write_bglcomp_xml(model, DEFAULT_CYCLE, output, scope="airports")
+
+    approaches = ET.parse(output).getroot().findall("Airport/Approach")
+    assert len(approaches) == 2
+    first, second = approaches
+    assert first.attrib["type"] == "RNAV"
+    assert second.attrib["type"] == "RNAV"
+    assert first.attrib.get("suffix") is None
+    assert second.attrib.get("suffix") is None
+    assert first.attrib["rnpAr"] == "TRUE"
+    assert second.attrib["rnpAr"] == "TRUE"
+    assert {first.attrib["fixIdent"], second.attrib["fixIdent"]} == {"LZ306", "LZ404"}
+    by_fix = {approach.attrib["fixIdent"]: approach for approach in approaches}
+    assert by_fix["LZ306"].find("Transition[@name='DUMI']") is not None or by_fix["LZ306"].find("Transition[@name='DUMIX']") is not None
+    assert by_fix["LZ404"].find("Transition[@name='GOMO']") is not None or by_fix["LZ404"].find("Transition[@name='GOMON']") is not None
+    faf = by_fix["LZ306"].find("ApproachLegs/Leg[@fixIdent='LZ295']")
+    assert faf is not None
+    assert faf.attrib["isFAF"] == "TRUE"
+
+
 def test_iap_chart_roles_leave_ambiguous_plates_unmarked(tmp_path: Path):
     model = NavModel(Path("source"))
     source = SourceRef("approach.pdf", 1, 1, "hash")

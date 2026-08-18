@@ -2,6 +2,7 @@ from pathlib import Path
 
 from fenix_default_navdata.iap_coverage import (
     analyze_iap_coverage,
+    iap_chart_roles,
     iap_multi_primary_section_assignments,
 )
 from fenix_default_navdata.model import (
@@ -92,7 +93,7 @@ def test_iap_coverage_counts_unique_map_disambiguation():
 
     report = analyze_iap_coverage(model)
 
-    assert report["version"] == 22
+    assert report["version"] == 23
     assert report["chart_pages"]["total"] == 2
     assert report["chart_pages"]["matched_to_primary_group"] == 2
     assert report["chart_pages"]["selected_for_role_projection"] == 1
@@ -219,6 +220,196 @@ def test_iap_coverage_splits_same_label_rnp_and_rnp_ar_primaries_by_direct_fixes
     assert assignments[id(model.procedure_segments[-2])].family == "RNP"
     assert assignments[id(model.procedure_segments[-2])].chart.chart_name == "RNP RWY03"
     assert assignments[id(model.procedure_segments[-1])].family == "RNP"
+
+
+
+def _model_with_zunz_r23_qualifier_primaries() -> NavModel:
+    model = _model_with_iap_segments()
+    primary_a = SourceRef("Terminal/ZUNZ/ZUNZ-4G06.pdf", 1, 1, "db-a")
+    primary_b = SourceRef("Terminal/ZUNZ/ZUNZ-4G07.pdf", 1, 1, "db-b")
+    model.procedure_segments[:] = [
+        ProcedureSegment(
+            "ZUNZ", "R23", "approach_transition", "23", "DUMIX", (
+                ChartTerminalLeg("R23", "23", "IF", "DUMIX", "fixture", sequence=1),
+            ), primary_a, approach_family="RNP_AR",
+        ),
+        ProcedureSegment(
+            "ZUNZ", "R23", "approach_transition", "23", "ELNUN", (
+                ChartTerminalLeg("R23", "23", "IF", "ELNUN", "fixture", sequence=1),
+            ), primary_a, approach_family="RNP_AR",
+        ),
+        ProcedureSegment(
+            "ZUNZ", "R23", "approach_transition", "23", "LZ430", (
+                ChartTerminalLeg("R23", "23", "IF", "LZ430", "fixture", sequence=1),
+            ), primary_a, approach_family="RNP_AR",
+        ),
+        ProcedureSegment(
+            "ZUNZ", "R23", "approach", "23", "", (
+                ChartTerminalLeg("R23", "23", "IF", "LZ306", "fixture", sequence=1),
+                ChartTerminalLeg("R23", "23", "TF", "LZ295", "fixture", sequence=2),
+                ChartTerminalLeg("R23", "23", "TF", "RW23", "fixture", sequence=3),
+            ), primary_a, approach_family="RNP_AR",
+        ),
+        ProcedureSegment(
+            "ZUNZ", "R23", "missed", "23", "", (
+                ChartTerminalLeg("R23", "23", "TF", "LZ310", "fixture", sequence=1),
+            ), primary_a, approach_family="RNP_AR",
+        ),
+        ProcedureSegment(
+            "ZUNZ", "R23", "approach_transition", "23", "GOMON", (
+                ChartTerminalLeg("R23", "23", "IF", "GOMON", "fixture", sequence=1),
+            ), primary_b, approach_family="RNP_AR",
+        ),
+        ProcedureSegment(
+            "ZUNZ", "R23", "approach", "23", "", (
+                ChartTerminalLeg("R23", "23", "IF", "LZ404", "fixture", sequence=1),
+                ChartTerminalLeg("R23", "23", "TF", "RW23", "fixture", sequence=2),
+            ), primary_b, approach_family="RNP_AR",
+        ),
+        ProcedureSegment(
+            "ZUNZ", "R23", "missed", "23", "", (
+                ChartTerminalLeg("R23", "23", "TF", "LZ410", "fixture", sequence=1),
+            ), primary_b, approach_family="RNP_AR",
+        ),
+    ]
+    model.procedure_charts.extend([
+        ProcedureChart(
+            "ZUNZ", "ZUNZ-9D.pdf", 1, "instrument-approach-index",
+            "RNP RWY23(AR)(DUMIX)", "text", (), ("23",), (), (), (),
+            SourceRef("Terminal/ZUNZ/ZUNZ-9D.pdf", 1, 1, "dumix-hash"),
+            route_fixes=(
+                ChartRouteFix("DUMIX", "IAF"),
+                ChartRouteFix("LZ298", "IF"),
+                ChartRouteFix("LZ295", "FAF"),
+            ),
+            has_missed_approach=True,
+        ),
+        ProcedureChart(
+            "ZUNZ", "ZUNZ-9E.pdf", 1, "instrument-approach-index",
+            "RNP RWY23(AR)(ELNUN)", "text", (), ("23",), (), (), (),
+            SourceRef("Terminal/ZUNZ/ZUNZ-9E.pdf", 1, 1, "elnun-hash"),
+            route_fixes=(ChartRouteFix("LZ295", "FAF"),),
+            has_missed_approach=True,
+        ),
+        ProcedureChart(
+            "ZUNZ", "ZUNZ-9F.pdf", 1, "instrument-approach-index",
+            "RNP RWY23(AR)(LZ430)", "text", (), ("23",), (), (), (),
+            SourceRef("Terminal/ZUNZ/ZUNZ-9F.pdf", 1, 1, "lz430-hash"),
+            route_fixes=(ChartRouteFix("LZ295", "FAF"),),
+            has_missed_approach=True,
+        ),
+        ProcedureChart(
+            "ZUNZ", "ZUNZ-9G.pdf", 1, "instrument-approach-index",
+            "RNP RWY23(AR)(GOMON)", "text", (), ("23",), (), (), (),
+            SourceRef("Terminal/ZUNZ/ZUNZ-9G.pdf", 1, 1, "gomon-hash"),
+            route_fixes=(ChartRouteFix("GOMON", "IAF"),),
+        ),
+    ])
+    return model
+
+
+def test_iap_coverage_partitions_same_label_rnp_ar_primaries_by_title_qualifiers():
+    model = _model_with_zunz_r23_qualifier_primaries()
+
+    report = analyze_iap_coverage(model)
+    primaries = [
+        segment for segment in model.procedure_segments
+        if segment.kind == "approach"
+    ]
+
+    assert report["version"] == 23
+    assert report["procedure_groups"]["status_counts"] == {
+        "multiple_primary_rnp_ar_title_qualifier": 1,
+    }
+    assert report["role_evidence_counts"] == {"FAF": 1}
+    assert report["source_fixed_point_selections"] == []
+    assert report["unresolved_groups"] == []
+    assert [
+        (item["family"], item["selection"], item["source"]["file"], item["chart_names"])
+        for item in report["multi_primary_variant_assignments"]
+    ] == [
+        (
+            "RNP_AR",
+            "rnp_ar_title_qualifier",
+            "Terminal/ZUNZ/ZUNZ-4G06.pdf",
+            [
+                "RNP RWY23(AR)(DUMIX)",
+                "RNP RWY23(AR)(ELNUN)",
+                "RNP RWY23(AR)(LZ430)",
+            ],
+        ),
+        (
+            "RNP_AR",
+            "rnp_ar_title_qualifier",
+            "Terminal/ZUNZ/ZUNZ-4G07.pdf",
+            ["RNP RWY23(AR)(GOMON)"],
+        ),
+    ]
+    assignments = iap_multi_primary_section_assignments(model)
+    assert assignments[id(model.procedure_segments[0])].chart.filename == "ZUNZ-9D.pdf"
+    assert assignments[id(model.procedure_segments[5])].chart.filename == "ZUNZ-9G.pdf"
+    assert iap_chart_roles(model, primaries[0]) == {"LZ295": {"FAF"}}
+    assert iap_chart_roles(model, primaries[1]) == {}
+
+
+def test_iap_coverage_rejects_invalid_rnp_ar_title_qualifier_partitions():
+    shared = _model_with_zunz_r23_qualifier_primaries()
+    shared.procedure_charts[1] = ProcedureChart(
+        "ZUNZ", "ZUNZ-9E.pdf", 1, "instrument-approach-index",
+        "RNP RWY23(AR)(DUMIX)", "text", (), ("23",), (), (), (),
+        SourceRef("Terminal/ZUNZ/ZUNZ-9E.pdf", 1, 1, "elnun-hash"),
+        route_fixes=(ChartRouteFix("LZ295", "FAF"),),
+    )
+    shared_report = analyze_iap_coverage(shared)
+    assert shared_report["procedure_groups"]["status_counts"] == {"no_unique_primary": 1}
+    assert shared_report["unresolved_groups"][0]["status"] == "no_unique_primary"
+
+    leftover = _model_with_zunz_r23_qualifier_primaries()
+    leftover.procedure_segments[:] = [
+        segment for segment in leftover.procedure_segments
+        if segment.transition != "GOMON"
+    ]
+    leftover_report = analyze_iap_coverage(leftover)
+    assert leftover_report["procedure_groups"]["status_counts"] == {"no_unique_primary": 1}
+
+    mixed = _model_with_zunz_r23_qualifier_primaries()
+    mixed.procedure_charts.append(ProcedureChart(
+        "ZUNZ", "ZUNZ-9H.pdf", 1, "instrument-approach-index",
+        "RNP ILS RWY23", "text", (), ("23",), (), (), (),
+        SourceRef("Terminal/ZUNZ/ZUNZ-9H.pdf", 1, 1, "ils-hash"),
+    ))
+    mixed_report = analyze_iap_coverage(mixed)
+    assert mixed_report["procedure_groups"]["status_counts"] == {"no_unique_primary": 1}
+
+    same_page = _model_with_zunz_r23_qualifier_primaries()
+    same_source = SourceRef("Terminal/ZUNZ/ZUNZ-4G06.pdf", 1, 1, "same-page")
+    same_page.procedure_segments[:] = [
+        ProcedureSegment(
+            segment.airport,
+            segment.label,
+            segment.kind,
+            segment.runway,
+            segment.transition,
+            segment.legs,
+            same_source,
+            approach_family=segment.approach_family,
+        )
+        for segment in same_page.procedure_segments
+    ]
+    same_page_report = analyze_iap_coverage(same_page)
+    assert same_page_report["procedure_groups"]["status_counts"] == {"no_unique_primary": 1}
+
+    overlapping = _model_with_zunz_r23_qualifier_primaries()
+    overlapping.procedure_charts[0] = ProcedureChart(
+        "ZUNZ", "ZUNZ-9D.pdf", 1, "instrument-approach-index",
+        "RNP RWY23(AR)(DUMIX/GOMON)", "text", (), ("23",), (), (), (),
+        SourceRef("Terminal/ZUNZ/ZUNZ-9D.pdf", 1, 1, "dumix-hash"),
+        route_fixes=(ChartRouteFix("LZ295", "FAF"),),
+        has_missed_approach=True,
+    )
+    del overlapping.procedure_charts[3]
+    overlapping_report = analyze_iap_coverage(overlapping)
+    assert overlapping_report["procedure_groups"]["status_counts"] == {"no_unique_primary": 1}
 
 
 def test_iap_coverage_rejects_equal_unqualified_rnp_ar_direct_fix_candidates():
