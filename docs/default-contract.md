@@ -184,6 +184,15 @@ JSON；路径以 `.gz` 结尾时使用 gzip。`build --model` 跳过 `load_naip(
 `test_model_io.py`、`test_convert.py`、`test_cli.py`、
 `test_build_candidate_uses_supplied_model_instead_of_loading_source`。
 
+### SID/STAR SDK 名称
+
+`bglcomp.xsd` 要求 `Departure`/`Arrival` 名称为 `stString6`，航路过渡名称为
+`stString5`。BGL 适配器必须在每个机场内为不同的 424 程序标签分配唯一输出名：先保留
+原前缀，冲突时保留变体后缀。不得把 `APAKA-1A` 与 `APAKA-1B` 都截成 `APAKA-`。该规则
+只作用于默认 BGL 投影，不改 `NavModel`。回归：
+`test_unique_limited_ident_preserves_short_names_and_variant_suffixes`、
+`test_airport_projection_keeps_truncated_sid_star_names_unique`。
+
 ### 导航台区域键
 
 424 的 VOR/NDB 如有有效中国 `SERVICED_AIRPORT`，默认通用数据适配器必须以该 ICAO 前缀作为区域键。这是 FIR 边界导航台唯一可证明的机场侧物理归属。没有服务机场时，才可使用单一 `CODE_FIR` 的映射；跨区域的多 FIR 不得取第一个字符串，必须拒绝。该规则只使用当期 424 字段。
