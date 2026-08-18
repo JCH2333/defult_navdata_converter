@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 import re
 from typing import Any
@@ -35,6 +35,10 @@ _RNP_AR_TITLE_QUALIFIER = re.compile(
     r"\((?P<idents>[A-Z][A-Z0-9]{1,7}(?:/[A-Z][A-Z0-9]{1,7})*)\)",
 )
 _RUNWAY_FIX_IDENT = re.compile(r"RW\d{2}[LRC]?$")
+_VARIANT_LABEL = re.compile(
+    r"^(?P<base>[A-Z]\d{2}[LRC]?)-(?P<variant>[WXYZ])$",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -150,6 +154,57 @@ def shared_iap_section_assignments(
                 (selected.airport, selected.label, selected.runway),
                 selection,
             )
+    return assignments
+
+
+def inherited_base_primary_assignments(
+    segments: list[Any],
+) -> dict[tuple[str, str, str], tuple[Any, str]]:
+    """Give a missed-only variant the unique unsuffixed same-page primary.
+
+    CAAC database pages may print one unlabelled final approach, then
+    separately titled ``复飞 y`` / ``复飞 z`` rows.  Those suffix groups have
+    no primary of their own.  Inherit the unique base primary only when the
+    variant label is exactly the unsuffixed identity plus a single W/X/Y/Z
+    letter, the variant group has no approach section, the unsuffixed group
+    has exactly one non-empty approach section, and every variant section
+    shares that primary's source page.  Cross-page or non-unique donors stay
+    unresolved.
+    """
+    groups: dict[tuple[str, str, str], list[Any]] = defaultdict(list)
+    for segment in segments:
+        if iap_section_kind(segment) in IAP_KINDS:
+            groups[(segment.airport, segment.label, segment.runway)].append(segment)
+    primaries = {
+        key: [
+            segment for segment in selected
+            if iap_section_kind(segment) == "approach" and segment.legs
+        ]
+        for key, selected in groups.items()
+    }
+    assignments: dict[tuple[str, str, str], tuple[Any, str]] = {}
+    for key, selected in groups.items():
+        airport, label, runway = key
+        match = _VARIANT_LABEL.fullmatch(label)
+        if (
+            match is None
+            or not selected
+            or primaries[key]
+            or any(iap_section_kind(segment) == "approach" for segment in selected)
+        ):
+            continue
+        donor_key = (airport, match["base"].upper(), runway)
+        donors = primaries.get(donor_key, [])
+        if len(donors) != 1:
+            continue
+        donor = donors[0]
+        if not all(
+            segment.source.file == donor.source.file
+            and segment.source.page == donor.source.page
+            for segment in selected
+        ):
+            continue
+        assignments[key] = (donor, "same_page_unique_base_primary")
     return assignments
 
 
@@ -1031,6 +1086,9 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
     shared_assignments = shared_iap_section_assignments(model.procedure_segments)
     shared_section_groups = _shared_section_group_keys(groups, shared_assignments)
     multi_primary_variants = iap_multi_primary_variants(model)
+    inherited_base_primaries = inherited_base_primary_assignments(
+        model.procedure_segments,
+    )
 
     charts = sorted(
         (
@@ -1073,6 +1131,14 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
             len(primary) > 1
             and all(id(segment) in multi_primary_variants for segment in primary)
         )
+        if (
+            not resolved_multi_primary
+            and len(primary) != 1
+            and (inherited := inherited_base_primaries.get((airport, label, runway)))
+            and not primary
+        ):
+            donor, _inherited_selection = inherited
+            primary = [replace(donor, label=label)]
         if resolved_multi_primary:
             status = "multiple_primary_direct_fixed_points"
             complete_primary_groups += len(primary)
@@ -1373,7 +1439,7 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
     role_evidence_pages = sum(bool(chart.route_fixes) for chart in charts)
     missed_evidence_pages = sum(bool(chart.has_missed_approach) for chart in charts)
     return {
-        "version": 20,
+        "version": 21,
         "chart_pages": {
             "total": len(charts),
             "with_route_role_evidence": role_evidence_pages,
@@ -1404,6 +1470,20 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
             for segment in model.procedure_segments
             if (assignment := shared_assignments.get(id(segment))) is not None
             for target, selection in (assignment,)
+        ],
+        "inherited_base_primary_assignments": [
+            {
+                "airport": airport,
+                "label": label,
+                "runway": runway,
+                "base_label": donor.label,
+                "selection": selection,
+                "primary_legs": len(donor.legs),
+                "source": _source_report(donor.source),
+            }
+            for (airport, label, runway), (donor, selection) in sorted(
+                inherited_base_primaries.items()
+            )
         ],
         "multi_primary_variant_assignments": [
             {

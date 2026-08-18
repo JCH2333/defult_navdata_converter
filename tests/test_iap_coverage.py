@@ -92,7 +92,7 @@ def test_iap_coverage_counts_unique_map_disambiguation():
 
     report = analyze_iap_coverage(model)
 
-    assert report["version"] == 20
+    assert report["version"] == 21
     assert report["chart_pages"]["total"] == 2
     assert report["chart_pages"]["matched_to_primary_group"] == 2
     assert report["chart_pages"]["selected_for_role_projection"] == 1
@@ -1504,6 +1504,118 @@ def test_iap_coverage_does_not_reject_same_page_shared_variant_sections():
         "unique_chart_without_roles": 1,
     }
     assert report["unresolved_groups"] == []
+
+
+def test_iap_coverage_inherits_same_page_base_primary_for_suffixed_missed_variants():
+    model = _model_with_iap_segments()
+    source = SourceRef("Terminal/ZBAD/ZBAD-0C-18.pdf", 1, 1, "database-hash")
+    model.procedure_segments = [
+        ProcedureSegment(
+            "ZBAD", "R35L", "approach_transition", "35L", "AD521", (
+                ChartTerminalLeg("R35L", "35L", "IF", "AD521", "fixture", sequence=1),
+                ChartTerminalLeg("R35L", "35L", "TF", "AD660", "fixture", sequence=2),
+            ), source,
+        ),
+        ProcedureSegment(
+            "ZBAD", "R35L", "approach", "35L", "", (
+                ChartTerminalLeg("R35L", "35L", "IF", "AD660", "fixture", sequence=1),
+                ChartTerminalLeg("R35L", "35L", "TF", "AD604", "fixture", sequence=2),
+                ChartTerminalLeg("R35L", "35L", "TF", "AD601", "fixture", sequence=3),
+            ), source,
+        ),
+        ProcedureSegment(
+            "ZBAD", "R35L-Z", "missed", "35L", "", (
+                ChartTerminalLeg("R35L-Z", "35L", "CF", "AD667", "fixture", sequence=1),
+            ), source,
+        ),
+        ProcedureSegment(
+            "ZBAD", "R35L-Y", "missed", "35L", "", (
+                ChartTerminalLeg("R35L-Y", "35L", "DF", "AD663", "fixture", sequence=1),
+            ), source,
+        ),
+    ]
+    model.procedure_charts = [
+        ProcedureChart(
+            "ZBAD", "ZBAD-5P-7.pdf", 1, "instrument-approach-index",
+            "RNP z RWY35L", "text", (), ("35L",), (), (), (), source,
+            route_fixes=(
+                ChartRouteFix("AD660", "IF"),
+                ChartRouteFix("AD604", "FAF"),
+                ChartRouteFix("AD601", "MAPT"),
+            ),
+        ),
+        ProcedureChart(
+            "ZBAD", "ZBAD-5P-8.pdf", 1, "instrument-approach-index",
+            "RNP y RWY35L", "text", (), ("35L",), (), (), (), source,
+            route_fixes=(
+                ChartRouteFix("AD660", "IF"),
+                ChartRouteFix("AD604", "FAF"),
+                ChartRouteFix("AD601", "MAPT"),
+            ),
+        ),
+    ]
+
+    report = analyze_iap_coverage(model)
+
+    assert report["inherited_base_primary_assignments"] == [
+        {
+            "airport": "ZBAD",
+            "label": "R35L-Y",
+            "runway": "35L",
+            "base_label": "R35L",
+            "selection": "same_page_unique_base_primary",
+            "primary_legs": 3,
+            "source": {
+                "file": "Terminal/ZBAD/ZBAD-0C-18.pdf",
+                "row": 1,
+                "page": 1,
+                "sha256": "database-hash",
+            },
+        },
+        {
+            "airport": "ZBAD",
+            "label": "R35L-Z",
+            "runway": "35L",
+            "base_label": "R35L",
+            "selection": "same_page_unique_base_primary",
+            "primary_legs": 3,
+            "source": {
+                "file": "Terminal/ZBAD/ZBAD-0C-18.pdf",
+                "row": 1,
+                "page": 1,
+                "sha256": "database-hash",
+            },
+        },
+    ]
+    assert "no_unique_primary" not in report["procedure_groups"]["status_counts"]
+    assert [item["label"] for item in report["unresolved_groups"]] == []
+
+
+def test_iap_coverage_rejects_cross_page_base_primary_inheritance():
+    model = _model_with_iap_segments()
+    primary_source = SourceRef("Terminal/ZYDD/ZYDD-0C-2.pdf", 1, 1, "primary-hash")
+    missed_source = SourceRef("Terminal/ZYDD/ZYDD-0C-3.pdf", 1, 1, "missed-hash")
+    model.procedure_segments = [
+        ProcedureSegment(
+            "ZYDD", "R01", "approach", "01", "", (
+                ChartTerminalLeg("R01", "01", "IF", "DD501", "fixture", sequence=1),
+            ), primary_source,
+        ),
+        ProcedureSegment(
+            "ZYDD", "R01-Y", "missed", "01", "", (
+                ChartTerminalLeg("R01-Y", "01", "DF", "DD503", "fixture", sequence=1),
+            ), missed_source,
+        ),
+    ]
+
+    report = analyze_iap_coverage(model)
+
+    assert report["inherited_base_primary_assignments"] == []
+    assert report["procedure_groups"]["status_counts"]["no_unique_primary"] == 1
+    assert [
+        (item["label"], item["status"]) for item in report["unresolved_groups"]
+        if item["status"] == "no_unique_primary"
+    ] == [("R01-Y", "no_unique_primary")]
 
 
 def test_iap_coverage_resolves_ordered_cross_page_base_sections():

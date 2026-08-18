@@ -18,6 +18,7 @@ from pathlib import Path
 from .iap_coverage import (
     iap_chart_roles,
     iap_multi_primary_section_assignments,
+    inherited_base_primary_assignments,
     matching_iap_charts,
     shared_iap_section_assignments,
 )
@@ -1337,6 +1338,7 @@ def _approach_sections(model: NavModel, segments: list):
     source_order = {id(segment): index for index, segment in enumerate(segments)}
     shared_assignments = shared_iap_section_assignments(segments)
     multi_primary_section_assignments = iap_multi_primary_section_assignments(model)
+    inherited_primaries = inherited_base_primary_assignments(segments)
 
     for (segment_airport, label, runway), selected in sorted(groups.items()):
         primary = [
@@ -1351,6 +1353,20 @@ def _approach_sections(model: NavModel, segments: list):
             segment for segment in selected
             if _iap_section_kind(segment) == "missed"
         ]
+        inherited = inherited_primaries.get((segment_airport, label, runway))
+        if not primary and inherited is not None:
+            donor, _selection = inherited
+            primary = [replace(donor, label=label)]
+            transitions.extend(
+                segment for segment in segments
+                if _iap_section_kind(segment) == "approach_transition"
+                and segment.airport == segment_airport
+                and segment.runway == runway
+                and segment.label == donor.label
+                and segment.source.file == donor.source.file
+                and segment.source.page == donor.source.page
+            )
+            transitions.sort(key=lambda segment: source_order[id(segment)])
         if len(primary) > 1:
             if not all(id(segment) in multi_primary_section_assignments for segment in primary):
                 yield label, runway, transitions, primary, missed, None

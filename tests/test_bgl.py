@@ -504,6 +504,87 @@ def test_airport_projection_maps_raw_chinese_procedure_kinds_and_iap_sections(
     assert [leg.attrib["fixIdent"] for leg in missed.findall("Leg")] == ["MISSED", "MAHF"]
 
 
+def test_bgl_projects_inherited_base_primary_onto_suffixed_missed_variant(
+    tmp_path: Path,
+):
+    model = NavModel(Path("source"))
+    source = SourceRef("Terminal/ZBAD/ZBAD-0C-18.pdf", 1, 1, "database-hash")
+    model.airports["a"] = Airport(
+        "a", "ZBAD", "ZBAD", 39.5, 116.4, 1000, 18000, 180, source,
+    )
+    model.runways.append(Runway(
+        "r", "a", "35L", 350.0, 10000, 150, "ASP", 1000, source,
+    ))
+    model.terminal_waypoints.extend([
+        TerminalWaypoint(f"point-{ident}", "ZBAD", ident, 39.5 + index / 100, 116.4, source, "ZB")
+        for index, ident in enumerate(("AD521", "AD660", "AD604", "AD601", "AD663"))
+    ])
+    model.procedure_segments.extend([
+        ProcedureSegment(
+            "ZBAD", "R35L", "approach_transition", "35L", "AD521", (
+                ChartTerminalLeg(
+                    "R35L", "35L", "IF", "AD521", "fixture",
+                    sequence=1, transition="AD521", fix_region="ZB",
+                    fix_type="TERMINAL_WAYPOINT", fix_latitude=39.51, fix_longitude=116.4,
+                ),
+            ), source,
+        ),
+        ProcedureSegment(
+            "ZBAD", "R35L", "approach", "35L", "", (
+                ChartTerminalLeg(
+                    "R35L", "35L", "IF", "AD660", "fixture",
+                    sequence=1, fix_region="ZB", fix_type="TERMINAL_WAYPOINT",
+                    fix_latitude=39.52, fix_longitude=116.4,
+                ),
+                ChartTerminalLeg(
+                    "R35L", "35L", "TF", "AD604", "fixture",
+                    sequence=2, fix_region="ZB", fix_type="TERMINAL_WAYPOINT",
+                    fix_latitude=39.53, fix_longitude=116.4,
+                ),
+                ChartTerminalLeg(
+                    "R35L", "35L", "TF", "AD601", "fixture",
+                    sequence=3, fix_region="ZB", fix_type="TERMINAL_WAYPOINT",
+                    fix_latitude=39.54, fix_longitude=116.4,
+                ),
+            ), source,
+        ),
+        ProcedureSegment(
+            "ZBAD", "R35L-Y", "missed", "35L", "", (
+                ChartTerminalLeg(
+                    "R35L-Y", "35L", "DF", "AD663", "fixture",
+                    sequence=1, fix_region="ZB", fix_type="TERMINAL_WAYPOINT",
+                    fix_latitude=39.55, fix_longitude=116.4,
+                ),
+            ), source,
+        ),
+    ])
+    model.procedure_charts.append(ProcedureChart(
+        "ZBAD", "ZBAD-5P-8.pdf", 1, "instrument-approach-index",
+        "RNP y RWY35L", "text", (), ("35L",), (), (), (), source,
+        route_fixes=(
+            ChartRouteFix("AD660", "IF"),
+            ChartRouteFix("AD604", "FAF"),
+            ChartRouteFix("AD601", "MAPT"),
+        ),
+    ))
+
+    output = tmp_path / "inherited-base-primary.xml"
+    write_bglcomp_xml(model, DEFAULT_CYCLE, output, scope="airports")
+
+    airport = ET.parse(output).getroot().find("Airport")
+    assert airport is not None
+    variant = airport.find("Approach[@suffix='Y']")
+    assert variant is not None
+    assert variant.attrib["type"] == "RNAV"
+    assert [
+        leg.attrib["fixIdent"] for leg in variant.findall("ApproachLegs/Leg")
+    ] == ["AD660", "AD604", "AD601"]
+    assert [
+        leg.attrib["fixIdent"] for leg in variant.findall("MissedApproachLegs/Leg")
+    ] == ["AD663"]
+    assert variant.find("Transition[@name='AD521']") is not None
+
+
 def test_bgl_projects_shared_rnp_primary_as_ils_without_rnp_missed_legs(
     tmp_path: Path,
 ):
