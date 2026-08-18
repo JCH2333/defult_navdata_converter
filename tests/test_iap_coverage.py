@@ -109,7 +109,7 @@ def test_iap_coverage_counts_unique_map_disambiguation():
 def test_iap_coverage_selects_unqualified_rnp_ar_chart_by_complete_direct_fixes():
     model = _model_with_unqualified_rnp_ar_variant()
     selected_source = SourceRef("Terminal/ZUNP/ZUNP-9D.pdf", 1, 1, "selected-hash")
-    model.procedure_charts.extend([
+    model.procedure_charts[:] = [
         _unqualified_rnp_ar_chart(
             "ZUNP-9C.pdf", ("NP706", "NP708", "NP710"), selected_source,
         ),
@@ -119,7 +119,7 @@ def test_iap_coverage_selects_unqualified_rnp_ar_chart_by_complete_direct_fixes(
             selected_source,
             route_fixes=(ChartRouteFix("NP900", "IAF"),),
         ),
-    ])
+    ]
 
     report = analyze_iap_coverage(model)
 
@@ -1184,6 +1184,49 @@ def test_iap_coverage_projects_rnp_subset_consensus_when_other_chart_has_no_dire
     assert selection[0]["other_candidates_without_direct_roles"][0]["chart_name"] == (
         "LOC/DME RWY03"
     )
+
+
+def test_iap_coverage_projects_pure_rnp_subset_consensus_with_roleless_rnp_candidate():
+    model = _model_with_iap_segments()
+    source = SourceRef("approach.pdf", 1, 1, "hash")
+    model.procedure_segments[:] = [ProcedureSegment(
+        "ZUNZ", "R05", "approach", "05", "", (
+            ChartTerminalLeg(
+                "R05", "05", "IF", "LZ250", "IF LZ250 RNP0.3", sequence=1,
+            ),
+            ChartTerminalLeg(
+                "R05", "05", "TF", "RW05", "TF RW05 RNP0.3", sequence=2,
+            ),
+        ), source,
+    )]
+    model.procedure_charts.extend([
+        ProcedureChart(
+            "ZUNZ", "dumix.pdf", 1, "instrument-approach-index",
+            "RNP RWY05(AR)(DUMIX)", "text", (), ("05",), (), (), (), source,
+        ),
+        ProcedureChart(
+            "ZUNZ", "elnun.pdf", 1, "instrument-approach-index",
+            "RNP RWY05(AR)(ELNUN)", "text", (), ("05",), (), (), (), source,
+            route_fixes=(ChartRouteFix("LZ250", "IF"),),
+        ),
+        ProcedureChart(
+            "ZUNZ", "lz302.pdf", 1, "instrument-approach-index",
+            "RNP RWY05(AR)(LZ302)", "text", (), ("05",), (), (), (), source,
+            route_fixes=(ChartRouteFix("LZ250", "IF"),),
+        ),
+    ])
+
+    report = analyze_iap_coverage(model)
+
+    assert report["procedure_groups"]["status_counts"] == {
+        "roles_source_rnp_subset_consensus_direct_chart": 1,
+    }
+    assert report["role_evidence_counts"] == {"IF": 1}
+    assert report["unresolved_groups"] == []
+    selection = report["source_rnp_subset_consensus_direct_role_selections"]
+    assert len(selection) == 1
+    assert selection[0]["matching_roles"] == [{"ident": "LZ250", "roles": ["IF"]}]
+    assert selection[0]["other_candidates_without_direct_roles"] == []
 
 
 def test_iap_coverage_rejects_rnp_subset_consensus_when_other_chart_has_direct_role():

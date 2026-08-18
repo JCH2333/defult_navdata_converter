@@ -445,14 +445,15 @@ def _rnp_subset_consensus_direct_chart_roles(
     charts: list[Any],
     segment: Any,
 ) -> dict[str, set[str]]:
-    """Return a pure-RNP consensus when other charts prove no primary roles.
+    """Return a pure-RNP consensus when remaining charts prove no primary roles.
 
     Some database primaries explicitly encode every leg as RNP while the chart
-    index also lists a non-RNP procedure for the same runway. If at least two
-    pure-RNP pages agree on non-empty direct roles and every non-RNP candidate
-    contributes no direct role for the primary, the shared flags are safe to
-    project without selecting a chart variant. Any role on another candidate
-    remains a conflict and leaves the group unresolved.
+    index lists several procedures for the same runway. If at least two
+    pure-RNP pages agree on non-empty direct roles and every remaining
+    title-compatible candidate contributes no direct role for the primary, the
+    shared flags are safe to project without selecting a chart variant. A
+    role-bearing page that disagrees with the consensus remains a conflict and
+    leaves the group unresolved.
     """
     rnp_charts = [
         chart
@@ -461,7 +462,7 @@ def _rnp_subset_consensus_direct_chart_roles(
         and "ILS" not in chart.chart_name.upper()
     ]
     other_charts = [chart for chart in charts if chart not in rnp_charts]
-    if len(rnp_charts) < 2 or not other_charts:
+    if len(rnp_charts) < 2:
         return {}
     if not segment.legs or not all(
         "RNP" in (leg.raw or "").upper()
@@ -478,16 +479,17 @@ def _rnp_subset_consensus_direct_chart_roles(
         _direct_chart_roles_for_segment(chart, segment)
         for chart in rnp_charts
     ]
-    if not evidence or not evidence[0]:
+    supporting = [candidate for candidate in evidence if candidate]
+    if len(supporting) < 2:
         return {}
-    if any(candidate != evidence[0] for candidate in evidence[1:]):
+    if any(candidate and candidate != supporting[0] for candidate in evidence):
         return {}
     if any(
         _direct_chart_roles_for_segment(chart, segment)
         for chart in other_charts
     ):
         return {}
-    return evidence[0]
+    return supporting[0]
 
 
 def _select_iap_chart_with_rnp_ar_title_qualifier(
