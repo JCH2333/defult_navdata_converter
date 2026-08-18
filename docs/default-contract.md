@@ -193,6 +193,21 @@ JSON；路径以 `.gz` 结尾时使用 gzip。`build --model` 跳过 `load_naip(
 `test_unique_limited_ident_preserves_short_names_and_variant_suffixes`、
 `test_airport_projection_keeps_truncated_sid_star_names_unique`。
 
+r128 隔离 SDK 构建确认该映射已进入真实 XML：主包 `Departure` 2653/2653、
+`Arrival` 2794/2794，每机场 0 个重名；r127 为 189 个冲突机场、239 个重复
+`Departure` 名和 208 个重复 `Arrival` 名。相对 r127，覆盖层 BGL 体积全部不变、
+哈希改变。独立 `validate` 仍为本地契约通过、参考字节不一致、不可部署。
+
+### Package Tool magvar 节
+
+MSFS 2024 SDK 1.5.7 的 Package Tool 会在每个编译 BGL 中嵌入类型 `0x20`、
+大小 `2,359,296` 的 magvar 网格。577 字节单机场烟雾 XML 也会得到 2,359,801
+字节的 `smoke.bgl`。参考 `00_enroute.bgl` 含该节；参考机场覆盖 BGL 与官方
+`APX`/`NAX` 不含。因此机场 BGL 相对参考的“有的更大、有的更小”不能归因于
+SID/STAR 名称碰撞。在改写 QMID 头并取得加载证据前，不得剥离该节。回归：
+`test_parse_bgl_header_reads_package_tool_magvar_section`、
+`test_parse_bgl_header_detects_reference_airport_without_magvar`。
+
 ### 导航台区域键
 
 424 的 VOR/NDB 如有有效中国 `SERVICED_AIRPORT`，默认通用数据适配器必须以该 ICAO 前缀作为区域键。这是 FIR 边界导航台唯一可证明的机场侧物理归属。没有服务机场时，才可使用单一 `CODE_FIR` 的映射；跨区域的多 FIR 不得取第一个字符串，必须拒绝。该规则只使用当期 424 字段。
