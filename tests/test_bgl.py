@@ -697,6 +697,69 @@ def test_bgl_iap_chart_roles_reuse_rnp_ar_title_qualifier_selection(tmp_path: Pa
     assert leg.attrib["isIAF"] == "TRUE"
 
 
+def test_bgl_iap_chart_roles_reuse_identical_direct_role_consensus(
+    tmp_path: Path,
+):
+    model = NavModel(Path("source"))
+    source = SourceRef("Terminal/ZBCF/ZBCF-4L.pdf", 1, 1, "database-hash")
+    model.airports["a"] = Airport(
+        "a", "ZBCF", "ZBCF", 35.0, 105.0, 1000, 18000, 180, source,
+    )
+    model.runways.append(Runway(
+        "r", "a", "03", 50.0, 10000, 150, "ASP", 1000, source,
+    ))
+    model.terminal_waypoints.extend([
+        TerminalWaypoint("first", "ZBCF", "IF01", 35.10, 105.0, source, "ZB"),
+        TerminalWaypoint("last", "ZBCF", "RW03", 35.05, 105.0, source, "ZB"),
+    ])
+    primary = ProcedureSegment(
+        "ZBCF", "R03", "approach", "03", "", (
+            ChartTerminalLeg(
+                "R03", "03", "IF", "IF01", "fixture", sequence=1,
+                fix_region="ZB", fix_type="TERMINAL_WAYPOINT",
+                fix_latitude=35.10, fix_longitude=105.0,
+            ),
+            ChartTerminalLeg(
+                "R03", "03", "TF", "RW03", "fixture", sequence=2,
+                fix_region="ZB", fix_type="TERMINAL_WAYPOINT",
+                fix_latitude=35.05, fix_longitude=105.0,
+            ),
+        ), source,
+    )
+    model.procedure_segments.append(primary)
+    model.procedure_charts.extend([
+        ProcedureChart(
+            "ZBCF", "ZBCF-9A.pdf", 1, "instrument-approach-index",
+            "RNP Z RWY03(AR)", "text", (), ("03",), (), (), (), source,
+            route_fixes=(
+                ChartRouteFix("IF01", "IF"),
+                ChartRouteFix("RW03", "MAPT"),
+            ),
+        ),
+        ProcedureChart(
+            "ZBCF", "ZBCF-9B.pdf", 1, "instrument-approach-index",
+            "RNP Y RWY03(AR)", "text", (), ("03",), (), (), (), source,
+            route_fixes=(
+                ChartRouteFix("IF01", "IF"),
+                ChartRouteFix("RW03", "MAPT"),
+            ),
+        ),
+    ])
+
+    assert _iap_chart_roles(model, primary) == {
+        "IF01": {"IF"},
+        "RW03": {"MAPT"},
+    }
+
+    output = tmp_path / "iap-direct-role-consensus.xml"
+    write_bglcomp_xml(model, DEFAULT_CYCLE, output, scope="airports")
+
+    first = ET.parse(output).getroot().find("Airport/Approach/ApproachLegs/Leg[@fixIdent='IF01']")
+    last = ET.parse(output).getroot().find("Airport/Approach/ApproachLegs/Leg[@fixIdent='RW03']")
+    assert first is not None
+    assert first.attrib["isIF"] == "TRUE"
+    assert last is not None
+    assert last.attrib["isMAP"] == "TRUE"
 def test_bgl_iap_chart_roles_reuse_unqualified_rnp_ar_direct_role_selection(
     tmp_path: Path,
 ):

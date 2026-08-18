@@ -92,7 +92,7 @@ def test_iap_coverage_counts_unique_map_disambiguation():
 
     report = analyze_iap_coverage(model)
 
-    assert report["version"] == 17
+    assert report["version"] == 19
     assert report["chart_pages"]["total"] == 2
     assert report["chart_pages"]["matched_to_primary_group"] == 2
     assert report["chart_pages"]["selected_for_role_projection"] == 1
@@ -1011,6 +1011,156 @@ def test_iap_coverage_keeps_equal_multi_role_charts_ambiguous():
     assert report["procedure_groups"]["status_counts"] == {
         "ambiguous_chart": 1,
     }
+    assert report["unresolved_groups"][0]["status"] == "ambiguous_chart"
+
+
+def test_iap_coverage_projects_identical_direct_roles_without_selecting_a_variant():
+    model = _model_with_iap_segments()
+    source = SourceRef("approach.pdf", 1, 1, "hash")
+    model.procedure_segments[0] = ProcedureSegment(
+        "ZBCF", "R03", "approach", "03", "", (
+            ChartTerminalLeg("R03", "03", "IF", "IF_FIX", "fixture", sequence=1),
+            ChartTerminalLeg("R03", "03", "TF", "FAF_FIX", "fixture", sequence=2),
+            ChartTerminalLeg("R03", "03", "TF", "MAP_FIX", "fixture", sequence=3),
+        ), source,
+    )
+    first_source = SourceRef("Terminal/ZBCF/first.pdf", 1, 1, "first-hash")
+    second_source = SourceRef("Terminal/ZBCF/second.pdf", 1, 1, "second-hash")
+    model.procedure_charts.extend([
+        ProcedureChart(
+            "ZBCF", "first.pdf", 1, "instrument-approach-index", "RNP Z RWY03(AR)",
+            "text", (), ("03",), (), (), (), first_source,
+            route_fixes=(
+                ChartRouteFix("IF_FIX", "IF"),
+                ChartRouteFix("FAF_FIX", "FAF"),
+                ChartRouteFix("MAP_FIX", "MAPT"),
+            ),
+        ),
+        ProcedureChart(
+            "ZBCF", "second.pdf", 1, "instrument-approach-index", "RNP Y RWY03(AR)",
+            "text", (), ("03",), (), (), (), second_source,
+            route_fixes=(
+                ChartRouteFix("IF_FIX", "IF"),
+                ChartRouteFix("FAF_FIX", "FAF"),
+                ChartRouteFix("MAP_FIX", "MAPT"),
+            ),
+        ),
+    ])
+
+    report = analyze_iap_coverage(model)
+
+    assert report["chart_pages"]["selected_for_role_projection"] == 0
+    assert report["procedure_groups"]["status_counts"] == {
+        "roles_source_consensus_direct_chart": 1,
+    }
+    assert report["role_evidence_counts"] == {"FAF": 1, "IF": 1, "MAPT": 1}
+    assert report["source_consensus_direct_role_selections"] == [{
+        "airport": "ZBCF",
+        "label": "R03",
+        "runway": "03",
+        "selection": "consensus_direct_roles",
+        "matching_charts": 2,
+        "candidates": [
+            {
+                "chart_name": "RNP Z RWY03(AR)",
+                "source": {
+                    "file": "Terminal/ZBCF/first.pdf",
+                    "row": 1,
+                    "page": 1,
+                    "sha256": "first-hash",
+                },
+            },
+            {
+                "chart_name": "RNP Y RWY03(AR)",
+                "source": {
+                    "file": "Terminal/ZBCF/second.pdf",
+                    "row": 1,
+                    "page": 1,
+                    "sha256": "second-hash",
+                },
+            },
+        ],
+        "matching_roles": [
+            {"ident": "FAF_FIX", "roles": ["FAF"]},
+            {"ident": "IF_FIX", "roles": ["IF"]},
+            {"ident": "MAP_FIX", "roles": ["MAPT"]},
+        ],
+    }]
+    assert report["unresolved_groups"] == []
+
+
+def test_iap_coverage_projects_identical_non_ar_rnp_direct_roles_without_selecting_a_variant():
+    model = _model_with_iap_segments()
+    source = SourceRef("approach.pdf", 1, 1, "hash")
+    model.procedure_segments[0] = ProcedureSegment(
+        "ZBCF", "R03", "approach", "03", "", (
+            ChartTerminalLeg("R03", "03", "IF", "IF_FIX", "fixture", sequence=1),
+            ChartTerminalLeg("R03", "03", "TF", "FAF_FIX", "fixture", sequence=2),
+            ChartTerminalLeg("R03", "03", "TF", "MAP_FIX", "fixture", sequence=3),
+        ), source,
+    )
+    first_source = SourceRef("Terminal/ZBCF/first.pdf", 1, 1, "first-hash")
+    second_source = SourceRef("Terminal/ZBCF/second.pdf", 1, 1, "second-hash")
+    model.procedure_charts.extend([
+        ProcedureChart(
+            "ZBCF", "first.pdf", 1, "instrument-approach-index", "RNP z RWY03",
+            "text", (), ("03",), (), (), (), first_source,
+            route_fixes=(
+                ChartRouteFix("IF_FIX", "IF"),
+                ChartRouteFix("FAF_FIX", "FAF"),
+                ChartRouteFix("MAP_FIX", "MAPT"),
+            ),
+        ),
+        ProcedureChart(
+            "ZBCF", "second.pdf", 1, "instrument-approach-index", "RNP y RWY03",
+            "text", (), ("03",), (), (), (), second_source,
+            route_fixes=(
+                ChartRouteFix("IF_FIX", "IF"),
+                ChartRouteFix("FAF_FIX", "FAF"),
+                ChartRouteFix("MAP_FIX", "MAPT"),
+            ),
+        ),
+    ])
+
+    report = analyze_iap_coverage(model)
+
+    assert report["procedure_groups"]["status_counts"] == {
+        "roles_source_consensus_direct_chart": 1,
+    }
+    assert report["unresolved_groups"] == []
+
+
+def test_iap_coverage_rejects_mixed_ar_and_non_ar_rnp_direct_role_consensus():
+    model = _model_with_iap_segments()
+    source = SourceRef("approach.pdf", 1, 1, "hash")
+    model.procedure_segments[0] = ProcedureSegment(
+        "ZBCF", "R03", "approach", "03", "", (
+            ChartTerminalLeg("R03", "03", "IF", "IF_FIX", "fixture", sequence=1),
+            ChartTerminalLeg("R03", "03", "TF", "FAF_FIX", "fixture", sequence=2),
+        ), source,
+    )
+    model.procedure_charts.extend([
+        ProcedureChart(
+            "ZBCF", "first.pdf", 1, "instrument-approach-index", "RNP z RWY03(AR)",
+            "text", (), ("03",), (), (), (), source,
+            route_fixes=(
+                ChartRouteFix("IF_FIX", "IF"),
+                ChartRouteFix("FAF_FIX", "FAF"),
+            ),
+        ),
+        ProcedureChart(
+            "ZBCF", "second.pdf", 1, "instrument-approach-index", "RNP y RWY03",
+            "text", (), ("03",), (), (), (), source,
+            route_fixes=(
+                ChartRouteFix("IF_FIX", "IF"),
+                ChartRouteFix("FAF_FIX", "FAF"),
+            ),
+        ),
+    ])
+
+    report = analyze_iap_coverage(model)
+
+    assert report["procedure_groups"]["status_counts"] == {"ambiguous_chart": 1}
     assert report["unresolved_groups"][0]["status"] == "ambiguous_chart"
 
 

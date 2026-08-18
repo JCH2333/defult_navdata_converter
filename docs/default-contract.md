@@ -266,6 +266,18 @@ SHA-256、OCR 运行时标识、命令、后端、模式、图像预处理、渲
 `test_iap_coverage_rejects_qualified_or_nonunique_rnp_ar_direct_role_matches` 和
 `test_bgl_iap_chart_roles_reuse_unqualified_rnp_ar_direct_role_selection`。
 
+当多张候选图都是不含 `ILS` 的纯 RNP 图、所有候选的 `(AR)` 属性一致，且每一张对
+数据库主进近腿给出完全相同、非空的直接 `IAF`、`IF`、`FAF`、`MAP` 或 `MAPT` 角色时，
+可投影这些共同角色，而不选择或假定任一图页对应具体变体。非 AR 候选的标准化标题必须
+彼此不同；AR 候选允许相同标题。混入 ILS、混合 AR/非 AR、非 AR 重复标题、角色集合
+为空或不一致时一律继续拒绝。选择记录为
+`source_consensus_direct_role_selections`；它只读取 424 直接图页文本，不使用 OCR、
+参考成品或 Fenix。自动化测试：
+`test_iap_coverage_projects_identical_direct_roles_without_selecting_a_variant`、
+`test_iap_coverage_projects_identical_non_ar_rnp_direct_roles_without_selecting_a_variant`、
+`test_iap_coverage_rejects_mixed_ar_and_non_ar_rnp_direct_role_consensus` 和
+`test_bgl_iap_chart_roles_reuse_identical_direct_role_consensus`。
+
 另一项直接文本规则适用于存在多个标题兼容候选、但恰好一张图的明确 `IAF`、`IF`、`FAF`、
 `MAP` 或 `MAPT` 标记与来源主进近腿相交的情形。它不使用 OCR、参考成品或 Fenix，并将
 选择写入 `source_unique_direct_role_selections`。RNP AR 候选不得与非 AR 图题混用；
