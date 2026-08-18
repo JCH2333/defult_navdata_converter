@@ -204,7 +204,7 @@ MSFS 2024 SDK 1.5.7 的 Package Tool 会在每个编译 BGL 中嵌入类型 `0x2
 大小 `2,359,296` 的 magvar 网格。577 字节单机场烟雾 XML 也会得到 2,359,801
 字节的 `smoke.bgl`。参考 `00_enroute.bgl` 含该节；参考机场覆盖 BGL 与官方
 `APX`/`NAX` 不含。因此机场 BGL 相对参考的“有的更大、有的更小”不能归因于
-SID/STAR 名称碰撞。在改写 QMID 头并取得加载证据前，不得剥离该节。回归：
+SID/STAR 名称碰撞。该网格由 XML 中的 `AiracCycle` 触发。无 `AiracCycle` 的单机场烟雾包为 455 字节，节表 `0x3`/`0x35`，无 magvar。机场分区 XML 不得写入 `AiracCycle`；航路文件必须保留。回归：`test_airport_scope_omits_airac_cycle`、`test_enroute_scope_keeps_airac_cycle`、
 `test_parse_bgl_header_reads_package_tool_magvar_section`、
 `test_parse_bgl_header_detects_reference_airport_without_magvar`。
 
