@@ -430,6 +430,9 @@ class NavModel:
     # Audit-only result of recovering blank designated-point regions from
     # uniquely mapped source FIR/ACC remarks on connected airway segments.
     source_acc_region_resolution: dict[str, object] = field(default_factory=dict)
+    # Audit-only result of recovering blank designated-point regions from
+    # unanimous resolved airway neighbors after FIR/ACC restoration.
+    source_neighbor_region_resolution: dict[str, object] = field(default_factory=dict)
     # Audit-only record of terminal coordinate-page points promoted to global
     # waypoints through a source-only shared-identity rule.
     terminal_coordinate_waypoint_promotion: dict[str, object] = field(

@@ -989,9 +989,9 @@ def test_load_naip_recovers_blank_route_endpoint_firs_from_matching_424_records(
     ] == [
         ("ZB", "ZG"),
         ("ZU", "ZB"),
-        ("ZB", ""),
+        ("ZB", "ZB"),
     ]
-    assert next(point.country for point in model.waypoints if point.ident == "NOFIR") == ""
+    assert next(point.country for point in model.waypoints if point.ident == "NOFIR") == "ZB"
 
 
 def test_load_naip_recovers_blank_waypoint_region_from_unambiguous_source_acc(
@@ -1029,7 +1029,7 @@ def test_load_naip_recovers_blank_waypoint_region_from_unambiguous_source_acc(
     } == {
         "ANCHOR": "ZB",
         "UNIQUE": "ZG",
-        "UNKNOWN": "",
+        "UNKNOWN": "ZB",
         "MULTIPLE": "",
         "BELOW": "ZG",
         "UNUSED": "",
@@ -1039,7 +1039,7 @@ def test_load_naip_recovers_blank_waypoint_region_from_unambiguous_source_acc(
         for leg in model.airway_legs
     ] == [
         ("ZG", "ZB"),
-        ("", "ZB"),
+        ("ZB", "ZB"),
         ("", "ZB"),
         ("", "ZB"),
         ("ZG", "ZB"),
@@ -1098,7 +1098,7 @@ def test_load_naip_prefers_explicit_endpoint_acc_label_over_generic_leg_accs(
         "ANCHOR": "ZB",
         "SLASH/ID": "ZG",
         "CONFLICT": "",
-        "UNKNOWN": "",
+        "UNKNOWN": "ZB",
     }
     assert [
         (leg.start_country, leg.end_country)
@@ -1107,7 +1107,7 @@ def test_load_naip_prefers_explicit_endpoint_acc_label_over_generic_leg_accs(
         ("ZG", "ZB"),
         ("", "ZB"),
         ("", "ZB"),
-        ("", "ZB"),
+        ("ZB", "ZB"),
     ]
     assert model.source_acc_region_resolution["waypoints"] == {
         "blank_before": 3,
@@ -1121,6 +1121,75 @@ def test_load_naip_prefers_explicit_endpoint_acc_label_over_generic_leg_accs(
         "multiple_acc_regions": 1,
         "blank_after": 2,
     }
+
+
+
+def test_load_naip_recovers_blank_waypoint_region_from_unanimous_airway_neighbors(
+    tmp_path: Path,
+) -> None:
+    root = _minimal_naip_root(tmp_path, "ASP")
+    _write_csv(root, "AIRSPACE.csv", "\n".join((
+        "AIRSPACE_ID,CODE_TYPE,CODE_ID,TXT_NAME",
+        "beijing,FIR,ZBPE,\u5317\u4eac\u98de\u884c\u60c5\u62a5\u533a",
+        "guangzhou,FIR,ZGZU,\u5e7f\u5dde\u98de\u884c\u60c5\u62a5\u533a",
+    )))
+    _write_csv(root, "DESIGNATED_POINT.csv", "\n".join((
+        "SIGNIFICANT_POINT_ID,CODE_ID,TXT_NAME,GEO_LAT_ACCURACY,GEO_LONG_ACCURACY,CODE_FIR",
+        "anchor,ANCHOR,ANCHOR,N350000,E1050000,\u5317\u4eac\u60c5\u62a5\u533a",
+        "unique,UNIQUE,UNIQUE,N360000,E1060000,",
+        "blanknb,BLANKNB,BLANKNB,N361000,E1061000,",
+        "multi,MULTI,MULTI,N370000,E1070000,",
+        "south,SOUTH,SOUTH,N230000,E1130000,\u5e7f\u5dde\u60c5\u62a5\u533a",
+        "conflict,CONFLICT,CONFLICT,N380000,E1080000,",
+        "ghostless,GHOSTLESS,GHOSTLESS,N390000,E1090000,",
+    )))
+    _write_csv(root, "VOR.csv", "\n".join((
+        "SIGNIFICANT_POINT_ID,CODE_ID,TXT_NAME,GEO_LAT_ACCURACY,GEO_LONG_ACCURACY,VAL_FREQ,VAL_MAG_VAR,VAL_ELEV,SERVICED_AIRPORT,CODE_FIR",
+        "vor,THY,THY,N414800,E1252800,113.1,0,0,ZYTX,\u6c88\u9633\u60c5\u62a5\u533a",
+    )))
+    _write_csv(root, "RTE_SEG.csv", "\n".join((
+        "TXT_DESIG,VAL_SORT,CODE_POINT_START,CODE_POINT_END,GEO_LAT_START_ACCURACY,GEO_LONG_START_ACCURACY,GEO_LAT_END_ACCURACY,GEO_LONG_END_ACCURACY,CODE_FIR_START,CODE_FIR_END,CODE_DIR,CODE_TYPE,CODE_TYPE_START,CODE_TYPE_END,Airspace_Remark",
+        "R1,1,UNIQUE,ANCHOR,N360000,E1060000,N350000,E1050000,,,B,L,DESIGNATED_POINT,DESIGNATED_POINT,\u54c8\u5c14\u6ee8ACC",
+        "R2,2,BLANKNB,ANCHOR,N361000,E1061000,N350000,E1050000,,,B,L,DESIGNATED_POINT,DESIGNATED_POINT,",
+        "R8,8,BLANKNB,UNIQUE,N361000,E1061000,N360000,E1060000,,,B,L,DESIGNATED_POINT,DESIGNATED_POINT,",
+        "R3,3,MULTI,ANCHOR,N370000,E1070000,N350000,E1050000,,,B,L,DESIGNATED_POINT,DESIGNATED_POINT,",
+        "R4,4,MULTI,SOUTH,N370000,E1070000,N230000,E1130000,,,B,L,DESIGNATED_POINT,DESIGNATED_POINT,",
+        "R5,5,CONFLICT,ANCHOR,N380000,E1080000,N350000,E1050000,,,B,L,DESIGNATED_POINT,DESIGNATED_POINT,\u5e7f\u5ddeACC\u54c8\u5c14\u6ee8ACC",
+        "R6,6,THY,GHOSTLESS,N414800,E1252800,N390000,E1090000,,,B,L,VORDME,DESIGNATED_POINT,",
+        "R7,7,****,ANCHOR,N145400,E1115530,N350000,E1050000,,,B,L,\u5730\u540d\u70b9,DESIGNATED_POINT,\u4e09\u4e9aACC",
+    )))
+
+    model = load_naip(root, include_terminal_documents=False)
+
+    assert {
+        point.ident: point.country
+        for point in model.waypoints
+    } == {
+        "ANCHOR": "ZB",
+        "UNIQUE": "ZB",
+        "BLANKNB": "ZB",
+        "MULTI": "",
+        "SOUTH": "ZG",
+        "CONFLICT": "",
+        "GHOSTLESS": "ZY",
+    }
+    assert not any(point.ident == "****" for point in model.waypoints)
+    legs = {
+        (leg.airway, leg.sequence): (leg.start_ident, leg.start_country, leg.end_ident, leg.end_country)
+        for leg in model.airway_legs
+    }
+    assert legs[("R1", 1)] == ("UNIQUE", "ZB", "ANCHOR", "ZB")
+    assert legs[("R2", 2)] == ("BLANKNB", "ZB", "ANCHOR", "ZB")
+    assert legs[("R8", 8)] == ("BLANKNB", "ZB", "UNIQUE", "ZB")
+    assert legs[("R3", 3)][1] == ""
+    assert legs[("R4", 4)][1] == ""
+    assert legs[("R5", 5)][1] == ""
+    assert legs[("R6", 6)] == ("THY", "ZY", "GHOSTLESS", "ZY")
+    assert legs[("R7", 7)][0] == "****"
+    assert legs[("R7", 7)][1] == ""
+    assert model.source_neighbor_region_resolution["waypoints"]["recovered"] == 3
+    assert model.source_neighbor_region_resolution["waypoints"]["multiple_neighbor_regions"] == 1
+    assert model.source_neighbor_region_resolution["waypoints"]["acc_disagrees_with_neighbors"] == 1
 
 
 def test_load_naip_uses_strict_serviced_airport_prefix_for_blank_waypoint_fir(
@@ -1189,11 +1258,11 @@ def test_load_naip_recovers_blank_waypoint_fir_only_when_source_geometry_is_unam
         "SAFE": "ZB",
         "AMB": "",
         "BOUNDARY": "",
-        "OUTSIDE": "",
+        "OUTSIDE": "ZB",
     }
     assert (model.airway_legs[0].start_country, model.airway_legs[0].end_country) == (
         "ZB",
-        "",
+        "ZB",
     )
     assert model.source_fir_region_resolution == {
         "source": {

@@ -680,6 +680,131 @@ def _restore_waypoint_countries_from_airway_acc(
     }
 
 
+def _restore_waypoint_countries_from_airway_neighbors(
+    model: NavModel,
+    countries: dict[tuple[str, str, float, float], set[str]],
+    acc_countries: dict[str, str],
+) -> dict[str, object]:
+    """Recover blank designated-point regions from unanimous airway neighbors.
+
+    A waypoint inherits a region only when every currently resolved airway
+    neighbor of that exact identity shares one region, and any mapped ACC
+    evidence on connected legs is empty or agrees with that same region.
+    Blank neighbors and unmapped city ACC names do not vote.  The rule never
+    invents a waypoint that is absent from DESIGNATED_POINT.csv.
+    """
+    neighbor_regions: dict[tuple[str, str, float, float], set[str]] = {}
+    mapped_acc_regions: dict[tuple[str, str, float, float], set[str]] = {}
+    connected: set[tuple[str, str, float, float]] = set()
+    for leg in model.airway_legs:
+        endpoints = (
+            (
+                leg.start_type,
+                leg.start_ident,
+                leg.start_latitude,
+                leg.start_longitude,
+                leg.start_country,
+            ),
+            (
+                leg.end_type,
+                leg.end_ident,
+                leg.end_latitude,
+                leg.end_longitude,
+                leg.end_country,
+            ),
+        )
+        mapped = {
+            acc_countries[name]
+            for name in _airway_acc_names(leg.source_airspace_remark)
+            if name in acc_countries
+        }
+        for index, (endpoint_type, ident, latitude, longitude, _country) in enumerate(
+            endpoints
+        ):
+            key = _airway_endpoint_key(endpoint_type, ident, latitude, longitude)
+            if key is None or key[0] != "DESIGNATED_POINT":
+                continue
+            connected.add(key)
+            neighbor_regions.setdefault(key, set())
+            mapped_acc_regions.setdefault(key, set()).update(mapped)
+            other_type, other_ident, other_lat, other_lon, _other_country = endpoints[
+                1 - index
+            ]
+            other_country = _recover_airway_endpoint_country(
+                countries,
+                other_type,
+                other_ident,
+                other_lat,
+                other_lon,
+            )
+            if other_country:
+                neighbor_regions[key].add(other_country)
+
+    counts: Counter[str] = Counter()
+    restored: list[Waypoint] = []
+    for waypoint in model.waypoints:
+        if waypoint.country:
+            restored.append(waypoint)
+            continue
+        counts["blank_before"] += 1
+        key = (
+            "DESIGNATED_POINT",
+            waypoint.ident.upper(),
+            round(waypoint.latitude, 6),
+            round(waypoint.longitude, 6),
+        )
+        if key not in connected:
+            counts["not_airway_connected"] += 1
+            restored.append(waypoint)
+            continue
+        counts["airway_connected"] += 1
+        regions = neighbor_regions.get(key, set())
+        acc_regions = mapped_acc_regions.get(key, set())
+        if not regions:
+            counts["no_resolved_neighbor"] += 1
+            restored.append(waypoint)
+            continue
+        if len(regions) != 1:
+            counts["multiple_neighbor_regions"] += 1
+            restored.append(waypoint)
+            continue
+        if acc_regions and acc_regions != regions:
+            counts["acc_disagrees_with_neighbors"] += 1
+            restored.append(waypoint)
+            continue
+        country = next(iter(regions))
+        restored_waypoint = replace(waypoint, country=country)
+        restored.append(restored_waypoint)
+        _register_airway_endpoint_country(
+            countries,
+            "DESIGNATED_POINT",
+            restored_waypoint.ident,
+            restored_waypoint.latitude,
+            restored_waypoint.longitude,
+            country,
+        )
+        counts["recovered"] += 1
+
+    model.waypoints = restored
+    counts["blank_after"] = counts["blank_before"] - counts["recovered"]
+    return {
+        "source": {
+            "airspace": "AIRSPACE.csv",
+            "airway_segments": "RTE_SEG.csv",
+        },
+        "waypoints": {
+            "blank_before": counts["blank_before"],
+            "airway_connected": counts["airway_connected"],
+            "not_airway_connected": counts["not_airway_connected"],
+            "recovered": counts["recovered"],
+            "no_resolved_neighbor": counts["no_resolved_neighbor"],
+            "multiple_neighbor_regions": counts["multiple_neighbor_regions"],
+            "acc_disagrees_with_neighbors": counts["acc_disagrees_with_neighbors"],
+            "blank_after": counts["blank_after"],
+        },
+    }
+
+
 def _unwrap_longitude(longitude: float, origin_longitude: float) -> float:
     """Keep a polygon longitude close to the tested point's meridian."""
     return origin_longitude + ((longitude - origin_longitude + 180) % 360) - 180
@@ -1661,6 +1786,13 @@ def load_naip(
         model,
         airway_endpoint_countries,
         fir_acc_countries,
+    )
+    model.source_neighbor_region_resolution = (
+        _restore_waypoint_countries_from_airway_neighbors(
+            model,
+            airway_endpoint_countries,
+            fir_acc_countries,
+        )
     )
     _restore_airway_endpoint_countries(model, airway_endpoint_countries)
     _load_general_document_airway_minimum_altitudes(

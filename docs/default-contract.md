@@ -52,6 +52,8 @@ FIR 多边形恢复。该规则只生成区域键，不复制官方航点记录�
 的无内容变化解析防护，不能据此宣称字节差分收敛。自动化覆盖：
 `test_load_naip_recovers_blank_waypoint_region_from_unambiguous_source_acc`。
 
+航路邻接区域恢复（默认通用数据、2608R1，证据：424 `DESIGNATED_POINT.csv`/`RTE_SEG.csv`、r123 跳过航路明细与 `tests/test_source.py`，2026-08-18）：在服务机场、显式 FIR、FIR 多边形和 ACC 规则之后仍为空的指定点，若其精确身份所连接的、当时已恢复区域的航路邻接端点全部属于同一地区，且相连航段上已映射的 FIR/ACC 地区为空或与该唯一邻接地区一致，则可继承该地区并回写匹配的 `RTE_SEG` 端点。空白邻接和无法映射的城市 ACC 名称不参与投票；多地区邻接、已映射 ACC 与邻接冲突、或 `RTE_SEG` 独有且不在 `DESIGNATED_POINT.csv` 中的标识（例如 `****`）一律保持为空。该规则不读取官方索引、参考成品或 Fenix。r123 源侧 27 个空指定点中邻接恢复 17 个，其中包括 `P45`/`P212`/`P213`；FIR 边界点 `P121`/`P127`/`P188`/`P225`/`P239` 因多地区邻接继续拒绝。自动化测试：`test_load_naip_recovers_blank_waypoint_region_from_unanimous_airway_neighbors`。
+
 ### Navdatareader 语义差分
 
 候选和参考覆盖包可以分别由 Navdatareader 解析为 SQLite 后，使用
