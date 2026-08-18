@@ -22,7 +22,7 @@ from pypdf import PdfReader
 from .model import Ad219NdbEvidence, Ad219Vor, ChartFixCoordinate, ChartHoldingEvidence, ChartRouteFix, ChartStandardProcedureRoute, ChartTerminalLeg, Ils, ProcedureChart, SourceRef
 
 
-_EVIDENCE_CACHE_VERSION = 41
+_EVIDENCE_CACHE_VERSION = 42
 
 
 _PROCEDURE = re.compile(r"\b([A-Z0-9]{2,6}-\d{2}[AD])\b")
@@ -33,6 +33,7 @@ _RNP_AR_LONG_NAME_AIRPORTS = {"ZYTL"}
 _WAYPOINT = re.compile(r"\b([A-Z][A-Z0-9]{1,5})\b")
 _IGNORED = {"CAAC", "ALL", "RIGHTS", "RESER", "MSA", "RNP", "ILS", "DME", "RWY", "ATC", "GP", "INOP", "N", "E", "S", "W"}
 _ROUTE_ROLE = {"IAF", "IF", "FAF", "MAP", "MAPT", "MAHF"}
+_POSITIONED_ROUTE_ROLE_ALIASES = {"FAP/VIP": "FAF"}
 _CHART_COORDINATE = re.compile(
     r"\bN\s*(?P<lat_deg>\d{2})\s*(?:[°º]|D)?\s*(?P<lat_min>\d{2}(?:\.\d+)?)\s*(?:['′])?"
     r"\s*[,/ ]*E\s*(?P<lon_deg>\d{3})\s*(?:[°º]|D)?\s*(?P<lon_min>\d{2}(?:\.\d+)?)\s*(?:['′])?\b",
@@ -545,7 +546,7 @@ def extract_positioned_route_fixes(words: list[tuple[float, float, float, float,
     """
     result: list[ChartRouteFix] = []
     for role_x0, role_y0, role_x1, role_y1, raw_role, block, *_ in words:
-        role = raw_role.upper()
+        role = _POSITIONED_ROUTE_ROLE_ALIASES.get(raw_role.strip().upper(), raw_role.upper())
         if role not in _ROUTE_ROLE:
             continue
         candidates = []

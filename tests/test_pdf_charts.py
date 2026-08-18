@@ -2,6 +2,7 @@ from fenix_default_navdata.pdf_charts import (
     approach_procedure_name_candidates,
     extract_ad219_vors,
     extract_positioned_coordinate_page_points,
+    extract_positioned_route_fixes,
     extract_terminal_holding_evidence,
     extract_terminal_leg_evidence,
 )
@@ -80,6 +81,16 @@ def test_positioned_coordinate_pages_allow_baseline_drift_without_cross_column_p
         ("HA364", 28.403917, 113.210361),
         ("BL723", 44.891556, 82.329917),
     ]
+
+
+def test_positioned_route_fixes_maps_exact_fap_vip_label_to_faf():
+    fixes = extract_positioned_route_fixes([
+        (100.0, 100.0, 142.0, 108.0, "FAP/VIP", 7, 0, 0),
+        (106.0, 111.0, 136.0, 119.0, "BD658", 7, 0, 1),
+        (106.0, 111.0, 136.0, 119.0, "BD635", 8, 0, 0),
+    ])
+
+    assert [(fix.ident, fix.role) for fix in fixes] == [("BD658", "FAF")]
 
 
 def test_database_holding_titles_keep_time_and_do_not_become_procedure_legs():
