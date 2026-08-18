@@ -264,6 +264,8 @@ def build_candidate(
     iap_ocr_cache_roots: tuple[Path, ...] = (),
     baseline_db: Path | None = None,
     baseline_tolerance_nm: float = 0.25,
+    model: NavModel | None = None,
+    model_path: Path | None = None,
 ) -> dict[str, object]:
     """复制全球官方基线并用 424 原始数据生成中国覆盖层候选。
 
@@ -271,33 +273,39 @@ def build_candidate(
     """
     if output.exists():
         raise FileExistsError(f"候选目录已存在: {output}")
-    if pdf_cache is None:
+    if model is not None and iap_ocr_cache_roots:
+        raise ValueError("已提供中间模型时不能再传入 IAP OCR 缓存重新解析 424")
+    if pdf_cache is None and model is None:
         cache_root = Path(os.environ.get("LOCALAPPDATA", str(output.parent)))
         pdf_cache = cache_root / "default_navdata_converter" / f"pdf-evidence-cache-{cycle.number}r{cycle.revision}"
-    pdf_cache = pdf_cache.resolve()
-    iap_ocr_role_evidence = (
-        load_iap_ocr_role_evidence(
-            raw_root,
-            iap_ocr_cache_roots,
-            pdf_cache=pdf_cache,
+    pdf_cache = pdf_cache.resolve() if pdf_cache is not None else None
+    loaded_from_model = model is not None
+    if not loaded_from_model:
+        iap_ocr_role_evidence = (
+            load_iap_ocr_role_evidence(
+                raw_root,
+                iap_ocr_cache_roots,
+                pdf_cache=pdf_cache,
+            )
+            if iap_ocr_cache_roots
+            else None
         )
-        if iap_ocr_cache_roots
-        else None
-    )
+        model = load_naip(
+            raw_root,
+            pdf_cache=pdf_cache,
+            general_doc_cache=general_doc_cache,
+            general_doc_key_point_cache_directory=general_doc_key_point_cache_directory,
+            general_doc_airway_cache_directories=general_doc_airway_cache_directories,
+            iap_ocr_role_evidence=iap_ocr_role_evidence,
+            include_terminal_documents=True,
+        )
+    else:
+        iap_ocr_role_evidence = model.iap_ocr_role_evidence
     output.mkdir(parents=True)
     _copy_tree(nav_base, output / BASE_PACKAGE)
     _copy_tree(nav_jepp, output / JEPP_PACKAGE)
     work = output / "_work"
     work.mkdir(exist_ok=True)
-    model = load_naip(
-        raw_root,
-        pdf_cache=pdf_cache,
-        general_doc_cache=general_doc_cache,
-        general_doc_key_point_cache_directory=general_doc_key_point_cache_directory,
-        general_doc_airway_cache_directories=general_doc_airway_cache_directories,
-        iap_ocr_role_evidence=iap_ocr_role_evidence,
-        include_terminal_documents=True,
-    )
     navaid_diff: NavaidDiff | None = None
     navaid_selection: DefaultNavaidSelection | None = None
     region_resolution: OfficialRegionResolution | None = None
@@ -367,8 +375,15 @@ def build_candidate(
         "airac": cycle.number,
         "revision": cycle.revision,
         "compiler": {"path": str(compiler.path) if compiler.path else None, "kind": compiler.kind, "reason": compiler.reason},
-        "source": {"raw_424": str(raw_root)},
-        "pdf_cache": str(pdf_cache),
+        "source": {
+            "raw_424": str(raw_root),
+            "intermediate_model": (
+                str(model_path)
+                if model_path is not None
+                else True if loaded_from_model else None
+            ),
+        },
+        "pdf_cache": str(pdf_cache) if pdf_cache else None,
         "general_doc_cache": str(general_doc_cache) if general_doc_cache else None,
         "general_doc_key_point_cache_directory": general_doc_key_point_cache_directory,
         "general_doc_airway_cache_directories": list(general_doc_airway_cache_directories),

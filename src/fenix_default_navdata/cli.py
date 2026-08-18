@@ -10,7 +10,7 @@ from .ad219_ndb import (
     write_ad219_ndb_ocr_audit,
 )
 from .bgl import find_compiler
-from .convert import convert
+from .convert import convert, export_intermediate_model
 from .deployment import deploy, restore
 from .general_docs import (
     audit_enroute_navaid_ocr_rerun,
@@ -23,6 +23,7 @@ from .iap_ocr_consensus import (
     write_iap_ocr_role_consensus,
 )
 from .iap_ocr_recheck import audit_iap_ocr_role_recheck, write_iap_ocr_role_recheck
+from .model_io import load_model
 from .ocr_cache import build_ocr_cache
 from .ocr_runtime import resolve_runtime_profile
 from .official_index import build_official_navaid_index
@@ -104,6 +105,35 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=0.25,
         help="424 与官方设施坐标匹配阈值（海里，默认 0.25）",
+    )
+    build.add_argument(
+        "--model",
+        help="已导出的中间模型 JSON/JSON.GZ；提供后跳过 424 解析，只运行官方设施选择和 BGL 适配器",
+    )
+    export_model = sub.add_parser("export-model", help="导出可复用的 424 中间模型快照")
+    export_model.add_argument("--raw", help="2608 原始 CSV/PDF 目录")
+    export_model.add_argument("--output", required=True, help="中间模型 JSON 或 JSON.GZ 输出路径")
+    export_model.add_argument("--pdf-cache", help="可复用的 PDF 解析缓存目录")
+    export_model.add_argument(
+        "--general-doc-cache",
+        help="航路 GeneralDoc 的 OCR 缓存目录；必须含已校验 SHA-256 的完整清单",
+    )
+    export_model.add_argument(
+        "--general-doc-keypoint-cache-directory",
+        default="enr-4.4",
+        help="GeneralDoc 4.4 重要点 OCR 缓存子目录；默认 enr-4.4",
+    )
+    export_model.add_argument(
+        "--general-doc-airway-cache-directories",
+        nargs="*",
+        default=[],
+        help="要投影最低飞行高度的完整 3.2 航路表 OCR 缓存子目录",
+    )
+    export_model.add_argument(
+        "--iap-ocr-cache-roots",
+        nargs="+",
+        default=[],
+        help="至少三份完全一致的 IAP OCR 缓存；仅用于多图进近页的受限消歧",
     )
     index = sub.add_parser("index", help="从当前官方双包生成并验证 VOR/NDB 设施索引")
     index.add_argument("--nav-base", help="官方 navigraph-nav-base 目录")
@@ -614,7 +644,18 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(detected.__dict__, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "build":
-        raw, base, jepp, reference = _defaults(args)
+        model_path = _path(args.model)
+        model = load_model(model_path) if model_path else None
+        if model is None:
+            raw, base, jepp, reference = _defaults(args)
+        else:
+            detected = detect_paths()
+            raw = _path(args.raw) or detected.raw_root or model.root
+            base = _path(args.nav_base) or detected.nav_base
+            jepp = _path(args.nav_jepp) or detected.nav_jepp
+            reference = _path(args.reference) or detected.reference_root
+            if not base or not jepp:
+                raise SystemExit("无法自动检测 navigraph-nav-base 或 navigraph-nav-jepp，请显式传参")
         report = convert(
             raw,
             base,
@@ -634,6 +675,27 @@ def main(argv: list[str] | None = None) -> int:
             ),
             baseline_db=_path(args.baseline_db),
             baseline_tolerance_nm=args.baseline_tolerance_nm,
+            model=model,
+            model_path=model_path,
+        )
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "export-model":
+        raw = _path(args.raw) or detect_paths().raw_root
+        if not raw:
+            raise SystemExit("无法自动检测 424 原始目录，请显式传入 --raw")
+        report = export_intermediate_model(
+            raw,
+            Path(args.output),
+            pdf_cache=_path(args.pdf_cache),
+            general_doc_cache=_path(args.general_doc_cache),
+            general_doc_key_point_cache_directory=args.general_doc_keypoint_cache_directory,
+            general_doc_airway_cache_directories=tuple(
+                args.general_doc_airway_cache_directories
+            ),
+            iap_ocr_cache_roots=tuple(
+                Path(value) for value in args.iap_ocr_cache_roots
+            ),
         )
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0

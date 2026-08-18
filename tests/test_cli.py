@@ -3,6 +3,8 @@ from pathlib import Path
 
 from fenix_default_navdata import cli
 from fenix_default_navdata.bgl import CompilerInfo
+from fenix_default_navdata.model import NavModel
+from fenix_default_navdata.profile import DEFAULT_CYCLE
 
 
 def test_ocr_audit_compares_available_rerun_pages_without_an_extra_flag(monkeypatch) -> None:
@@ -109,3 +111,71 @@ def test_route_fragment_probe_passes_sdk_and_reader_options(monkeypatch) -> None
         "build_timeout_seconds": 600,
         "reader_timeout_seconds": 90,
     }
+
+
+def test_export_model_command_passes_source_and_output(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def export_intermediate_model(raw_root, output, **kwargs):
+        captured["raw_root"] = raw_root
+        captured["output"] = output
+        captured.update(kwargs)
+        return {"output": str(output)}
+
+    monkeypatch.setattr(cli, "export_intermediate_model", export_intermediate_model)
+    monkeypatch.setattr(cli, "detect_paths", lambda: type("P", (), {"raw_root": Path("raw")})())
+
+    result = cli.main([
+        "export-model",
+        "--raw", "raw",
+        "--output", "output/model.json.gz",
+        "--pdf-cache", "pdf-cache",
+    ])
+
+    assert result == 0
+    assert captured["raw_root"] == Path("raw")
+    assert captured["output"] == Path("output/model.json.gz")
+    assert captured["pdf_cache"] == Path("pdf-cache")
+
+
+def test_build_command_loads_intermediate_model_and_skips_raw_requirement(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    model = NavModel(tmp_path / "raw")
+    captured: dict[str, object] = {}
+
+    def convert(*args, **kwargs):
+        captured["args"] = args
+        captured.update(kwargs)
+        return {"status": "from-model"}
+
+    monkeypatch.setattr(cli, "load_model", lambda path: model)
+    monkeypatch.setattr(cli, "convert", convert)
+    monkeypatch.setattr(
+        cli,
+        "detect_paths",
+        lambda: type(
+            "P",
+            (),
+            {
+                "raw_root": None,
+                "nav_base": Path("base"),
+                "nav_jepp": Path("jepp"),
+                "reference_root": None,
+            },
+        )(),
+    )
+
+    result = cli.main([
+        "build",
+        "--model", "model.json.gz",
+        "--output", "output/candidate",
+        "--nav-base", "base",
+        "--nav-jepp", "jepp",
+    ])
+
+    assert result == 0
+    assert captured["model"] is model
+    assert captured["model_path"] == Path("model.json.gz")
+    assert captured["cycle"] == DEFAULT_CYCLE

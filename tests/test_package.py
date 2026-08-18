@@ -73,6 +73,46 @@ def test_missing_compiler_blocks_both_overlay_packages(tmp_path: Path, monkeypat
     assert not (output / AIRPORT_PACKAGE).exists()
 
 
+def test_build_candidate_uses_supplied_model_instead_of_loading_source(
+    tmp_path: Path,
+    monkeypatch,
+):
+    raw = tmp_path / "raw"
+    base = tmp_path / "base"
+    jepp = tmp_path / "jepp"
+    output = tmp_path / "candidate"
+    model_path = tmp_path / "model.json"
+    for path in (raw, base, jepp):
+        path.mkdir()
+    model = NavModel(raw)
+    model.waypoints.append(
+        Waypoint("ZB.P01", "P01", "P01", 40.1, 116.1, SourceRef("DESIGNATED_POINT.csv", 2), country="ZB"),
+    )
+
+    def load_naip(*_args, **_kwargs):
+        raise AssertionError("supplied NavModel must skip 424 parsing")
+
+    monkeypatch.setattr("fenix_default_navdata.package.load_naip", load_naip)
+
+    report = build_candidate(
+        raw_root=raw,
+        nav_base=base,
+        nav_jepp=jepp,
+        output=output,
+        cycle=DEFAULT_CYCLE,
+        compiler=CompilerInfo(None, "none", "missing"),
+        model=model,
+        model_path=model_path,
+    )
+
+    assert report["source"] == {
+        "raw_424": str(raw),
+        "intermediate_model": str(model_path),
+    }
+    assert report["model"]["waypoints"] == 1
+    assert report["pdf_cache"] is None
+
+
 def test_missing_navaid_baseline_keeps_candidate_non_deployable(
     tmp_path: Path,
     monkeypatch,

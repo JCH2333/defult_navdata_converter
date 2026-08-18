@@ -7,8 +7,9 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from .convert import convert
+from .convert import convert, export_intermediate_model
 from .deployment import deploy
+from .model_io import load_model
 from .official_index import build_official_navaid_index
 from .paths import detect_paths
 from .profile import DEFAULT_CYCLE
@@ -40,6 +41,7 @@ class App:
         self.general_doc_keypoint_cache_directory = tk.StringVar(value="enr-4.4")
         self.iap_ocr_cache_roots = tk.StringVar()
         self.reference = tk.StringVar()
+        self.model_path = tk.StringVar()
         self.output = tk.StringVar(value=str(Path.cwd() / "output" / "candidate-2608-default"))
         self.target = tk.StringVar()
         self.status = tk.StringVar(value="等待检测")
@@ -69,6 +71,7 @@ class App:
             ("重要点 OCR 子目录", self.general_doc_keypoint_cache_directory, "text"),
             ("IAP OCR 共识缓存", self.iap_ocr_cache_roots, "dirs"),
             ("参考成品（只读）", self.reference, "dir"),
+            ("中间模型（可选）", self.model_path, "model"),
             ("隔离候选输出", self.output, "dir"),
             ("Community 目标", self.target, "dir"),
         ]
@@ -107,6 +110,7 @@ class App:
         for text, command in (
             ("自动检测", self._detect),
             ("生成官方索引", self._build_official_index),
+            ("导出中间模型", self._export_model),
             ("生成候选", self._build_candidate),
             ("验证候选", self._validate),
             ("检查测试更新", self._check_update),
@@ -120,13 +124,19 @@ class App:
         self.log.pack(fill=tk.BOTH, expand=True)
 
     def _browse(self, variable: tk.StringVar, kind: str) -> None:
-        value = (
-            filedialog.askopenfilename(
+        if kind == "file":
+            value = filedialog.askopenfilename(
                 filetypes=[("SQLite 数据库", "*.sqlite *.db3"), ("所有文件", "*.*")]
             )
-            if kind == "file"
-            else filedialog.askdirectory()
-        )
+        elif kind == "model":
+            value = filedialog.askopenfilename(
+                filetypes=[
+                    ("中间模型", "*.json *.json.gz *.gz"),
+                    ("所有文件", "*.*"),
+                ]
+            )
+        else:
+            value = filedialog.askdirectory()
         if value:
             variable.set(value)
 
@@ -170,6 +180,8 @@ class App:
     def _required(self) -> bool:
         if not self._required_baseline():
             return False
+        if Path(self.model_path.get()).is_file():
+            return True
         if not Path(self.raw.get()).is_dir():
             messagebox.showerror("输入不完整", "缺少：2608 原始目录")
             return False
@@ -208,9 +220,20 @@ class App:
         if not self._required():
             return
         output = Path(self.output.get())
-        self.status.set("正在解析来源并生成候选")
+        model_path = (
+            Path(self.model_path.get())
+            if Path(self.model_path.get()).is_file()
+            else None
+        )
+        model = load_model(model_path) if model_path else None
+        raw = Path(self.raw.get())
+        if not raw.is_dir() and model is not None:
+            raw = model.root
+        self.status.set(
+            "正在从中间模型生成候选" if model is not None else "正在解析来源并生成候选"
+        )
         self._run(lambda: convert(
-            Path(self.raw.get()),
+            raw,
             Path(self.base.get()),
             Path(self.jepp.get()),
             output,
@@ -234,12 +257,60 @@ class App:
                 self.general_doc_keypoint_cache_directory.get().strip()
                 or "enr-4.4"
             ),
-            iap_ocr_cache_roots=tuple(
-                Path(value.strip())
-                for value in self.iap_ocr_cache_roots.get().split(";")
-                if value.strip()
+            iap_ocr_cache_roots=(
+                ()
+                if model is not None
+                else tuple(
+                    Path(value.strip())
+                    for value in self.iap_ocr_cache_roots.get().split(";")
+                    if value.strip()
+                )
             ),
+            model=model,
+            model_path=model_path,
         ))
+
+    def _export_model(self) -> None:
+        if not Path(self.raw.get()).is_dir():
+            messagebox.showerror("输入不完整", "缺少：2608 原始目录")
+            return
+        value = filedialog.asksaveasfilename(
+            defaultextension=".json.gz",
+            filetypes=[
+                ("压缩中间模型", "*.json.gz"),
+                ("中间模型 JSON", "*.json"),
+                ("所有文件", "*.*"),
+            ],
+        )
+        if not value:
+            return
+        output = Path(value)
+        self.status.set("正在导出中间模型")
+        self._run(
+            lambda: export_intermediate_model(
+                Path(self.raw.get()),
+                output,
+                general_doc_cache=(
+                    Path(self.general_doc_cache.get())
+                    if Path(self.general_doc_cache.get()).is_dir()
+                    else None
+                ),
+                general_doc_key_point_cache_directory=(
+                    self.general_doc_keypoint_cache_directory.get().strip()
+                    or "enr-4.4"
+                ),
+                iap_ocr_cache_roots=tuple(
+                    Path(item.strip())
+                    for item in self.iap_ocr_cache_roots.get().split(";")
+                    if item.strip()
+                ),
+            ),
+            self._set_model_path,
+        )
+
+    def _set_model_path(self, report: object) -> None:
+        if isinstance(report, dict) and isinstance(report.get("output"), str):
+            self.model_path.set(report["output"])
 
     def _validate(self) -> None:
         candidate = Path(self.output.get())
