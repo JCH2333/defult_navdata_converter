@@ -1203,6 +1203,40 @@ def _append_legs(parent: ET.Element, legs, airport: str, identities) -> None:
         ET.SubElement(parent, "Leg", _leg_attrs(ordered, index, airport, identities))
 
 
+def _unique_limited_ident(value: str, limit: int, used: set[str]) -> str:
+    """Allocate a unique SDK ident that stays within the XSD length limit.
+
+    Departure/Arrival names are ``stString6`` and enroute/approach transition
+    names are ``stString5``.  Truncating independently would collapse distinct
+    424 labels such as ``APAKA-1A``/``APAKA-1B`` onto the same output name.
+    """
+
+    raw = (value or "").upper()
+    compact = "".join(character for character in raw if character.isalnum())
+    candidates: list[str] = []
+    if raw:
+        candidates.append(raw[:limit])
+    if compact:
+        for suffix_len in range(1, min(limit, len(compact))):
+            candidates.append(
+                (compact[:limit - suffix_len] + compact[-suffix_len:])[:limit]
+            )
+        candidates.append(compact[:limit])
+    for candidate in candidates:
+        if candidate and candidate not in used:
+            used.add(candidate)
+            return candidate
+    stem = (compact or raw or "P")[: max(limit - 3, 1)]
+    suffix = 1
+    while suffix <= 999:
+        candidate = f"{stem}{suffix:03d}"[:limit]
+        if candidate and candidate not in used:
+            used.add(candidate)
+            return candidate
+        suffix += 1
+    raise ValueError(f"无法为 {value!r} 分配唯一的 {limit} 字符 SDK 名称")
+
+
 def _append_departures(
     airport_element: ET.Element,
     airport: str,
@@ -1210,12 +1244,18 @@ def _append_departures(
     identities,
 ) -> None:
     labels = sorted({segment.label for segment in segments})
+    used_names: set[str] = set()
     for label in labels:
         selected = [segment for segment in segments if segment.label == label]
-        departure = ET.SubElement(airport_element, "Departure", {"name": label[:6]})
+        departure = ET.SubElement(
+            airport_element,
+            "Departure",
+            {"name": _unique_limited_ident(label, 6, used_names)},
+        )
         runway_transitions = ET.SubElement(departure, "RunwayTransitions")
         common = ET.SubElement(departure, "CommonRouteLegs")
         enroute_transitions = ET.SubElement(departure, "EnrouteTransitions")
+        used_transitions: set[str] = set()
         for segment in selected:
             transition = segment.transition.upper()
             runway = segment.runway or (transition[2:] if transition.startswith("RW") else "")
@@ -1229,7 +1269,7 @@ def _append_departures(
                 target = ET.SubElement(
                     enroute_transitions,
                     "EnrouteTransitionLegs",
-                    _attrs(name=transition[:5]),
+                    _attrs(name=_unique_limited_ident(transition, 5, used_transitions)),
                 )
             else:
                 target = common
@@ -1243,12 +1283,18 @@ def _append_arrivals(
     identities,
 ) -> None:
     labels = sorted({segment.label for segment in segments})
+    used_names: set[str] = set()
     for label in labels:
         selected = [segment for segment in segments if segment.label == label]
-        arrival = ET.SubElement(airport_element, "Arrival", {"name": label[:6]})
+        arrival = ET.SubElement(
+            airport_element,
+            "Arrival",
+            {"name": _unique_limited_ident(label, 6, used_names)},
+        )
         enroute_transitions = ET.SubElement(arrival, "EnrouteTransitions")
         common = ET.SubElement(arrival, "CommonRouteLegs")
         runway_transitions = ET.SubElement(arrival, "RunwayTransitions")
+        used_transitions: set[str] = set()
         for segment in selected:
             transition = segment.transition.upper()
             runway = segment.runway or (transition[2:] if transition.startswith("RW") else "")
@@ -1262,7 +1308,7 @@ def _append_arrivals(
                 target = ET.SubElement(
                     enroute_transitions,
                     "EnrouteTransitionLegs",
-                    _attrs(name=transition[:5]),
+                    _attrs(name=_unique_limited_ident(transition, 5, used_transitions)),
                 )
             else:
                 target = common
@@ -1502,6 +1548,7 @@ def _append_approaches(
                 _append_legs(
                     missed_element, segment.legs, airport, identities,
                 )
+        used_transitions: set[str] = set()
         for segment in transitions:
             first_transition_fix = next(
                 (leg for leg in segment.legs if leg.fix_ident),
@@ -1521,7 +1568,11 @@ def _append_approaches(
                     if first_transition_fix and first_transition_fix.altitude1_ft is not None
                     else None
                 ),
-                name=segment.transition[:5],
+                name=(
+                    _unique_limited_ident(segment.transition, 5, used_transitions)
+                    if segment.transition
+                    else None
+                ),
             ))
             _append_legs(
                 ET.SubElement(transition, "TransitionLegs"),

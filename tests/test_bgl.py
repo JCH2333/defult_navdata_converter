@@ -6,6 +6,7 @@ from fenix_default_navdata.bgl import (
     CompilerInfo,
     PackageToolProcessTrace,
     _iap_chart_roles,
+    _unique_limited_ident,
     compile_package,
     find_compiler,
     write_bglcomp_xml,
@@ -1961,3 +1962,59 @@ def test_package_tool_keeps_failed_ascii_stage_with_short_async_process_trace(
     assert (stages[0] / "attempt-01-BuilderLogError.txt").read_text(
         encoding="utf-8"
     ) == "after\n"
+
+
+def test_unique_limited_ident_preserves_short_names_and_variant_suffixes() -> None:
+    used: set[str] = set()
+    assert _unique_limited_ident("SID01", 6, used) == "SID01"
+    assert _unique_limited_ident("STAR01", 6, used) == "STAR01"
+    used = set()
+    assert _unique_limited_ident("APAKA-1A", 6, used) == "APAKA-"
+    assert _unique_limited_ident("APAKA-1B", 6, used) == "APAKAB"
+    used = set()
+    assert _unique_limited_ident("TRANSITION1", 5, used) == "TRANS"
+    assert _unique_limited_ident("TRANSITION2", 5, used) == "TRAN2"
+
+
+def test_airport_projection_keeps_truncated_sid_star_names_unique(tmp_path: Path) -> None:
+    model = NavModel(Path("source"))
+    source = SourceRef("fixture", 1)
+    model.airports["a"] = Airport(
+        "a", "ZBCF", "ZBCF", 35.0, 105.0, 1000, 18000, 180, source,
+    )
+    def _leg(ident: str) -> ChartTerminalLeg:
+        return ChartTerminalLeg(
+            ident, "", "TF", ident, "fixture",
+            sequence=1, fix_region="ZB", fix_type="TERMINAL_WAYPOINT",
+            fix_latitude=35.1, fix_longitude=105.1,
+        )
+    model.procedure_segments.extend([
+        ProcedureSegment("ZBCF", "APAKA-1A", "departure", "", "TRANSITION1", (_leg("AA"),), source),
+        ProcedureSegment("ZBCF", "APAKA-1A", "departure", "", "TRANSITION2", (_leg("A2"),), source),
+        ProcedureSegment("ZBCF", "APAKA-1B", "departure", "", "TRANSITION1", (_leg("AB"),), source),
+        ProcedureSegment("ZBCF", "BOBA-1A", "arrival", "", "TRANSITION1", (_leg("BA"),), source),
+        ProcedureSegment("ZBCF", "BOBA-1B", "arrival", "", "TRANSITION1", (_leg("BB"),), source),
+    ])
+
+    output = tmp_path / "unique-sid-star.xml"
+    write_bglcomp_xml(model, DEFAULT_CYCLE, output, scope="airports")
+
+    airport = ET.parse(output).getroot().find("Airport")
+    assert airport is not None
+    departure_names = [item.attrib["name"] for item in airport.findall("Departure")]
+    arrival_names = [item.attrib["name"] for item in airport.findall("Arrival")]
+    assert len(departure_names) == 2
+    assert len(set(departure_names)) == 2
+    assert all(len(name) <= 6 for name in departure_names)
+    assert len(arrival_names) == 2
+    assert len(set(arrival_names)) == 2
+    assert all(len(name) <= 6 for name in arrival_names)
+    transition_names = [
+        item.attrib["name"]
+        for item in airport.findall(
+            "Departure[@name='APAKA-']/EnrouteTransitions/EnrouteTransitionLegs"
+        )
+    ]
+    assert len(transition_names) == 2
+    assert len(set(transition_names)) == 2
+    assert all(len(name) <= 5 for name in transition_names)
