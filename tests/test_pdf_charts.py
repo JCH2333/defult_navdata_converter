@@ -263,6 +263,40 @@ def test_database_approach_leg_type_is_not_a_transition_name():
     ]
 
 
+def test_database_via_keyword_is_not_a_transition_name():
+    text = """
+    RWY15进近过渡 via OF217
+    IF OF217 1200 MAX210 RNAV1
+    TF GUXUV RNAV1
+    RWY15进近过渡 via  OF204
+    IF OF204 900 MAX210 RNAV1
+    TF NOKUL 600 RNAV1
+    RWY33 RNP 进近过渡 via OF105
+    IF OF105 900 MAX210 RNAV1
+    TF OF104 RNAV1
+    """
+
+    legs = extract_terminal_leg_evidence(text)
+
+    assert [
+        (
+            leg.procedure_label,
+            leg.procedure_kind,
+            leg.transition,
+            leg.leg_type,
+            leg.fix_ident,
+        )
+        for leg in legs
+    ] == [
+        ("R15", "进近过渡", "OF217", "IF", "OF217"),
+        ("R15", "进近过渡", "OF217", "TF", "GUXUV"),
+        ("R15", "进近过渡", "OF204", "IF", "OF204"),
+        ("R15", "进近过渡", "OF204", "TF", "NOKUL"),
+        ("R33", "进近过渡", "OF105", "IF", "OF105"),
+        ("R33", "进近过渡", "OF105", "TF", "OF104"),
+    ]
+
+
 def test_database_trailing_family_and_variant_are_not_misread_as_a_transition():
     text = """
     RWY02 \u8fdb\u8fd1 RNP ILS/DME x

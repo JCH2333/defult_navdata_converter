@@ -22,7 +22,7 @@ from pypdf import PdfReader
 from .model import Ad219NdbEvidence, Ad219Vor, ChartFixCoordinate, ChartHoldingEvidence, ChartRouteFix, ChartStandardProcedureRoute, ChartTerminalLeg, Ils, ProcedureChart, SourceRef
 
 
-_EVIDENCE_CACHE_VERSION = 42
+_EVIDENCE_CACHE_VERSION = 43
 
 
 _PROCEDURE = re.compile(r"\b([A-Z0-9]{2,6}-\d{2}[AD])\b")
@@ -63,14 +63,14 @@ _DATABASE_APPROACH_PROCEDURE = re.compile(
     r"\bRWY\s?(?P<runway>\d{2}[LRC]?)\s*(?:(?P<family>(?:RNP\s+)?ILS|RNP)\s*)?(?:AR\s+[WXYZ](?:\s+[WXYZ])?\s*)?"
     r"(?:\u6700\u540e\s*)?(?P<kind>\u8fdb\u8fd1\s*\u8fc7\u6e21|\u8fdb\u8fd1(?:\u53ca|\u3001|-)?\s*\u590d\u98de|\u8fdb\u8fd1|\u590d\u98de)"
     r"(?:\s*-?\s*(?P<variant>[WXYZ]))?"
-    r"(?:\s+(?P<transition>[A-Z][A-Z0-9]{0,5})|\s*VIA\s*(?P<via_transition>[A-Z][A-Z0-9]{0,5}))?\b", re.IGNORECASE
+    r"(?:\s+(?P<transition>(?!VIA\b)[A-Z][A-Z0-9]{0,5})|\s*VIA\s*(?P<via_transition>[A-Z][A-Z0-9]{0,5}))?\b", re.IGNORECASE
 )
 _DATABASE_TARGET_FAMILY_APPROACH = re.compile(
     r"\bRWY\s?(?P<runway>\d{2}[LRC]?).{0,48}?"
     r"(?P<connection>\u63a5|\u81f3|\u5230)?\s*(?P<family>RNP(?:\s+AR)?|(?:RNP\s+)?ILS)\s*"
     r"(?:\u6700\u540e\s*)?(?P<kind>\u8fdb\u8fd1\s*\u8fc7\u6e21|\u8fdb\u8fd1(?:\u53ca|\u3001|-)?\s*\u590d\u98de|\u8fdb\u8fd1|\u590d\u98de)"
     r"(?:\s*-?\s*(?P<variant>[WXYZ]))?"
-    r"(?:\s+(?P<transition>[A-Z][A-Z0-9]{0,5})|\s*VIA\s*(?P<via_transition>[A-Z][A-Z0-9]{0,5}))?\b",
+    r"(?:\s+(?P<transition>(?!VIA\b)[A-Z][A-Z0-9]{0,5})|\s*VIA\s*(?P<via_transition>[A-Z][A-Z0-9]{0,5}))?\b",
     re.IGNORECASE,
 )
 _DATABASE_TRAILING_FAMILY_APPROACH = re.compile(
