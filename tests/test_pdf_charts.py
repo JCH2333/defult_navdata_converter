@@ -179,6 +179,33 @@ def test_database_combined_approach_missed_without_separator_splits_at_missed_le
     ]
 
 
+def test_database_final_approach_missed_heading_is_a_combined_approach_section():
+    text = """
+    RWY14 最后进近、复飞
+    IF BD658 16700 MAX160 RNP0.3
+    TF RW14 Y 14257 RNP0.3
+    CF BD443 321 9000 RNP0.3
+    DF BD444 R 3000 RNP0.3
+    RWY28 最后进近-复飞
+    IF XH506 12800 RNP0.3
+    TF RW28 Y RNP0.3
+    """
+
+    legs = extract_terminal_leg_evidence(text)
+
+    assert [
+        (leg.procedure_label, leg.procedure_kind, leg.leg_type, leg.fix_ident)
+        for leg in legs
+    ] == [
+        ("R14", "进近", "IF", "BD658"),
+        ("R14", "进近", "TF", "RW14"),
+        ("R14", "复飞", "CF", "BD443"),
+        ("R14", "复飞", "DF", "BD444"),
+        ("R28", "进近", "IF", "XH506"),
+        ("R28", "进近", "TF", "RW28"),
+    ]
+
+
 def test_database_approach_leg_type_is_not_a_transition_name():
     text = """
     RWY12R RNP 进近 TF
