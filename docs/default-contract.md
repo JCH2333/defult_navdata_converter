@@ -174,6 +174,16 @@ r67/r69/参考受控读取表明，这个外部读取器过滤会产生 `bgl_fil
 
 ## 当前数据模型
 
+### 中间模型快照
+
+`NavModel` 是 424 CSV/PDF 的可复用来源快照，不是默认 BGL 专有结构。`export-model`
+把它写成格式 id `default-navdata-intermediate-model`、schema 版本 `1` 的类型标签
+JSON；路径以 `.gz` 结尾时使用 gzip。`build --model` 跳过 `load_naip()`，仍运行
+官方设施选择和 BGL/Package Tool 适配器。其他机模适配器应消费同一快照，不得再解析
+424，也不得读取 Fenix `nd.db3`、PDF OCR 缓存目录或参考成品。回归：
+`test_model_io.py`、`test_convert.py`、`test_cli.py`、
+`test_build_candidate_uses_supplied_model_instead_of_loading_source`。
+
 ### 导航台区域键
 
 424 的 VOR/NDB 如有有效中国 `SERVICED_AIRPORT`，默认通用数据适配器必须以该 ICAO 前缀作为区域键。这是 FIR 边界导航台唯一可证明的机场侧物理归属。没有服务机场时，才可使用单一 `CODE_FIR` 的映射；跨区域的多 FIR 不得取第一个字符串，必须拒绝。该规则只使用当期 424 字段。

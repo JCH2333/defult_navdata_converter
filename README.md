@@ -7,6 +7,7 @@
 ## 当前能力
 
 - 只读解析 424 2608 原始 CSV/PDF，以机场、跑道、ILS、终端程序和主要导航内容建立统一中间模型。
+- 可将该中间模型导出为 `default-navdata-intermediate-model` 快照；默认 BGL 适配器和其他机模适配器都应消费这份快照，不必再次解析 424。
 - 使用 `RTE_SEG.csv` 航路、端点和终端文档作为内容来源。
 - 只读复制官方 `navigraph-nav-base` 与 `navigraph-nav-jepp` 全球基线。
 - 在中国 NDB 覆盖层中明确区分 424 新增、直接 `NDB.csv` 修订与官方基线保留；官方字段仅用于保留原有基线，绝不由参考成品反向补写。
@@ -46,7 +47,9 @@
 ```powershell
 python -m pip install -e .
 python -m fenix_default_navdata.cli detect
+python -m fenix_default_navdata.cli export-model --output output/nav-model-2608.json.gz
 python -m fenix_default_navdata.cli build --output output/candidate-2608-default
+python -m fenix_default_navdata.cli build --model output/nav-model-2608.json.gz --output output/candidate-2608-default
 python -m fenix_default_navdata.cli validate `
   --candidate output/candidate-2608-default `
   --reference "F:\我的世界动画\AI项目\导航数据\424源数据\2608\Default navdata 2608R1"
@@ -193,6 +196,7 @@ python -m fenix_default_navdata.cli build `
 ## 安全边界
 
 - 原始 CSV/PDF、官方 Community 包、参考 BGL、备份、日志和生成包均不进入仓库。
+- 中间模型快照只保存已规范化的 424 `NavModel`，不含 PDF 缓存目录或 Fenix `nd.db3`。
 - Fenix `nd.db3` 不参与本工具转换；Fenix 相关代码仅保留为历史适配器回归材料。
 - 参考成品只用于只读差分，绝不复制参考 BGL 冒充转换结果。
 - `semantic-diff` 不返回参考 SQLite 的坐标、频率、磁差、高程、名称或航路端点字段值，不能作为候选内容的反向来源。调用时必须显式提供候选和参考各自的预期 BGL 数；`bgl_file` 登记数不精确相等即拒绝生成报告。
