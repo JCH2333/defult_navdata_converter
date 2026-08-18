@@ -338,6 +338,137 @@ def test_projects_same_page_rnp_primary_to_ils_without_rnp_missed_legs() -> None
     assert report["unresolved_groups"] == []
 
 
+def test_projects_same_page_rnp_primary_to_ils_from_rnav_ils_title_support() -> None:
+    model = NavModel(Path("raw"))
+    database_source = SourceRef(
+        "Terminal/ZSNJ/ZSNJ-4L.pdf", 1, 1, "database-hash",
+    )
+    model.procedure_segments.extend((
+        ProcedureSegment(
+            "ZSNJ", "R07", "approach", "07", "", (
+                ChartTerminalLeg("R07", "07", "IF", "NJ106", "fixture"),
+                ChartTerminalLeg("R07", "07", "TF", "RW07", "fixture"),
+            ),
+            database_source,
+        ),
+        ProcedureSegment(
+            "ZSNJ", "R07", "missed", "07", "", (
+                ChartTerminalLeg("R07", "07", "DF", "RNPMA", "fixture"),
+            ),
+            database_source,
+            approach_family="RNP",
+        ),
+        ProcedureSegment(
+            "ZSNJ", "I07", "missed", "07", "", (
+                ChartTerminalLeg("I07", "07", "DF", "ILSMA", "fixture"),
+            ),
+            database_source,
+            approach_family="ILS",
+        ),
+    ))
+    model.procedure_charts.extend((
+        ProcedureChart(
+            "ZSNJ", "ZSNJ-5C.pdf", 1, "instrument-approach-index",
+            "RNAV ILS/DME z RWY07", "text", (), ("07",), (), (), (),
+            SourceRef("Terminal/ZSNJ/ZSNJ-5C.pdf", 1, 1, "ils-z-hash"),
+        ),
+        ProcedureChart(
+            "ZSNJ", "ZSNJ-5J.pdf", 1, "instrument-approach-index",
+            "RNAV CAT-II ILS/DME x RWY07", "text", (), ("07",), (), (), (),
+            SourceRef("Terminal/ZSNJ/ZSNJ-5J.pdf", 1, 1, "ils-x-hash"),
+        ),
+        ProcedureChart(
+            "ZSNJ", "ZSNJ-5D.pdf", 1, "instrument-approach-index",
+            "ILS/DME y RWY07", "text", (), ("07",), (), (), (),
+            SourceRef("Terminal/ZSNJ/ZSNJ-5D.pdf", 1, 1, "ils-y-hash"),
+        ),
+    ))
+
+    _project_same_page_rnp_primary_to_ils(model)
+
+    projected = [
+        segment
+        for segment in model.procedure_segments
+        if segment.label == "I07" and segment.kind == "approach"
+    ]
+    assert len(projected) == 1
+    assert [leg.fix_ident for leg in projected[0].legs] == ["NJ106", "RW07"]
+    assert model.shared_ils_primary_projections == [{
+        "airport": "ZSNJ",
+        "label": "I07",
+        "runway": "07",
+        "selection": (
+            "same_database_page_unique_rnp_primary_with_rnav_ils_support"
+        ),
+        "rnp_label": "R07",
+        "rnp_approach_family": "implicit_rnp_label",
+        "primary_legs": 2,
+        "database_source": {
+            "file": "Terminal/ZSNJ/ZSNJ-4L.pdf",
+            "row": 1,
+            "page": 1,
+            "sha256": "database-hash",
+        },
+        "ils_missed_source": {
+            "file": "Terminal/ZSNJ/ZSNJ-4L.pdf",
+            "row": 1,
+            "page": 1,
+            "sha256": "database-hash",
+        },
+        "chart_names": [
+            "RNAV CAT-II ILS/DME x RWY07",
+            "RNAV ILS/DME z RWY07",
+        ],
+        "chart_sources": [
+            {
+                "file": "Terminal/ZSNJ/ZSNJ-5J.pdf",
+                "row": 1,
+                "page": 1,
+                "sha256": "ils-x-hash",
+            },
+            {
+                "file": "Terminal/ZSNJ/ZSNJ-5C.pdf",
+                "row": 1,
+                "page": 1,
+                "sha256": "ils-z-hash",
+            },
+        ],
+    }]
+
+
+def test_rnav_ils_title_does_not_project_cross_page_rnp_primary() -> None:
+    model = NavModel(Path("raw"))
+    model.procedure_segments.extend((
+        ProcedureSegment(
+            "ZSNJ", "R25", "approach", "25", "", (
+                ChartTerminalLeg("R25", "25", "IF", "NJ206", "fixture"),
+            ),
+            SourceRef("Terminal/ZSNJ/ZSNJ-4N.pdf", 1, 1, "rnp-hash"),
+        ),
+        ProcedureSegment(
+            "ZSNJ", "I25", "missed", "25", "", (
+                ChartTerminalLeg("I25", "25", "DF", "NJ216", "fixture"),
+            ),
+            SourceRef("Terminal/ZSNJ/ZSNJ-4P.pdf", 1, 1, "ils-hash"),
+            approach_family="ILS",
+        ),
+    ))
+    model.procedure_charts.append(ProcedureChart(
+        "ZSNJ", "ZSNJ-5G.pdf", 1, "instrument-approach-index",
+        "RNAV ILS/DME z RWY25", "text", (), ("25",), (), (), (),
+        SourceRef("Terminal/ZSNJ/ZSNJ-5G.pdf", 1, 1, "chart-hash"),
+    ))
+
+    _project_same_page_rnp_primary_to_ils(model)
+
+    assert [
+        segment
+        for segment in model.procedure_segments
+        if segment.label == "I25" and segment.kind == "approach"
+    ] == []
+    assert model.shared_ils_primary_projections == []
+
+
 def test_projects_same_page_ils_suffix_from_unique_combined_rnp_candidate() -> None:
     model = NavModel(Path("raw"))
     database_source = SourceRef(

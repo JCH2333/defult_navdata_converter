@@ -2154,9 +2154,10 @@ def _project_same_page_rnp_primary_to_ils(model: NavModel) -> None:
     but its indexed ILS plate and the same database page establish that the
     RNP primary is shared. A separately printed database page is also accepted
     only when that same unique combined chart explicitly names both labels and
-    exposes exactly one non-AR RNP primary. This is deliberately narrower than
-    generic shared IAP section assignment: it never carries a RNP missed
-    section to ILS.
+    exposes exactly one non-AR RNP primary. A same-page ``RNAV ILS`` plate can
+    also support the exact base RNP label, but it cannot justify a cross-page
+    projection. This is deliberately narrower than generic shared IAP section
+    assignment: it never carries a RNP missed section to ILS.
     """
     groups: dict[tuple[str, str, str], list[ProcedureSegment]] = {}
     for segment in model.procedure_segments:
@@ -2204,31 +2205,55 @@ def _project_same_page_rnp_primary_to_ils(model: NavModel) -> None:
                 chart.airport,
             )
         ]
+        rnav_ils_support_charts = [
+            chart
+            for chart in matching_ils_charts
+            if (
+                re.search(r"\bRNAV\b", chart.chart_name.upper())
+                and re.search(r"\bILS\b", chart.chart_name.upper())
+                and "RNP" not in chart.chart_name.upper()
+                and "(AR)" not in chart.chart_name.upper()
+            )
+        ]
         # A plain ILS variant plate can share the Ixx identity but cannot
         # establish that this Rxx primary is also the ILS primary. The combined
         # source title must explicitly resolve to both database identities.
-        if len(shared_primary_charts) != 1:
-            continue
-        chart = shared_primary_charts[0]
-        chart_labels = approach_procedure_name_candidates(
-            chart.chart_name,
-            chart.runways,
-            chart.airport,
-        )
-        rnp_candidates = [
-            segment
-            for candidate_label in chart_labels
-            if candidate_label.startswith("R")
-            for segment in groups.get((airport, candidate_label, runway), [])
-            if (
-                iap_section_kind(segment) == "approach"
-                # The Rxx database label is the source identity for a plain
-                # RNP primary. A combined source title can explicitly expose
-                # both its base and suffix variants, while RNP AR remains
-                # excluded.
-                and segment.approach_family.upper() in {"", "RNP"}
+        if len(shared_primary_charts) == 1:
+            support_charts = shared_primary_charts
+            chart = shared_primary_charts[0]
+            chart_labels = approach_procedure_name_candidates(
+                chart.chart_name,
+                chart.runways,
+                chart.airport,
             )
-        ]
+            rnp_candidates = [
+                segment
+                for candidate_label in chart_labels
+                if candidate_label.startswith("R")
+                for segment in groups.get((airport, candidate_label, runway), [])
+                if (
+                    iap_section_kind(segment) == "approach"
+                    # The Rxx database label is the source identity for a plain
+                    # RNP primary. A combined source title can explicitly expose
+                    # both its base and suffix variants, while RNP AR remains
+                    # excluded.
+                    and segment.approach_family.upper() in {"", "RNP"}
+                )
+            ]
+        elif not shared_primary_charts and rnav_ils_support_charts:
+            support_charts = rnav_ils_support_charts
+            rnp_candidates = [
+                segment
+                for segment in groups.get(
+                    (airport, requested_rnp_label, runway), [],
+                )
+                if (
+                    iap_section_kind(segment) == "approach"
+                    and segment.approach_family.upper() in {"", "RNP"}
+                )
+            ]
+        else:
+            continue
         same_page_rnp_candidates = [
             segment
             for segment in rnp_candidates
@@ -2236,7 +2261,15 @@ def _project_same_page_rnp_primary_to_ils(model: NavModel) -> None:
         ]
         if len(same_page_rnp_candidates) == 1:
             rnp_primary = same_page_rnp_candidates[0]
-            selection = "same_database_page_unique_rnp_primary"
+            selection = (
+                "same_database_page_unique_rnp_primary"
+                if shared_primary_charts
+                else "same_database_page_unique_rnp_primary_with_rnav_ils_support"
+            )
+        elif rnav_ils_support_charts:
+            # RNAV does not itself mean RNP. It can only confirm an exact Rxx
+            # primary printed on the same database page as the ILS missed group.
+            continue
         elif len(rnp_candidates) == 1:
             rnp_primary = rnp_candidates[0]
             selection = "cross_database_page_unique_rnp_primary"
@@ -2266,7 +2299,7 @@ def _project_same_page_rnp_primary_to_ils(model: NavModel) -> None:
             rnp_primary.fenix_name,
             "ILS",
         ))
-        projections.append({
+        projection: dict[str, object] = {
             "airport": airport,
             "label": ils_label,
             "runway": runway,
@@ -2288,14 +2321,49 @@ def _project_same_page_rnp_primary_to_ils(model: NavModel) -> None:
                 "page": ils_sections[0].source.page,
                 "sha256": ils_sections[0].source.sha256,
             },
-            "chart_name": chart.chart_name,
-            "chart_source": {
-                "file": chart.source.file,
-                "row": chart.source.row,
-                "page": chart.source.page,
-                "sha256": chart.source.sha256,
-            },
-        })
+        }
+        if shared_primary_charts:
+            chart = support_charts[0]
+            projection.update({
+                "chart_name": chart.chart_name,
+                "chart_source": {
+                    "file": chart.source.file,
+                    "row": chart.source.row,
+                    "page": chart.source.page,
+                    "sha256": chart.source.sha256,
+                },
+            })
+        else:
+            projection.update({
+                "chart_names": [
+                    chart.chart_name
+                    for chart in sorted(
+                        support_charts,
+                        key=lambda item: (
+                            item.chart_name,
+                            item.source.file,
+                            item.page,
+                        ),
+                    )
+                ],
+                "chart_sources": [
+                    {
+                        "file": chart.source.file,
+                        "row": chart.source.row,
+                        "page": chart.source.page,
+                        "sha256": chart.source.sha256,
+                    }
+                    for chart in sorted(
+                        support_charts,
+                        key=lambda item: (
+                            item.chart_name,
+                            item.source.file,
+                            item.page,
+                        ),
+                    )
+                ],
+            })
+        projections.append(projection)
     model.procedure_segments.extend(additions)
     model.shared_ils_primary_projections.extend(projections)
 

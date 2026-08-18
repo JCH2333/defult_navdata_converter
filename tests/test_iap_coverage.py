@@ -321,6 +321,35 @@ def test_iap_coverage_prefers_unique_plain_ils_title_for_database_i_label():
     assert report["unresolved_groups"] == []
 
 
+def test_iap_coverage_does_not_treat_rnav_ils_as_plain_ils():
+    model = _model_with_iap_segments()
+    source = SourceRef("Terminal/ZSNJ/ZSNJ-4N.pdf", 1, 1, "database-hash")
+    model.procedure_segments[:] = [
+        ProcedureSegment(
+            "ZSNJ", "I24", "approach", "24", "", (
+                ChartTerminalLeg("I24", "24", "IF", "NJ205", "fixture"),
+            ), source, approach_family="ILS",
+        ),
+    ]
+    model.procedure_charts.extend([
+        ProcedureChart(
+            "ZSNJ", "ZSNJ-5E.pdf", 1, "instrument-approach-index",
+            "RNAV ILS/DME z RWY24", "text", (), ("24",), (), (), (), source,
+        ),
+        ProcedureChart(
+            "ZSNJ", "ZSNJ-5F.pdf", 1, "instrument-approach-index",
+            "ILS/DME y RWY24", "text", (), ("24",), (), (), (), source,
+        ),
+    ])
+
+    report = analyze_iap_coverage(model)
+
+    assert report["procedure_groups"]["status_counts"] == {
+        "unique_chart_without_roles": 1,
+    }
+    assert report["unresolved_groups"] == []
+
+
 def test_iap_coverage_prefers_plain_rnp_title_after_stronger_rules_fail():
     model = _model_with_iap_segments()
     source = SourceRef("Terminal/ZBDH/ZBDH-4H.pdf", 1, 1, "database-hash")

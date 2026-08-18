@@ -180,9 +180,9 @@ def _unqualified_rnp_ar_chart(chart: Any, segment: Any) -> bool:
 
 
 def _plain_ils_chart(chart: Any) -> bool:
-    """Identify a chart explicitly titled as ILS without an RNP qualifier."""
+    """Identify a chart explicitly titled as ILS without an RNAV/RNP qualifier."""
     title = chart.chart_name.upper()
-    return "ILS" in title and "RNP" not in title
+    return "ILS" in title and "RNAV" not in title and "RNP" not in title
 
 
 def _plain_rnp_chart(chart: Any) -> bool:
