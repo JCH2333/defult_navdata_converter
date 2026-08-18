@@ -1229,6 +1229,52 @@ def test_iap_coverage_projects_pure_rnp_subset_consensus_with_roleless_rnp_candi
     assert selection[0]["other_candidates_without_direct_roles"] == []
 
 
+def test_iap_coverage_ignores_mixed_rnp_ils_if_marker_on_non_if_primary_leg():
+    model = _model_with_iap_segments()
+    source = SourceRef("approach.pdf", 1, 1, "hash")
+    model.procedure_segments[:] = [ProcedureSegment(
+        "ZWTK", "R33", "approach", "33", "", (
+            ChartTerminalLeg(
+                "R33", "33", "IF", "TK802", "IF TK802 RNP0.3", sequence=1,
+            ),
+            ChartTerminalLeg(
+                "R33", "33", "RF", "TK801", "RF TK801 RNP0.3", sequence=2,
+            ),
+        ), source,
+    )]
+    model.procedure_charts[:] = [
+        ProcedureChart(
+            "ZWTK", "rnp-z.pdf", 1, "instrument-approach-index",
+            "RNP z RWY33(AR)", "text", (), ("33",), (), (), (), source,
+            route_fixes=(ChartRouteFix("TK802", "IF"),),
+        ),
+        ProcedureChart(
+            "ZWTK", "rnp-y.pdf", 1, "instrument-approach-index",
+            "RNP y RWY33(AR)", "text", (), ("33",), (), (), (), source,
+            route_fixes=(ChartRouteFix("TK802", "IF"),),
+        ),
+        ProcedureChart(
+            "ZWTK", "rnp-ils.pdf", 1, "instrument-approach-index",
+            "RNP ILS z RWY33(AR)", "text", (), ("33",), (), (), (), source,
+            route_fixes=(ChartRouteFix("TK801", "IF"),),
+        ),
+    ]
+
+    report = analyze_iap_coverage(model)
+
+    assert report["procedure_groups"]["status_counts"] == {
+        "roles_source_rnp_subset_consensus_direct_chart": 1,
+    }
+    assert report["role_evidence_counts"] == {"IF": 1}
+    assert report["unresolved_groups"] == []
+    selection = report["source_rnp_subset_consensus_direct_role_selections"]
+    assert len(selection) == 1
+    assert selection[0]["matching_roles"] == [{"ident": "TK802", "roles": ["IF"]}]
+    assert selection[0]["other_candidates_without_direct_roles"][0]["chart_name"] == (
+        "RNP ILS z RWY33(AR)"
+    )
+
+
 def test_iap_coverage_rejects_rnp_subset_consensus_when_other_chart_has_direct_role():
     model = _model_with_iap_segments()
     source = SourceRef("approach.pdf", 1, 1, "hash")

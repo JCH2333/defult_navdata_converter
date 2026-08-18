@@ -441,6 +441,35 @@ def _consensus_direct_chart_roles(
     return evidence[0]
 
 
+def _rnp_subset_direct_chart_roles(chart: Any, segment: Any) -> dict[str, set[str]]:
+    """Discard a mixed RNP/ILS page's IF marker when no source IF leg exists.
+
+    A combined RNP/ILS plate can print an IF marker for its ILS path while the
+    same fixed point occurs as an RF leg in an RNP database primary. That
+    marker cannot identify the RNP primary's IF leg, so it must not veto an
+    otherwise unanimous pure-RNP subset. This narrow compatibility filter is
+    intentionally limited to the combined-title case and the IF role.
+    """
+    roles = _direct_chart_roles_for_segment(chart, segment)
+    title = chart.chart_name.upper()
+    if "RNP" not in title or "ILS" not in title:
+        return roles
+    source_leg_types: dict[str, set[str]] = {}
+    for leg in segment.legs:
+        if leg.fix_ident:
+            source_leg_types.setdefault(leg.fix_ident.strip().upper(), set()).add(
+                leg.leg_type.upper()
+            )
+    compatible: dict[str, set[str]] = {}
+    for ident, role_set in roles.items():
+        retained = set(role_set)
+        if "IF" in retained and "IF" not in source_leg_types.get(ident, set()):
+            retained.remove("IF")
+        if retained:
+            compatible[ident] = retained
+    return compatible
+
+
 def _rnp_subset_consensus_direct_chart_roles(
     charts: list[Any],
     segment: Any,
@@ -476,7 +505,7 @@ def _rnp_subset_consensus_direct_chart_roles(
     if ar_titles == {False} and len(set(titles)) != len(titles):
         return {}
     evidence = [
-        _direct_chart_roles_for_segment(chart, segment)
+        _rnp_subset_direct_chart_roles(chart, segment)
         for chart in rnp_charts
     ]
     supporting = [candidate for candidate in evidence if candidate]
@@ -485,7 +514,7 @@ def _rnp_subset_consensus_direct_chart_roles(
     if any(candidate and candidate != supporting[0] for candidate in evidence):
         return {}
     if any(
-        _direct_chart_roles_for_segment(chart, segment)
+        _rnp_subset_direct_chart_roles(chart, segment)
         for chart in other_charts
     ):
         return {}
