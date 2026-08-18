@@ -441,6 +441,55 @@ def _consensus_direct_chart_roles(
     return evidence[0]
 
 
+def _rnp_subset_consensus_direct_chart_roles(
+    charts: list[Any],
+    segment: Any,
+) -> dict[str, set[str]]:
+    """Return a pure-RNP consensus when other charts prove no primary roles.
+
+    Some database primaries explicitly encode every leg as RNP while the chart
+    index also lists a non-RNP procedure for the same runway. If at least two
+    pure-RNP pages agree on non-empty direct roles and every non-RNP candidate
+    contributes no direct role for the primary, the shared flags are safe to
+    project without selecting a chart variant. Any role on another candidate
+    remains a conflict and leaves the group unresolved.
+    """
+    rnp_charts = [
+        chart
+        for chart in charts
+        if "RNP" in chart.chart_name.upper()
+        and "ILS" not in chart.chart_name.upper()
+    ]
+    other_charts = [chart for chart in charts if chart not in rnp_charts]
+    if len(rnp_charts) < 2 or not other_charts:
+        return {}
+    if not segment.legs or not all(
+        "RNP" in (leg.raw or "").upper()
+        for leg in segment.legs
+    ):
+        return {}
+    titles = [chart.chart_name.upper() for chart in rnp_charts]
+    ar_titles = {"(AR)" in title for title in titles}
+    if len(ar_titles) != 1:
+        return {}
+    if ar_titles == {False} and len(set(titles)) != len(titles):
+        return {}
+    evidence = [
+        _direct_chart_roles_for_segment(chart, segment)
+        for chart in rnp_charts
+    ]
+    if not evidence or not evidence[0]:
+        return {}
+    if any(candidate != evidence[0] for candidate in evidence[1:]):
+        return {}
+    if any(
+        _direct_chart_roles_for_segment(chart, segment)
+        for chart in other_charts
+    ):
+        return {}
+    return evidence[0]
+
+
 def _select_iap_chart_with_rnp_ar_title_qualifier(
     charts: list[Any],
     segment: Any,
@@ -856,6 +905,12 @@ def iap_chart_roles(model: NavModel, segment: Any) -> dict[str, set[str]]:
     consensus = _consensus_direct_chart_roles(charts, segment)
     if consensus:
         return consensus
+    rnp_subset_consensus = _rnp_subset_consensus_direct_chart_roles(
+        charts,
+        segment,
+    )
+    if rnp_subset_consensus:
+        return rnp_subset_consensus
     chart, _ = _select_iap_chart(model, charts, segment)
     if chart is None:
         return {}
@@ -875,6 +930,8 @@ def _iap_role_status(selection: str | None, direct_fixed_selection: bool) -> str
         return "roles_source_dominant_direct_role_chart"
     if selection == "consensus_direct_roles":
         return "roles_source_consensus_direct_chart"
+    if selection == "rnp_subset_consensus_direct_roles":
+        return "roles_source_rnp_subset_consensus_direct_chart"
     if selection == "plain_rnp_title":
         return "roles_source_plain_rnp_title_chart"
     if selection == "unique_first_if":
@@ -961,6 +1018,7 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
     source_unique_direct_role_selections: list[dict[str, object]] = []
     source_dominant_direct_role_selections: list[dict[str, object]] = []
     source_consensus_direct_role_selections: list[dict[str, object]] = []
+    source_rnp_subset_consensus_direct_role_selections: list[dict[str, object]] = []
     source_plain_rnp_title_selections: list[dict[str, object]] = []
     source_unique_first_if_selections: list[dict[str, object]] = []
     selected_role_pages: set[tuple[str, str, int]] = set()
@@ -1037,14 +1095,25 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
                     consensus_roles,
                 )
             else:
-                selected_chart, selection = _select_iap_chart(
-                    model, matching, primary[0],
+                rnp_subset_consensus_roles = _rnp_subset_consensus_direct_chart_roles(
+                    matching,
+                    primary[0],
                 )
-                roles = (
-                    _chart_roles_for_segment(model, selected_chart, primary[0])
-                    if selected_chart is not None
-                    else {}
-                )
+                if rnp_subset_consensus_roles:
+                    selected_chart, selection, roles = (
+                        None,
+                        "rnp_subset_consensus_direct_roles",
+                        rnp_subset_consensus_roles,
+                    )
+                else:
+                    selected_chart, selection = _select_iap_chart(
+                        model, matching, primary[0],
+                    )
+                    roles = (
+                        _chart_roles_for_segment(model, selected_chart, primary[0])
+                        if selected_chart is not None
+                        else {}
+                    )
             matching_roles = _matching_leg_roles(primary[0], roles)
             direct_fixed_selection = (
                 match_selection == "direct_fixed_points"
@@ -1190,6 +1259,42 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
                         for ident, role_set in sorted(roles.items())
                     ],
                 })
+            if selection == "rnp_subset_consensus_direct_roles":
+                rnp_candidates = [
+                    chart
+                    for chart in matching
+                    if "RNP" in chart.chart_name.upper()
+                    and "ILS" not in chart.chart_name.upper()
+                ]
+                source_rnp_subset_consensus_direct_role_selections.append({
+                    "airport": airport,
+                    "label": label,
+                    "runway": runway,
+                    "selection": "rnp_subset_consensus_direct_roles",
+                    "matching_charts": len(matching),
+                    "rnp_candidates": [
+                        {
+                            "chart_name": chart.chart_name,
+                            "source": _source_report(chart.source),
+                        }
+                        for chart in rnp_candidates
+                    ],
+                    "other_candidates_without_direct_roles": [
+                        {
+                            "chart_name": chart.chart_name,
+                            "source": _source_report(chart.source),
+                        }
+                        for chart in matching
+                        if chart not in rnp_candidates
+                    ],
+                    "matching_roles": [
+                        {
+                            "ident": ident,
+                            "roles": sorted(role_set),
+                        }
+                        for ident, role_set in sorted(roles.items())
+                    ],
+                })
             if plain_rnp_title_selection and selected_chart is not None:
                 source_plain_rnp_title_selections.append({
                     "airport": airport,
@@ -1237,7 +1342,7 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
     role_evidence_pages = sum(bool(chart.route_fixes) for chart in charts)
     missed_evidence_pages = sum(bool(chart.has_missed_approach) for chart in charts)
     return {
-        "version": 19,
+        "version": 20,
         "chart_pages": {
             "total": len(charts),
             "with_route_role_evidence": role_evidence_pages,
@@ -1296,6 +1401,9 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
         "source_dominant_direct_role_selections": source_dominant_direct_role_selections,
         "source_consensus_direct_role_selections": (
             source_consensus_direct_role_selections
+        ),
+        "source_rnp_subset_consensus_direct_role_selections": (
+            source_rnp_subset_consensus_direct_role_selections
         ),
         "source_plain_rnp_title_selections": source_plain_rnp_title_selections,
         "source_unique_first_if_selections": source_unique_first_if_selections,
