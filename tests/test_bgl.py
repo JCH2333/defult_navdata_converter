@@ -2018,3 +2018,24 @@ def test_airport_projection_keeps_truncated_sid_star_names_unique(tmp_path: Path
     assert len(transition_names) == 2
     assert len(set(transition_names)) == 2
     assert all(len(name) <= 5 for name in transition_names)
+
+
+def test_airport_scope_omits_airac_cycle(tmp_path: Path) -> None:
+    model = NavModel(Path("source"))
+    model.airports["a"] = Airport(
+        "a", "ZBCF", "ZBCF", 35.0, 105.0, 1000, 18000, 180, SourceRef("AD_HP.csv", 1),
+    )
+    output = tmp_path / "airports.xml"
+    write_bglcomp_xml(model, DEFAULT_CYCLE, output, scope="airports")
+    root = ET.parse(output).getroot()
+    assert root.find("Airport") is not None
+    assert root.find("AiracCycle") is None
+
+
+def test_enroute_scope_keeps_airac_cycle(tmp_path: Path) -> None:
+    model = NavModel(Path("source"))
+    output = tmp_path / "enroute.xml"
+    write_bglcomp_xml(model, DEFAULT_CYCLE, output, scope="enroute")
+    cycle = ET.parse(output).getroot().find("AiracCycle")
+    assert cycle is not None
+    assert cycle.attrib["cycleNumber"] == "08"

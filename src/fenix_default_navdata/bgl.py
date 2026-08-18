@@ -1971,11 +1971,15 @@ def write_bglcomp_xml(
         "version": "9.0",
         "source": "default_navdata_converter",
     })
-    ET.SubElement(root, "AiracCycle", {
-        "cycleBegin": cycle.begin,
-        "cycleEnd": cycle.end,
-        "cycleNumber": cycle.number[-2:],
-    })
+    # Official airport BGLs and the 2608R1 overlay airport files do not embed
+    # the Package Tool magvar grid. That grid is compiled from AiracCycle and
+    # already lives in navigraph-nav-base plus the overlay enroute BGL.
+    if scope in {"all", "enroute"}:
+        ET.SubElement(root, "AiracCycle", {
+            "cycleBegin": cycle.begin,
+            "cycleEnd": cycle.end,
+            "cycleNumber": cycle.number[-2:],
+        })
 
     airports = [
         airport for airport in model.airports.values()
