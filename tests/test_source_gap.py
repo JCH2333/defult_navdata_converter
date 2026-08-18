@@ -19,6 +19,7 @@ from fenix_default_navdata.source_gap import (
     SourceGapAuditError,
     audit_general_document_key_point_reference_coverage,
     audit_source_gaps,
+    audit_terminal_coordinate_field_delta_coverage,
     audit_terminal_coordinate_reference_coverage,
 )
 
@@ -28,7 +29,10 @@ def _semantic_report(
     waypoint_samples: list[dict[str, object]],
     airway_samples: list[dict[str, object]],
     waypoint_omitted: int = 0,
+    waypoint_field_deltas: list[dict[str, object]] | None = None,
+    waypoint_field_deltas_omitted: int = 0,
 ) -> dict[str, object]:
+    waypoint_field_deltas = waypoint_field_deltas or []
     return {
         "diagnostic": "navdatareader-semantic-diff-v1",
         "read_only": True,
@@ -42,6 +46,9 @@ def _semantic_report(
                 "reference_only_logical_keys": len(waypoint_samples),
                 "reference_only_samples": waypoint_samples,
                 "reference_only_samples_omitted": waypoint_omitted,
+                "field_delta_rows": len(waypoint_field_deltas),
+                "field_delta_samples": waypoint_field_deltas,
+                "field_delta_samples_omitted": waypoint_field_deltas_omitted,
             },
             "airway": {
                 "reference_only_logical_keys": len(airway_samples),
@@ -274,6 +281,175 @@ def test_terminal_coordinate_audit_reports_unretained_airport_coordinate(
         "airport_terminal_coordinate_not_retained": 1,
     }
     assert "LOCAL" not in json.dumps(result)
+
+
+def test_terminal_coordinate_field_delta_audit_keeps_source_categories_redacted(
+    tmp_path: Path,
+) -> None:
+    model = _model(tmp_path)
+    source = SourceRef("Terminal/ZBAA/coordinate-page.pdf", page=1)
+    retained = TerminalWaypoint(
+        "retained", "ZBAA", "RETAINED", 40.1, 116.1, source, "ZB",
+    )
+    root = TerminalWaypoint(
+        "root", "ZBAA", "ROOT", 40.2, 116.2, source, "ZB",
+    )
+    model.terminal_waypoints.extend((
+        retained,
+        TerminalWaypoint(
+            "unretained", "ZBAA", "UNRETAINED", 40.3, 116.3, source, "ZB",
+        ),
+        TerminalWaypoint(
+            "airport-a", "ZBAA", "MULTI", 40.4, 116.4, source, "ZB",
+        ),
+        TerminalWaypoint(
+            "airport-b", "ZBAA", "MULTI", 40.5, 116.5, source, "ZB",
+        ),
+        root,
+        TerminalWaypoint(
+            "root-a", "ZBAA", "ROOTMULTI", 40.6, 116.6, source, "ZB",
+        ),
+        TerminalWaypoint(
+            "root-b", "ZBAD", "ROOTMULTI", 40.7, 116.7, source, "ZB",
+        ),
+    ))
+    report = _semantic_report(
+        waypoint_samples=[],
+        airway_samples=[],
+        waypoint_field_deltas=[
+            {
+                "logical_key": {
+                    "ident": "RETAINED", "region": "ZB", "airport_ident": "ZBAA",
+                },
+                "fields": ["laty", "mag_var"],
+            },
+            {
+                "logical_key": {
+                    "ident": "UNRETAINED", "region": "ZB", "airport_ident": "ZBAA",
+                },
+                "fields": ["lonx"],
+            },
+            {
+                "logical_key": {
+                    "ident": "MISSING", "region": "ZB", "airport_ident": "ZBAA",
+                },
+                "fields": ["laty"],
+            },
+            {
+                "logical_key": {
+                    "ident": "MULTI", "region": "ZB", "airport_ident": "ZBAA",
+                },
+                "fields": ["laty"],
+            },
+            {
+                "logical_key": {
+                    "ident": "ROOT", "region": "ZB", "airport_ident": None,
+                },
+                "fields": ["mag_var"],
+            },
+            {
+                "logical_key": {
+                    "ident": "ROOTMULTI", "region": "ZB", "airport_ident": None,
+                },
+                "fields": ["laty"],
+            },
+        ],
+    )
+
+    result = audit_terminal_coordinate_field_delta_coverage(
+        model,
+        report,
+        retained_terminal_waypoints=(retained, root),
+    )
+
+    assert result["diagnostic"] == "terminal-coordinate-field-delta-coverage-v1"
+    assert result["scope"] == {"airport_scoped": 4, "root_scoped": 2}
+    assert result["changed_fields"] == {"laty": 4, "lonx": 1, "mag_var": 2}
+    assert result["categories"] == {
+        "airport_terminal_coordinate_not_retained": 1,
+        "airport_terminal_coordinate_source_backed": 1,
+        "airport_terminal_multiple_source_coordinates": 1,
+        "airport_terminal_not_present_in_coordinate_pages": 1,
+        "root_terminal_coordinate_source_backed": 1,
+        "root_terminal_multiple_source_coordinates": 1,
+    }
+    serialized = json.dumps(result)
+    for value in ("RETAINED", "UNRETAINED", "MISSING", "MULTI", "ROOT"):
+        assert value not in serialized
+
+
+def test_terminal_coordinate_field_delta_audit_rejects_truncated_samples(
+    tmp_path: Path,
+) -> None:
+    report = _semantic_report(
+        waypoint_samples=[],
+        airway_samples=[],
+        waypoint_field_deltas=[{
+            "logical_key": {
+                "ident": "LOCAL", "region": "ZB", "airport_ident": "ZBAA",
+            },
+            "fields": ["laty"],
+        }],
+        waypoint_field_deltas_omitted=1,
+    )
+
+    with pytest.raises(SourceGapAuditError, match="字段差异样本被截断"):
+        audit_terminal_coordinate_field_delta_coverage(_model(tmp_path), report)
+
+
+def test_cli_writes_terminal_coordinate_field_delta_audit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    semantic = tmp_path / "semantic.json"
+    semantic.write_text(json.dumps(_semantic_report(
+        waypoint_samples=[],
+        airway_samples=[],
+        waypoint_field_deltas=[{
+            "logical_key": {
+                "ident": "LOCAL", "region": "ZB", "airport_ident": "ZBAA",
+            },
+            "fields": ["laty"],
+        }],
+    )), encoding="utf-8")
+    output = tmp_path / "audit.json"
+    observed: dict[str, object] = {}
+
+    def fake_load(root: Path, **kwargs: object) -> NavModel:
+        observed["root"] = root
+        observed["include_terminal_documents"] = kwargs["include_terminal_documents"]
+        model = _model(tmp_path)
+        model.terminal_waypoints.append(TerminalWaypoint(
+            "local",
+            "ZBAA",
+            "LOCAL",
+            40.1,
+            116.1,
+            SourceRef("Terminal/ZBAA/coordinate-page.pdf", page=1),
+            "ZB",
+        ))
+        return model
+
+    monkeypatch.setattr("fenix_default_navdata.cli.load_naip", fake_load)
+    monkeypatch.setattr(
+        "fenix_default_navdata.cli._load_terminal_coordinate_pages",
+        lambda model, cache: None,
+    )
+
+    exit_code = main([
+        "terminal-coordinate-delta-audit",
+        "--raw", str(tmp_path / "raw"),
+        "--semantic-diff", str(semantic),
+        "--output", str(output),
+    ])
+
+    assert exit_code == 0
+    assert observed["include_terminal_documents"] is False
+    assert json.loads(output.read_text(encoding="utf-8"))["diagnostic"] == (
+        "terminal-coordinate-field-delta-coverage-v1"
+    )
+    assert json.loads(capsys.readouterr().out)["read_only"] is True
 
 
 def test_general_doc_keypoint_audit_keeps_source_categories_redacted(

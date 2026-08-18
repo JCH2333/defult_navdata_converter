@@ -96,6 +96,60 @@ def _reference_only_keys(
     return tuple(result)
 
 
+def _field_delta_keys(
+    report: Mapping[str, object],
+    table: str,
+    fields: tuple[str, ...],
+) -> tuple[tuple[dict[str, object], tuple[str, ...]], ...]:
+    """Return complete, redacted field-delta identities without reference values."""
+    if report.get("diagnostic") != "navdatareader-semantic-diff-v1":
+        raise SourceGapAuditError("来源审计只接受 navdatareader-semantic-diff-v1 报告")
+    if report.get("read_only") is not True or report.get("reference_values_redacted") is not True:
+        raise SourceGapAuditError("来源审计只接受只读且已脱敏的语义差分报告")
+    tables = report.get("tables")
+    if not isinstance(tables, Mapping):
+        raise SourceGapAuditError("语义差分缺少 tables")
+    table_report = tables.get(table)
+    if not isinstance(table_report, Mapping):
+        raise SourceGapAuditError(f"语义差分缺少 {table} 表")
+    samples = table_report.get("field_delta_samples")
+    if not isinstance(samples, list):
+        raise SourceGapAuditError(f"{table} 表缺少字段差异样本")
+    if int(table_report.get("field_delta_samples_omitted") or 0) != 0:
+        raise SourceGapAuditError(
+            f"{table} 表字段差异样本被截断，不能用于完整来源审计"
+        )
+    expected = int(table_report.get("field_delta_rows") or 0)
+    if len(samples) != expected:
+        raise SourceGapAuditError(
+            f"{table} 表字段差异样本数量与逻辑身份总数不一致"
+        )
+    result: list[tuple[dict[str, object], tuple[str, ...]]] = []
+    seen: set[tuple[object, ...]] = set()
+    for sample in samples:
+        if not isinstance(sample, Mapping) or not isinstance(sample.get("logical_key"), Mapping):
+            raise SourceGapAuditError(f"{table} 表存在无效字段差异样本")
+        key = sample["logical_key"]
+        if any(field not in key for field in fields):
+            raise SourceGapAuditError(f"{table} 表字段差异样本缺少逻辑身份字段")
+        identity = tuple(key[field] for field in fields)
+        if identity in seen:
+            raise SourceGapAuditError(f"{table} 表字段差异样本存在重复逻辑身份")
+        changed_fields = sample.get("fields")
+        if (
+            not isinstance(changed_fields, list)
+            or not changed_fields
+            or any(not isinstance(value, str) or not value for value in changed_fields)
+        ):
+            raise SourceGapAuditError(f"{table} 表存在无效字段差异字段列表")
+        seen.add(identity)
+        result.append((
+            {field: key[field] for field in fields},
+            tuple(changed_fields),
+        ))
+    return tuple(result)
+
+
 def _waypoint_categories(
     model: NavModel,
     keys: tuple[dict[str, object], ...],
@@ -245,6 +299,120 @@ def audit_terminal_coordinate_reference_coverage(
             ),
         },
         "reference_only_waypoint_identities": len(keys),
+        "categories": dict(sorted(categories.items())),
+    }
+
+
+def audit_terminal_coordinate_field_delta_coverage(
+    model: NavModel,
+    semantic_report: Mapping[str, object],
+    *,
+    retained_terminal_waypoints: Iterable[object] | None = None,
+) -> dict[str, object]:
+    """Classify waypoint field deltas against 424 terminal-coordinate evidence.
+
+    The semantic report supplies only logical identities and changed field
+    names.  It never exposes reference values, so this diagnostic cannot be
+    repurposed as a reverse-input channel for coordinates or magnetic
+    variation.
+    """
+    _require_complete_reader_output(semantic_report)
+    deltas = _field_delta_keys(
+        semantic_report,
+        "waypoint",
+        _WAYPOINT_FIELDS,
+    )
+    airport_grouped: dict[tuple[str, str, str], list[object]] = defaultdict(list)
+    root_grouped: dict[tuple[str, str], list[object]] = defaultdict(list)
+    for point in model.terminal_waypoints:
+        airport = _normalized(point.airport)
+        region = _normalized(point.country or point.airport[:2])[:2]
+        ident = _normalized(point.ident)
+        airport_grouped[(airport, region, ident)].append(point)
+        root_grouped[(region, ident)].append(point)
+    retained_airport_identities = (
+        {
+            (
+                _normalized(point.airport),
+                _normalized(point.country or point.airport[:2])[:2],
+                _normalized(point.ident),
+            )
+            for point in retained_terminal_waypoints
+        }
+        if retained_terminal_waypoints is not None
+        else None
+    )
+    categories: Counter[str] = Counter()
+    scope_counts: Counter[str] = Counter()
+    field_counts: Counter[str] = Counter()
+    for key, changed_fields in deltas:
+        airport = _normalized(key["airport_ident"])
+        region = _normalized(key["region"])[:2]
+        ident = _normalized(key["ident"])
+        field_counts.update(changed_fields)
+        if airport:
+            scope_counts["airport_scoped"] += 1
+            candidates = airport_grouped.get((airport, region, ident), [])
+            coordinates = {
+                (round(point.latitude, 6), round(point.longitude, 6))
+                for point in candidates
+            }
+            if not candidates:
+                categories["airport_terminal_not_present_in_coordinate_pages"] += 1
+            elif len(coordinates) != 1:
+                categories["airport_terminal_multiple_source_coordinates"] += 1
+            elif (
+                retained_airport_identities is not None
+                and (airport, region, ident) not in retained_airport_identities
+            ):
+                categories["airport_terminal_coordinate_not_retained"] += 1
+            else:
+                categories["airport_terminal_coordinate_source_backed"] += 1
+            continue
+        scope_counts["root_scoped"] += 1
+        candidates = root_grouped.get((region, ident), [])
+        coordinates = {
+            (round(point.latitude, 6), round(point.longitude, 6))
+            for point in candidates
+        }
+        if not candidates:
+            categories["root_terminal_not_present_in_coordinate_pages"] += 1
+        elif len(coordinates) != 1:
+            categories["root_terminal_multiple_source_coordinates"] += 1
+        elif (
+            retained_airport_identities is not None
+            and not any(
+                (
+                    _normalized(point.airport),
+                    _normalized(point.country or point.airport[:2])[:2],
+                    _normalized(point.ident),
+                ) in retained_airport_identities
+                for point in candidates
+            )
+        ):
+            categories["root_terminal_coordinate_not_retained"] += 1
+        else:
+            categories["root_terminal_coordinate_source_backed"] += 1
+    if sum(categories.values()) != len(deltas):
+        raise SourceGapAuditError("终端坐标页字段差异分类未覆盖全部候选航点身份")
+    return {
+        "diagnostic": "terminal-coordinate-field-delta-coverage-v1",
+        "read_only": True,
+        "reference_values_redacted": True,
+        "source": {
+            "terminal_coordinate_points": len(model.terminal_waypoints),
+            "terminal_coordinate_airport_identity_groups": len(airport_grouped),
+            "terminal_coordinate_root_identity_groups": len(root_grouped),
+            "retention_checked": retained_airport_identities is not None,
+            "retained_terminal_coordinate_airport_identity_groups": (
+                len(retained_airport_identities)
+                if retained_airport_identities is not None
+                else None
+            ),
+        },
+        "field_delta_waypoint_identities": len(deltas),
+        "scope": dict(sorted(scope_counts.items())),
+        "changed_fields": dict(sorted(field_counts.items())),
         "categories": dict(sorted(categories.items())),
     }
 

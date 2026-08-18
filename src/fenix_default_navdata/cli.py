@@ -40,6 +40,7 @@ from .source import (
 from .source_gap import (
     audit_general_document_key_point_reference_coverage,
     audit_source_gaps,
+    audit_terminal_coordinate_field_delta_coverage,
     audit_terminal_coordinate_reference_coverage,
     load_semantic_diff,
     write_source_gap_audit,
@@ -185,6 +186,38 @@ def build_parser() -> argparse.ArgumentParser:
     terminal_coordinate.add_argument(
         "--output",
         help="可选的本地终端坐标页来源覆盖审计 JSON 输出路径",
+    )
+    terminal_coordinate_delta = sub.add_parser(
+        "terminal-coordinate-delta-audit",
+        help="只读分类候选航点字段差异在 424 终端坐标页中的来源覆盖",
+    )
+    terminal_coordinate_delta.add_argument("--raw", help="2608 原始 CSV/PDF 目录")
+    terminal_coordinate_delta.add_argument(
+        "--semantic-diff",
+        required=True,
+        help="完整、只读且已脱敏的 semantic-diff JSON",
+    )
+    terminal_coordinate_delta.add_argument(
+        "--pdf-cache",
+        help="可复用的终端 PDF 解析缓存目录；省略时直接只读解析源 PDF",
+    )
+    terminal_coordinate_delta.add_argument(
+        "--general-doc-cache",
+        help="可选：与候选构建相同的 GeneralDoc OCR 缓存根目录",
+    )
+    terminal_coordinate_delta.add_argument(
+        "--general-doc-keypoint-cache-directory",
+        default="enr-4.4",
+        help="与候选构建相同的 GeneralDoc 4.4 缓存子目录",
+    )
+    terminal_coordinate_delta.add_argument(
+        "--check-retention",
+        action="store_true",
+        help="额外加载完整来源模型，区分终端坐标条目是否被当前保留规则保留",
+    )
+    terminal_coordinate_delta.add_argument(
+        "--output",
+        help="可选的本地终端坐标页字段差异审计 JSON 输出路径",
     )
     general_doc_keypoint = sub.add_parser(
         "general-doc-keypoint-audit",
@@ -678,6 +711,43 @@ def main(argv: list[str] | None = None) -> int:
             )
             retained_terminal_waypoints = retained_model.terminal_waypoints
         report = audit_terminal_coordinate_reference_coverage(
+            model,
+            load_semantic_diff(Path(args.semantic_diff)),
+            retained_terminal_waypoints=retained_terminal_waypoints,
+        )
+        if args.output:
+            output = Path(args.output).expanduser().resolve()
+            report["output"] = str(output)
+            write_source_gap_audit(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "terminal-coordinate-delta-audit":
+        raw = _path(args.raw) or detect_paths().raw_root
+        if not raw:
+            raise SystemExit("无法自动检测 424 原始目录，请显式传入 --raw")
+        pdf_cache = _path(args.pdf_cache)
+        model = load_naip(
+            raw,
+            pdf_cache=pdf_cache,
+            general_doc_cache=_path(args.general_doc_cache),
+            general_doc_key_point_cache_directory=(
+                args.general_doc_keypoint_cache_directory
+            ),
+            include_terminal_documents=False,
+        )
+        _load_terminal_coordinate_pages(model, pdf_cache)
+        retained_terminal_waypoints = None
+        if args.check_retention:
+            retained_model = load_naip(
+                raw,
+                pdf_cache=pdf_cache,
+                general_doc_cache=_path(args.general_doc_cache),
+                general_doc_key_point_cache_directory=(
+                    args.general_doc_keypoint_cache_directory
+                ),
+            )
+            retained_terminal_waypoints = retained_model.terminal_waypoints
+        report = audit_terminal_coordinate_field_delta_coverage(
             model,
             load_semantic_diff(Path(args.semantic_diff)),
             retained_terminal_waypoints=retained_terminal_waypoints,
