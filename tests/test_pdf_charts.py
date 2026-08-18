@@ -206,6 +206,28 @@ def test_database_final_approach_missed_heading_is_a_combined_approach_section()
     ]
 
 
+def test_database_final_approach_missed_splits_after_runway_termination():
+    text = """
+    RWY23 \u6700\u540e\u8fdb\u8fd1\u3001\u590d\u98de
+    IF LZ306 900 RNP0.3
+    TF RW23 RNP0.3
+    TF LZ546 1500 RNP0.3
+    RF LZ566 1800 RNP0.3
+    """
+
+    legs = extract_terminal_leg_evidence(text)
+
+    assert [
+        (leg.procedure_label, leg.procedure_kind, leg.leg_type, leg.fix_ident)
+        for leg in legs
+    ] == [
+        ("R23", "\u8fdb\u8fd1", "IF", "LZ306"),
+        ("R23", "\u8fdb\u8fd1", "TF", "RW23"),
+        ("R23", "\u590d\u98de", "TF", "LZ546"),
+        ("R23", "\u590d\u98de", "RF", "LZ566"),
+    ]
+
+
 def test_database_approach_leg_type_is_not_a_transition_name():
     text = """
     RWY12R RNP 进近 TF

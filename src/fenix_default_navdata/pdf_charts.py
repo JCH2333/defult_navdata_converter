@@ -22,7 +22,7 @@ from pypdf import PdfReader
 from .model import Ad219NdbEvidence, Ad219Vor, ChartFixCoordinate, ChartHoldingEvidence, ChartRouteFix, ChartStandardProcedureRoute, ChartTerminalLeg, Ils, ProcedureChart, SourceRef
 
 
-_EVIDENCE_CACHE_VERSION = 40
+_EVIDENCE_CACHE_VERSION = 41
 
 
 _PROCEDURE = re.compile(r"\b([A-Z0-9]{2,6}-\d{2}[AD])\b")
@@ -918,10 +918,20 @@ def extract_terminal_leg_evidence(text: str) -> tuple[ChartTerminalLeg, ...]:
             fix_ident = (rf_leg["fix"] if rf_leg else leg["fix"]) or (
                 next_line if _COORDINATE_PAGE_IDENT.fullmatch(next_line) and next_line not in _IGNORED else None
             )
-            if split_combined_approach_missed and active_rows and leg_type in {"CA", "CF", "DF"}:
-                # CAAC combines these two labelled phases under one title.  The
-                # first course/direct leg after the printed approach rows starts
-                # the following explicitly named missed-approach portion.
+            previous_is_runway_termination = (
+                active_rows
+                and active_rows[-1][0] == "TF"
+                and active_rows[-1][1] in {f"RW{runway}" for runway in active_runways}
+            )
+            if (
+                split_combined_approach_missed
+                and active_rows
+                and (leg_type in {"CA", "CF", "DF"} or previous_is_runway_termination)
+            ):
+                # CAAC combines these two labelled phases under one title. A
+                # CF/CA/DF leg normally starts the explicit missed portion;
+                # some tables instead terminate final approach at TF RWxx and
+                # begin the missed path with TF/RF.
                 flush()
                 active_kind = "\u590d\u98de"
                 active_transition = ""
