@@ -843,6 +843,79 @@ def test_bgl_iap_chart_roles_reuse_identical_direct_role_consensus(
     assert last.attrib["isMAP"] == "TRUE"
 
 
+def test_bgl_iap_chart_roles_reuse_intersecting_direct_role_consensus(
+    tmp_path: Path,
+):
+    model = NavModel(Path("source"))
+    source = SourceRef("Terminal/ZUNZ/ZUNZ-4G05.pdf", 1, 1, "database-hash")
+    model.airports["a"] = Airport(
+        "a", "ZUNZ", "ZUNZ", 29.0, 90.0, 1000, 18000, 180, source,
+    )
+    model.runways.append(Runway(
+        "r", "a", "05", 50.0, 10000, 150, "ASP", 1000, source,
+    ))
+    model.terminal_waypoints.extend([
+        TerminalWaypoint("if", "ZUNZ", "LZ250", 29.10, 90.0, source, "ZU"),
+        TerminalWaypoint("faf", "ZUNZ", "LZ186", 29.08, 90.0, source, "ZU"),
+        TerminalWaypoint("map", "ZUNZ", "RW05", 29.05, 90.0, source, "ZU"),
+    ])
+    primary = ProcedureSegment(
+        "ZUNZ", "R05", "approach", "05", "", (
+            ChartTerminalLeg(
+                "R05", "05", "IF", "LZ250", "fixture", sequence=1,
+                fix_region="ZU", fix_type="TERMINAL_WAYPOINT",
+                fix_latitude=29.10, fix_longitude=90.0,
+            ),
+            ChartTerminalLeg(
+                "R05", "05", "TF", "LZ186", "fixture", sequence=2,
+                fix_region="ZU", fix_type="TERMINAL_WAYPOINT",
+                fix_latitude=29.08, fix_longitude=90.0,
+            ),
+            ChartTerminalLeg(
+                "R05", "05", "TF", "RW05", "fixture", sequence=3,
+                fix_region="ZU", fix_type="TERMINAL_WAYPOINT",
+                fix_latitude=29.05, fix_longitude=90.0,
+            ),
+        ), source,
+    )
+    model.procedure_segments.append(primary)
+    model.procedure_charts.extend([
+        ProcedureChart(
+            "ZUNZ", "ZUNZ-9A.pdf", 1, "instrument-approach-index",
+            "RNP RWY05(AR)(DUMIX)", "text", (), ("05",), (), (), (), source,
+            route_fixes=(ChartRouteFix("LZ186", "FAF"),),
+        ),
+        ProcedureChart(
+            "ZUNZ", "ZUNZ-9B.pdf", 1, "instrument-approach-index",
+            "RNP RWY05(AR)(ELNUN)", "text", (), ("05",), (), (), (), source,
+            route_fixes=(
+                ChartRouteFix("LZ250", "IF"),
+                ChartRouteFix("LZ186", "FAF"),
+            ),
+        ),
+        ProcedureChart(
+            "ZUNZ", "ZUNZ-9C.pdf", 1, "instrument-approach-index",
+            "RNP RWY05(AR)(LZ302)", "text", (), ("05",), (), (), (), source,
+            route_fixes=(
+                ChartRouteFix("LZ250", "IF"),
+                ChartRouteFix("LZ186", "FAF"),
+            ),
+        ),
+    ])
+
+    assert _iap_chart_roles(model, primary) == {"LZ186": {"FAF"}}
+
+    output = tmp_path / "iap-intersecting-role-consensus.xml"
+    write_bglcomp_xml(model, DEFAULT_CYCLE, output, scope="airports")
+
+    faf = ET.parse(output).getroot().find("Airport/Approach/ApproachLegs/Leg[@fixIdent='LZ186']")
+    iff = ET.parse(output).getroot().find("Airport/Approach/ApproachLegs/Leg[@fixIdent='LZ250']")
+    assert faf is not None
+    assert faf.attrib["isFAF"] == "TRUE"
+    assert iff is not None
+    assert "isIF" not in iff.attrib
+
+
 def test_bgl_iap_chart_roles_reuse_rnp_subset_direct_role_consensus(
     tmp_path: Path,
 ):
