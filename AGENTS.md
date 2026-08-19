@@ -1658,3 +1658,11 @@
 - `EO-33` 直接命中 `0`，无同文本行标签-类别链接。页面的类别标题只显式涉及其他 `RWY15` 标签；`RW33C`、RF 腿和跑道 `33` 不能将该段归类，也不能将未出现的 `RWY33` 标题视为来源事实。
 - 处置为 `rejected_missing_direct_label_anchor`、`source_proven_kind=null`、`target_mapping_allowed=false`。模型、投影、候选、Community 和部署不变；自重放 `29/29`、参考一致 `0/29`、`deployable=false`，字节收敛未推进。
 - 下一项唯一任务：按稳定排序审计 `ZUSH:EO-10:10:11`。该卡切换至不同机场和 PDF，不得从 ZUKD 同页缺失结果推断。
+
+## 2026-08-19 r235 ZUSH EO-10 程序卡直接来源审计
+
+- 实验编号：`r235-zush-eo-10-10-unclassified-procedure-card-audit`。唯一变量是切换到精确卡 `ZUSH:EO-10:10:11`，只读 `ZUSH-4Z01.pdf` 第 1 页，不修改代码、模型、候选、Community 或部署。
+- 真实报告为 `diagnostics\r235-zush-eo-10-10-unclassified-procedure-card-audit-20260819.json`。来源 SHA-256 `feb8f58de95e0f1934e47da4b11a8ca4db0f85c1f8ab6c748a6042ba6a18f478` 与模型一致；程序腿为 `IF RW10`、`TF DE10/NS600/NS610` 与多个 RF 腿。页面有 2 条类别标题事实，直接列出 `RWY10 UGOVA-09D` 和 `RWY28 UGOVA-19D` 离场，编码页列出跑道 `10/28`。
+- `EO-10` 直接命中 `0`，无同文本行标签-类别链接。`UGOVA` 离场标题、`RW10`、RF 腿和跑道 `10` 不能替代缺失标签锚点，也不能将此段归类为离场。
+- 处置为 `rejected_missing_direct_label_anchor`、`source_proven_kind=null`、`target_mapping_allowed=false`。模型、投影、候选、Community 和部署不变；自重放 `29/29`、参考一致 `0/29`、`deployable=false`，字节收敛未推进。
+- 下一项唯一任务：按稳定排序审计最后一张未分类程序卡 `ZUSH:EO-28:28:12`。它使用不同 PDF 页，必须独立核对；完成后需汇总 13 张未分类程序卡的来源闭合结果，再决定下一阶段的来源卡或 SDK 表达审计。
