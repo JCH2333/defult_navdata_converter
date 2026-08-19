@@ -112,3 +112,52 @@
 - 同标签 RNP AR 标题限定词分区（默认通用数据、2608R1，证据：424 `Terminal/ZUNZ/ZUNZ-4G06.pdf`、`ZUNZ-4G07.pdf`、`ZUNZ-9D.pdf` 至 `ZUNZ-9G.pdf` 的直接图页角色，r127 隔离 SDK 构建、独立 `validate`、`tests/test_iap_coverage.py` 与 `tests/test_bgl.py`，2026-08-18）：当同一 `Rxx` 组有多个 RNP AR 主进近时，只有全部匹配图都是不含 `ILS` 的带非跑道标题限定词 RNP AR 图、每个限定词只对应一张图、每个主进近占据不同数据库页、每个过渡名唯一拥有一张图且位于某个主进近页、全部图都被拥有且其余 IAP 段与某个主进近同页时，才可按所有权拆成多条 `rnpAr` 进近。不得发明 Y/Z 后缀。多图所有权只投影完全一致的直接角色或其后的非空交集，不选择具体变体。混入 ILS、共享限定词、跨主进近重叠所有权、剩余未拥有图、或两个主进近同页时继续拒绝。该规则只读取 424 直接文本，不使用 OCR、参考成品或 Fenix。r127 将 `ZUNZ/R23` 拆为 `LZ306`（DUMIX/ELNUN/LZ430，交集 `LZ295/FAF`）与 `LZ404`（GOMON，无主进近角色），IAP 未决由 11 降至 10；相对 r126 只改变两个覆盖包的 `ZU_airports.bgl`、相应索引/布局/包大小与报告。候选本地契约通过但仍不与参考包字节一致。自动化测试：`test_iap_coverage_partitions_same_label_rnp_ar_primaries_by_title_qualifiers`、`test_iap_coverage_rejects_invalid_rnp_ar_title_qualifier_partitions`、`test_bgl_projects_same_label_rnp_ar_primaries_partitioned_by_title_qualifiers`。
 - 多图 RNP 直接角色交集投影（默认通用数据、2608R1，证据：424 `Terminal/ZUNZ/ZUNZ-4G05.pdf`、`ZUNZ-9A.pdf`、`ZUNZ-9B.pdf`、`ZUNZ-9C.pdf` 的直接图页角色，r126 完整 SDK 构建、独立 `validate` 与 `tests/test_iap_coverage.py`、`tests/test_bgl.py`，2026-08-18）：当唯一图页选择失败后，只要全部标题兼容候选都是不含 `ILS` 的 RNP 图、`(AR)` 属性一致、非 AR 标题互异，并且每张图对数据库主进近腿都给出非空直接角色，就可投影这些角色集合的交集，而不选择或假定任一图页对应具体变体。同一 ident 被赋给互斥角色时整组拒绝；只出现在部分图页上的额外角色省略。该规则不得抢占已有的唯一 `MAPT`、主角色或标题选择。混入 ILS、混合 AR/非 AR、非 AR 重复标题、空交集或角色冲突时继续拒绝。只读取 424 直接文本，不使用 OCR、参考成品或 Fenix；审计字段为 `source_intersecting_direct_role_selections`。r126 对 `ZUNZ/R05` 的三张 RNP AR 图投影共同的 `LZ186/FAF`，IAP 未决由 12 降至 11；相对 r125 只改变两个覆盖层的 `ZU_airports.bgl`、相应索引/布局与报告。候选本地契约通过但仍不与参考包字节一致。自动化测试：`test_iap_coverage_projects_intersecting_direct_roles_without_selecting_a_variant`、`test_iap_coverage_rejects_conflicting_intersecting_direct_roles`、`test_iap_coverage_rejects_mixed_ils_intersecting_direct_roles`、`test_iap_coverage_rejects_mixed_ar_intersecting_direct_roles`、`test_iap_coverage_keeps_unique_mapt_when_shared_faf_could_intersect`、`test_bgl_iap_chart_roles_reuse_intersecting_direct_role_consensus`。
 - 关键点来源覆盖审计无新增规则（默认通用数据、2608R1，证据：r98 完整 `00_enroute.bgl` 只读语义差分、`general-doc-keypoint-audit`、`terminal-coordinate-audit --check-retention`、经 SHA-256 校验的 `GeneralDoc/航路_4.4重要点名称代码.pdf` OCR 缓存与终端 PDF 缓存，2026-08-17）：1,016 个参考独有全局航点身份中，GeneralDoc 4.4 分类为 814 个标识不存在、1 个区域歧义、154 个区域不一致、38 个 FIR 边界附近、9 个 FIR 多边形外，`general_doc_source_promotable=0`；终端坐标页分类为 861 个不存在、10 个多坐标、145 个仅单机场，亦无可安全提升项。当前可用 424 结构化数据和已审核图表不能新增这批全局航点，禁止按参考身份、坐标或区域反向填充。自动化保护：`test_general_doc_keypoint_audit_keeps_source_categories_redacted`、`test_terminal_coordinate_audit_keeps_source_categories_redacted`、`test_terminal_coordinate_audit_reports_unretained_airport_coordinate`。
+
+## 2026-08-19 项目状态与后续计划
+
+以下状态优先于早期“开发中”描述。它只记录当前仓库可复现的事实；参考成品仍是只读差分对象，不是内容来源。
+
+### 状态面板
+
+- 仓库：`main` 与 `origin/main` 同步于 `43caa66`，工作区干净，公开仓库为 `JCH2333/defult_navdata_converter`。
+- 自动化测试：`372 passed`。
+- 最新候选：`output/candidate-2608-default-r162-airway-coordinate-precision`。
+- 候选状态：`status=candidate`、`local_contract_verified=true`、`byte_equal_reference=false`、`deployable=false`、实机验证未完成。
+- 参考文件集合：主包 `15/15`、机场补丁 `14/14`，缺失 `0`、额外 `0`；当前逐文件 SHA-256 相等为 `0/29`。
+- 中间模型数量：机场 `275`、跑道方向 `640`、导航台 `438`、全局航点 `2741`、航路段 `4446`、终端航点 `12549`、程序段 `10409`、ILS `430`、等待航线 `1297`。
+- IAP：`780` 个程序分组，`10` 个 `no_unique_primary` 未决；未决清单由转换报告生成，不能由参考成品补齐。
+- 航路：候选 `4434` 行、参考 `4614` 行；严格相等 `1383` 行（`31.19%`），字段差异 `2045` 行，候选独有逻辑键 `1006`，参考独有逻辑键 `1186`。
+- 航路来源：4446 条源段中 4434 条已投影，12 条因端点区域为空跳过；5 个指定点区域仍未解析。来源审计显示 2030 条字段差异行拥有同源航路、同序号和候选端点对。
+- 航路拓扑：1354 条航路无序号重复、缺口、按序端点断裂和多连通分量；r163 已证明必须同时写 `Next` 与 `Previous`；r167 整体反转 `CODE_DIR=B` 使严格相等降至 `1305`，已否决。
+- 官方无 NAIP 基线：已备份于工作区 `backups/default_navdata_2608_official_no_naip_20260811_162644`；本次检查存在，包含 2228 个文件。
+- 交付状态：没有覆盖 Community，没有正式 Release，没有用户实机验证。当前“管线开发完成度较高”不等于“字节一致完成”。
+
+### 下一阶段执行顺序
+
+1. **冻结 r162 基线**：保存候选报告、29 个文件清单、BGL layout audit、完整脱敏 semantic diff、airway field delta source audit 和 source-gap audit 的相互引用；所有新实验使用新 r 编号，不修改 r162。
+2. **航路差异分类**：围绕 2030 条同源字段差异，按端点 `float32`、包围盒、fragment、sequence、airway type、空值、最低高度和区域键建立只输出字段名/计数的分类器。源拓扑序号已经证明连续，不再重复做同名序号审计。
+3. **最小 SDK 探针**：一次只改变一个变量，依次验证 Route 子节点排序、同名航路分组、fragment 边界、物理插入顺序、端点文本精度、包围盒触发和最低高度表达。每次保留 XML、进程轨迹、BGL 头部、读取器登记数和结论。
+4. **来源缺口审计**：对 12 条跳过航段、5 个未解析航点和参考独有航点/航路，只允许使用当期 424 直接表、可验收 PDF/OCR、FIR/ACC/邻接等来源规则。不能由参考逻辑键、坐标、字段或 Fenix 记录反向填充。
+5. **IAP 十组逐组处理**：当前为 `ZBAD/R29R`、`ZJSY/I08-X`、`ZSNJ/I25`、`ZSOF/R15`、`ZSOF/R33`、`ZSWY/I03`、`ZUAL/I15`、`ZYDD/R01`、`ZYDD/R01-Y`、`ZYTL/R10`。仅在形成唯一来源链和正反例测试时加入正式规则；否则保持拒绝。
+6. **机场 BGL 与索引收敛**：逐文件比较 `00_enroute`、十个区域机场 BGL 和十个机场补丁 BGL 的路径、大小、头部、节表、输入 XML 排序和 SHA-256。机场 XML 不写 `AiracCycle`，航路 XML 保留；机场替换先写 `DeleteAirport`。
+7. **确定性与可复用性加固**：为输入锁定、证据缓存、模型快照、目标 profile、构建工具、输入哈希、输出哈希、验证报告建立统一 manifest；其他 424 周期和其他目标适配器只替换输入/profile，不复制解析逻辑。
+8. **验收与部署**：只有参考范围内 `29/29` 文件 SHA-256 一致、本地验证全通过、干净重建可重复、游戏关闭、完成带时间戳备份并通过 `ZBCF`/`ZUNZ`/`ZUUU` 和退出稳定性实机验证，才允许 `status=release`、覆盖 Community 和创建正式 Release。
+
+### 固定工作流
+
+`lock-inputs -> ingest-424 -> evidence-audit -> normalize-model -> model-audit -> project-target -> build-target -> validate-target -> diff-and-audit -> stage-backup-deploy`
+
+- `source.py` 只负责 424 来源和规范化模型，不加入目标机模分支。
+- `bgl.py`/`package.py` 只负责默认 BGL profile、SDK XML、ASCII 暂存、Package Tool 和产物组装。
+- 语义差分必须 `read_only=true`、`reference_values_redacted=true`，且所有请求的 BGL 都完整登记。
+- 诊断失败实验保留在 `diagnostics`，不修改正式适配器；被否决的假设必须记录，避免重复试错。
+- GUI、CLI 和部署函数共用同一验证/门禁；GUI 不得提供绕过 `deployable` 的覆盖入口。
+- 新目标格式必须先登记官方基线、加载路径、schema、排序、元数据、降级策略、最小 fixture 和实机清单，再实现独立 adapter。
+
+### 每轮状态更新要求
+
+每次 Codex 继续工作时，先读取本文件和工作区根目录 `AGENTS.md`，运行 `git status --short --branch`，确认最新候选和测试结果。开始实验前记录假设、唯一变量、输入快照和预期指标；结束后记录候选目录、提交号、测试、构建、差分计数、来源审计、改善/恶化及保留/否决结论。每次代码或仓库文档改动后运行测试与 `git diff --check`，检查暂存区并提交、推送 GitHub。报告必须区分自动化测试、结构化构建、本地读取器诊断、用户实机验证和正式发布。
+
+### 当前首个执行任务
+
+从 r162 完整脱敏航路差分和 `r162-airway-field-delta-source-audit.json` 开始，生成“候选逻辑键 -> 424 航路名/序号”的脱敏关联统计，并定位 fragment、sequence、端点字段三类差异的最小复现实验。完成前不修改 `CODE_DIR` 投影、不回填参考记录、不覆盖 Community。
