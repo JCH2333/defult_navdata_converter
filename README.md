@@ -208,6 +208,7 @@ python -m fenix_default_navdata.cli build `
 - `scripts/airport_subset_probe.py` 的隔离构建报告会自动记录每个探针 BGL 的文件大小、头部版本、QMID 和节表类型/计数/尺寸。它只用于验证 SDK 输入对象如何影响编译布局，不读取参考 BGL 的内容。
 - 该探针的 `--set-airport-attribute name=value` 仅为隔离编译实验设置 XML 属性，绝不写入 `NavModel` 或正式候选。
 - `--append-airport-child "TAG;NAME=VALUE;..."` 可在每个被选机场末尾追加属性型 SDK 子对象，用于可复现的单变量布局实验；它同样永远不写入 `NavModel` 或正式候选。
+- `--append-root-child "TAG;NAME=VALUE;..."` 以同样约束在 `FSData` 根节点追加对象，用于区分根节点和机场作用域的 SDK 编译布局。
 - `--delete-airport-procedures` 用于隔离编译实验，验证正式适配器同样使用的 `DeleteAirport` 进近、离场和进场删除语义。
 - `source-gap-audit` 只接受完整、只读且已脱敏、并已证明 BGL 登记数完整的 `semantic-diff` 报告；它只输出 424 来源分类计数，不导出或保存参考逻辑身份。它还会核验 `ROUTE_HOLDING.csv` 是否只回链既有点；无区域键或复用位置标签的记录不得当作新 enroute 航点。
 - `terminal-coordinate-audit` 使用同一类完整脱敏差分，只读核验参考缺失航点是否可由 424 终端坐标页独立证明；输出只含来源类别计数。全局航点只有在 `terminal_source_promotable` 非零时，才可进入通用跨机场提升规则；机场作用域的 `airport_terminal_coordinate_source_present` 仅表示同机场坐标页存在来源，不构成新增或补写依据。传入 `--check-retention` 后，审计会再区分现有规则是否保留此类来源点；`airport_terminal_coordinate_not_retained` 仍只是一项调查信号，必须另行证明通用保留与投影规则，不能按审计结果列表补点。

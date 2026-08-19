@@ -173,6 +173,16 @@ def append_airport_children(
         airport.append(deepcopy(child))
 
 
+def append_root_children(
+    root: ET.Element,
+    children: tuple[ET.Element, ...],
+) -> None:
+    """Append independent diagnostic root objects in the caller's stable order."""
+
+    for child in children:
+        root.append(deepcopy(child))
+
+
 def parse_attribute_assignments(
     values: list[str],
     *,
@@ -409,6 +419,16 @@ def _parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--append-root-child",
+        action="append",
+        default=[],
+        metavar="TAG;NAME=VALUE",
+        help=(
+            "仅诊断用：在 FSData 根节点末尾附加属性型 SDK 对象；"
+            "例如 Ndb;frequency=385;ident=PROBE"
+        ),
+    )
+    parser.add_argument(
         "--delete-airport-procedures",
         action="store_true",
         help="仅诊断用：在每个保留机场首部写入程序覆盖删除标记。",
@@ -489,6 +509,9 @@ def main() -> int:
         appended_airport_children = parse_airport_child_specs(
             args.append_airport_child
         )
+        appended_root_children = parse_airport_child_specs(
+            args.append_root_child
+        )
         dropped_airport_waypoints = parse_airport_waypoint_selectors(
             args.drop_airport_waypoint
         )
@@ -503,6 +526,7 @@ def main() -> int:
         ident for ident in args.drop_root_waypoint if ident.strip()
     ]):
         raise SystemExit("--drop-root-waypoint 不能包含重复的航点标识")
+    append_root_children(root, appended_root_children)
     selected_holding_idents: tuple[str, ...] = ()
     for airport in selected:
         for attribute, value in assigned_airport_attributes.items():
@@ -673,6 +697,10 @@ def main() -> int:
             "appended_airport_children": [
                 {"tag": child.tag, "attributes": dict(child.attrib)}
                 for child in appended_airport_children
+            ],
+            "appended_root_children": [
+                {"tag": child.tag, "attributes": dict(child.attrib)}
+                for child in appended_root_children
             ],
             "delete_airport_procedures": args.delete_airport_procedures,
             "root_waypoints": (

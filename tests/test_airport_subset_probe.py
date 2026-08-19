@@ -6,6 +6,7 @@ import pytest
 from scripts.airport_subset_probe import (
     add_airport_procedure_deletion,
     append_airport_children,
+    append_root_children,
     drop_selected_waypoints,
     inspect_bgl_layouts,
     isolate_holding_group,
@@ -168,6 +169,24 @@ def test_airport_child_specs_are_attribute_only_and_append_in_order():
     ]
     with pytest.raises(ValueError, match="--append-airport-child"):
         parse_airport_child_specs(["Com;frequency=118.0;frequency=121.0"])
+
+
+def test_root_children_reuse_diagnostic_specs_without_reparenting():
+    children = parse_airport_child_specs([
+        "Ndb;frequency=385;ident=PRB",
+    ])
+    root = ET.fromstring("<FSData><Airport ident=\"ZUAL\" /></FSData>")
+
+    append_root_children(root, children)
+
+    assert [
+        (child.tag, child.attrib)
+        for child in list(root)
+    ] == [
+        ("Airport", {"ident": "ZUAL"}),
+        ("Ndb", {"frequency": "385", "ident": "PRB"}),
+    ]
+    assert children[0].get("frequency") == "385"
 
 
 def test_airport_procedure_deletion_is_inserted_before_source_children():
