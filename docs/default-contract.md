@@ -208,6 +208,8 @@ SID/STAR 名称碰撞。该网格由 XML 中的 `AiracCycle` 触发。无 `Airac
 `test_parse_bgl_header_reads_package_tool_magvar_section`、
 `test_parse_bgl_header_detects_reference_airport_without_magvar`。
 
+`bgl-layout-audit` 以参考包的顶层包名确定比较范围，只读对比候选和参考最终包内每个 BGL 的文件大小、SHA-256 是否相等以及 BGL 头部/节表布局；候选根目录下的 SDK `_work` 中间产物和不在参考范围内的官方依赖副本必须排除，数量记入 `scope`。不解析或输出导航记录，不能作为内容反向来源。它用于区分 SDK 编译布局差异与更深层的 424 内容覆盖差异。回归：`test_bgl_layout_audit_reports_only_file_and_header_contract`、`test_bgl_layout_audit_ignores_sdk_work_area`、`test_bgl_layout_audit_excludes_candidate_support_packages`。
+
 ### 导航台区域键
 
 424 的 VOR/NDB 如有有效中国 `SERVICED_AIRPORT`，默认通用数据适配器必须以该 ICAO 前缀作为区域键。这是 FIR 边界导航台唯一可证明的机场侧物理归属。没有服务机场时，才可使用单一 `CODE_FIR` 的映射；跨区域的多 FIR 不得取第一个字符串，必须拒绝。该规则只使用当期 424 字段。

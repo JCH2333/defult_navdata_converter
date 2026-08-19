@@ -10,6 +10,7 @@ from .ad219_ndb import (
     write_ad219_ndb_ocr_audit,
 )
 from .bgl import find_compiler
+from .bgl_format import audit_bgl_layouts, write_bgl_layout_audit
 from .convert import convert, export_intermediate_model
 from .deployment import deploy, restore
 from .general_docs import (
@@ -170,6 +171,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     semantic.add_argument("--sample-limit", type=int, default=50, help="每类差异最多输出的样本数")
     semantic.add_argument("--output", help="可选的本地诊断 JSON 输出路径")
+    bgl_layout = sub.add_parser(
+        "bgl-layout-audit",
+        help="只读比较候选与参考 BGL 的文件和节表布局，不导出导航记录",
+    )
+    bgl_layout.add_argument("--candidate", required=True, help="候选包根目录")
+    bgl_layout.add_argument(
+        "--reference",
+        help="Default navdata 2608R1 参考包根目录；省略时自动检测",
+    )
+    bgl_layout.add_argument("--output", help="可选的本地 BGL 布局审计 JSON 输出路径")
     source_gap = sub.add_parser(
         "source-gap-audit",
         help="只读按 424 原始记录分类已脱敏的航点/航路来源缺口",
@@ -729,6 +740,17 @@ def main(argv: list[str] | None = None) -> int:
             output = Path(args.output).expanduser().resolve()
             report["output"] = str(output)
             write_semantic_diff(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "bgl-layout-audit":
+        reference = _path(args.reference) or detect_paths().reference_root
+        if not reference:
+            raise SystemExit("无法自动检测 Default navdata 2608R1 参考目录，请显式传入 --reference")
+        report = audit_bgl_layouts(Path(args.candidate), reference)
+        if args.output:
+            output = Path(args.output).expanduser().resolve()
+            report["output"] = str(output)
+            write_bgl_layout_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "source-gap-audit":
