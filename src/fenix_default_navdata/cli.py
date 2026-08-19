@@ -52,6 +52,10 @@ from .iap_primary_source_audit import (
     audit_iap_primary_sources,
     write_iap_primary_source_audit,
 )
+from .iap_uncached_pdf_audit import (
+    audit_uncached_iap_pdfs,
+    write_uncached_iap_pdf_audit,
+)
 from .unclassified_procedure_audit import (
     audit_unclassified_procedures,
     write_unclassified_procedure_audit,
@@ -499,6 +503,25 @@ def build_parser() -> argparse.ArgumentParser:
         "--output",
         required=True,
         help="本地 IAP 主段来源审计 JSON 输出路径",
+    )
+    uncached_iap_pdf_audit = sub.add_parser(
+        "uncached-iap-pdf-audit",
+        help="只读分类 IAP 未缓存原始 PDF 的直接文本证据，不调用 OCR",
+    )
+    uncached_iap_pdf_audit.add_argument(
+        "--inventory",
+        required=True,
+        help="iap-evidence-cache-coverage-inventory JSON",
+    )
+    uncached_iap_pdf_audit.add_argument(
+        "--raw-root",
+        required=True,
+        help="当期 424 原始数据根目录",
+    )
+    uncached_iap_pdf_audit.add_argument(
+        "--output",
+        required=True,
+        help="本地未缓存 IAP PDF 直接文本审计 JSON 输出路径",
     )
     airway_diff = sub.add_parser(
         "airway-diff-audit",
@@ -1424,6 +1447,16 @@ def main(argv: list[str] | None = None) -> int:
         output = Path(args.output).expanduser().resolve()
         report["output"] = str(output)
         write_iap_primary_source_audit(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "uncached-iap-pdf-audit":
+        report = audit_uncached_iap_pdfs(
+            Path(args.inventory),
+            Path(args.raw_root),
+        )
+        output = Path(args.output).expanduser().resolve()
+        report["output"] = str(output)
+        write_uncached_iap_pdf_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "airway-diff-audit":

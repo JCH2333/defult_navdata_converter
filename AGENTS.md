@@ -2536,3 +2536,32 @@ Package Tool 构建、验证和部署门禁已具备。它不能与来源闭合�
   `git push` 失败：`Failed to connect to 127.0.0.1 port 7897`；未强推、未重写历史，远端未变更。
 - 本轮只更新计划和状态；未修改模型、内容投影、候选、Community 或部署状态。后续开始前必须重新
   查询 Git 领先数，不能沿用本节写入时的静态数值。
+
+## 2026-08-19 r255 未缓存 IAP PDF 直接文本分类完成
+
+- 实验编号：`r255-uncached-iap-pdf-direct-text-audit`。本轮新增可复用命令
+  `uncached-iap-pdf-audit --inventory <r253> --raw-root <424-root> --output <report>`，
+  实现位于 `iap_uncached_pdf_audit.py`。它只读取 r253 指定的原始 424 PDF 和其中记录的
+  SHA-256；固定校验 `read_only=true`、未读取参考/Fenix、未调用 OCR、未修改模型或投影。
+  输出只保存页级文本 SHA-256、直接文档类别、严格标签命中和处置，不导出参考内容或 PDF 文本。
+- 分类规则是可复用且保守的：只有同一 PDF 的直接文本同时证明
+  `terminal-database-coding` 或 `instrument-approach-index`，并以完整边界匹配同机场未决
+  IAP 标签，才可标为 `eligible_minimal_evidence_cache`。同跑道、标题相近、过渡/复飞、页码、
+  文件名、OCR 或跨页线索均不能形成候选。
+- 真实报告为 `diagnostics\r254-uncached-iap-pdf-direct-text-audit-20260819.json`。r253 的 42
+  份未缓存 PDF 均已读取且 SHA-256 与盘点一致：4 份具有直接“仪表进近图”类别文字、0 份具有
+  直接数据库编码类别文字、0 份同时直接命中 `ZJSY:I08-X`、`ZSNJ:I25`、`ZSOF:R15/R33`、
+  `ZSWY:I03`、`ZUAL:I15` 或 `ZYDD:R01/R01-Y`。因此
+  `eligible_minimal_evidence_cache_count=0`、`no_unread_direct_424_evidence=true`。
+- 结论：r253 阶段 A 已完成，当前 8 张 IAP 卡继续保留
+  `unresolved_direct_database_evidence_inconclusive` 与 `projection_allowed=false`，来源结论
+  覆盖仍为 `32/40`，不是“全部解决”。本轮未生成新缓存、未运行 IAP OCR、未改动模型、adapter、
+  候选、Community 或部署；自重放仍以 r188/r189 `29/29` 为冻结基线，参考字节验收仍为 `0/29`。
+- 回归新增 `tests/test_iap_uncached_pdf_audit.py`：直接类别与标签同时存在时可进入最小缓存候选、
+  仅标签时拒绝、源 PDF SHA-256 变化时失败。完整回归为 `457 passed in 4.02s`，并已通过
+  `git diff --check`。
+- 后续唯一工作不再是重复 IAP/PDF/OCR 审计。只有出现新的同周期 424 来源、真实加载 SQL/错误
+  文本，或可哈希可恢复的本地 SDK/模板变量时，才可创建新的单变量取证任务；否则必须保持本结论，
+  转向对现有 424 结构化来源中尚未进入 `NavModel` 的对象类别进行来源完整性库存审计。该库存审计
+  只能比较“原始来源已解析字段”和“当前模型是否消费”，不得读取参考导航 payload 或据 BGL 节表
+  反推对象。
