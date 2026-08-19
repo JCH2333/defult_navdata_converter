@@ -351,6 +351,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="本工具生成的 candidate conversion-report.json",
     )
     default_gap_cards.add_argument(
+        "--iap-primary-source-audit",
+        help="可选的本工具 IAP 主段来源审计 JSON；只读绑定已证实的拒绝结论",
+    )
+    default_gap_cards.add_argument(
         "--output",
         required=True,
         help="本地来源缺口卡 JSON 输出路径",
@@ -1153,6 +1157,7 @@ def main(argv: list[str] | None = None) -> int:
         report = audit_default_gap_cards(
             load_model(Path(args.model)),
             Path(args.candidate_report),
+            iap_primary_source_audit_path=_path(args.iap_primary_source_audit),
         )
         output = Path(args.output).expanduser().resolve()
         report["output"] = str(output)

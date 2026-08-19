@@ -91,6 +91,42 @@ def _candidate_report(path: Path, *, waypoint_count: int = 1) -> Path:
     return path
 
 
+def _iap_primary_source_audit(path: Path) -> Path:
+    iap_source = SourceRef("Terminal/ZTEST/ZTEST-4Z01.pdf", page=1, sha256="iap")
+    path.write_text(json.dumps({
+        "diagnostic": "iap-primary-source-audit-v1",
+        "read_only": True,
+        "reference_records_read": False,
+        "fenix_records_read": False,
+        "model_mutated": False,
+        "projection_changed": False,
+        "items": [{
+            "airport": "ZTEST",
+            "label": "R01",
+            "source": {
+                "file": iap_source.file,
+                "row": iap_source.row,
+                "page": iap_source.page,
+                "sha256": iap_source.sha256,
+            },
+            "disposition": "rejected_transition_and_missed_without_primary",
+            "model_sections": {
+                "approach": 0,
+                "approach_transition": 1,
+                "missed": 1,
+            },
+            "direct_database_sections": {
+                "approach": 0,
+                "approach_transition": 2,
+                "missed": 2,
+            },
+            "evidence_pages": [],
+            "projection_allowed": False,
+        }],
+    }), encoding="utf-8")
+    return path
+
+
 def test_gap_cards_keep_all_open_default_gaps_source_linked(tmp_path: Path) -> None:
     result = audit_default_gap_cards(
         _model(tmp_path / "raw"),
@@ -135,6 +171,45 @@ def test_gap_cards_reject_report_model_projection_mismatch(tmp_path: Path) -> No
         )
 
 
+def test_gap_cards_bind_exact_iap_primary_source_rejection(
+    tmp_path: Path,
+) -> None:
+    result = audit_default_gap_cards(
+        _model(tmp_path / "raw"),
+        _candidate_report(tmp_path / "candidate.json"),
+        iap_primary_source_audit_path=_iap_primary_source_audit(
+            tmp_path / "iap-primary-source-audit.json",
+        ),
+    )
+
+    card = result["cards"]["iap_primary_selection"][0]
+    assert card["disposition"] == "rejected_transition_and_missed_without_primary"
+    assert card["primary_source_audit"]["direct_database_sections"] == {
+        "approach": 0,
+        "approach_transition": 2,
+        "missed": 2,
+    }
+    assert result["source"]["iap_primary_source_audit"].endswith(
+        "iap-primary-source-audit.json",
+    )
+
+
+def test_gap_cards_reject_iap_source_audit_with_wrong_source(
+    tmp_path: Path,
+) -> None:
+    audit = _iap_primary_source_audit(tmp_path / "iap-primary-source-audit.json")
+    payload = json.loads(audit.read_text(encoding="utf-8"))
+    payload["items"][0]["source"]["sha256"] = "wrong"
+    audit.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(DefaultGapCardAuditError, match="来源不一致"):
+        audit_default_gap_cards(
+            _model(tmp_path / "raw"),
+            _candidate_report(tmp_path / "candidate.json"),
+            iap_primary_source_audit_path=audit,
+        )
+
+
 def test_cli_writes_default_gap_cards(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -157,3 +232,30 @@ def test_cli_writes_default_gap_cards(
     assert exit_code == 0
     assert json.loads(output.read_text(encoding="utf-8"))["summary"]["total"] == 4
     assert json.loads(capsys.readouterr().out)["read_only"] is True
+
+
+def test_cli_binds_iap_primary_source_audit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output = tmp_path / "cards.json"
+    candidate = _candidate_report(tmp_path / "candidate.json")
+    audit = _iap_primary_source_audit(tmp_path / "iap-primary-source-audit.json")
+    monkeypatch.setattr(
+        "fenix_default_navdata.cli.load_model",
+        lambda path: _model(tmp_path / "raw"),
+    )
+
+    exit_code = main([
+        "default-gap-cards-audit",
+        "--model", str(tmp_path / "model.json.gz"),
+        "--candidate-report", str(candidate),
+        "--iap-primary-source-audit", str(audit),
+        "--output", str(output),
+    ])
+
+    assert exit_code == 0
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert report["cards"]["iap_primary_selection"][0]["disposition"] == (
+        "rejected_transition_and_missed_without_primary"
+    )

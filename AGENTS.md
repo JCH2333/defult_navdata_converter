@@ -959,3 +959,11 @@
 - 实际报告为 `diagnostics/r200-zbad-r29r-primary-source-audit-20260819.json`。r187 的 `10` 个 IAP 未决组中，`9` 个因本轮只提供 ZBAD 单页缓存而保持 `not_evaluated_no_matching_direct_database_chart`；`ZBAD:R29R` 是唯一精确命中项，结论为 `rejected_transition_and_missed_without_primary`。模型段统计为主进近 `0`、进近过渡 `1`、复飞 `1`；缓存直接腿统计为主进近 `0`、进近过渡 `2`（`IF AD521`、`TF AD790`）、复飞 `2`（`CA 291`、`DF AD521`），逐腿身份与模型一致。
 - 正反例测试覆盖“过渡和复飞均存在但无主段时明确拒绝”以及“直接缓存出现主段时保持证据不充分、不得拒绝性归纳”。CLI 输出和空缓存拒绝同样覆盖。全量 `pytest -q` 为 `416 passed`。
 - 本轮未修改 424 解析、`iap_coverage` 决策、`ProcedureSegment`、BGL adapter、冻结模型或 r188/r189 候选。因此参考一致继续为 `0/29`、状态继续为 `candidate`、`deployable=false`。下一轮从其余 `9` 张 IAP 卡中只选择一张，并先取得同样精确、可审计的直接来源页或在 OCR 运行时门禁恢复后取得可复跑的限定证据。
+
+## 2026-08-19 r201/r202 全量 IAP 直接证据盘点与缺口卡绑定
+
+- r201 首先只读扫描本机 `pdf-evidence-cache-2608r1-r43`。r187 的 `10` 个 IAP 未决组对应 `9` 份唯一数据库编码 PDF（`ZYDD` 的 `R01` 与 `R01-Y` 共用一页）；r43 均有与其机场、完整 PDF 路径、页码和 PDF SHA-256 精确匹配的缓存，不使用 OCR、参考成品或 Fenix。
+- `iap-primary-source-audit` 的实际报告为 `diagnostics/r201-all-unresolved-iap-primary-source-audit-20260819.json`。结果为 `rejected_transition_and_missed_without_primary=2`、`unresolved_direct_database_evidence_inconclusive=8`：`ZBAD:R29R` 与 `ZYTL:R10` 的模型和缓存都没有主进近，且同时有过渡与复飞；其余 `ZJSY:I08-X`、`ZSNJ:I25`、`ZSOF:R15`、`ZSOF:R33`、`ZSWY:I03`、`ZUAL:I15`、`ZYDD:R01`、`ZYDD:R01-Y` 至少缺少过渡/复飞其中之一，不能从“不完整”推出无主段，继续未决。
+- r202 将 r201 只读报告绑定到 `default-gap-cards-audit --iap-primary-source-audit <r201.json>`，产物为 `diagnostics/r202-default-gap-cards-iap-primary-20260819.json`。40 张卡总数和四类计数不变；IAP 卡现精确分为 `rejected_transition_and_missed_without_primary=2` 与 `rejected_no_unique_primary=8`。绑定器强制检查报告格式、只读边界、`projection_allowed=false`、完整覆盖和每张卡的 `SourceRef`，任一来源不一致即失败。
+- 新增正例、缓存含主段反例、空缓存拒绝、来源不一致拒绝和 CLI 绑定测试。全量 `pytest -q` 为 `419 passed`。本轮仅改变审计与卡片处置，不改变模型、BGL、候选或部署状态；参考字节一致仍为 `0/29`、`deployable=false`。
+- 下一轮只从余下 `8` 张 IAP 未决卡中选取一个单一问题。先检查相同页面是否有可证明主段存在的直接 424 证据；若没有，保持拒绝/未决并转向另一张卡或 OCR 运行时恢复，禁止以“已有过渡或复飞”为由创造主进近。

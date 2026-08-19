@@ -37,6 +37,47 @@ def _load_candidate_report(path: Path) -> dict[str, object]:
     return payload
 
 
+def _load_iap_primary_source_audit(path: Path) -> dict[tuple[str, str], Mapping[str, object]]:
+    try:
+        payload = json.loads(path.expanduser().read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise DefaultGapCardAuditError(f"无法读取 IAP 主段来源审计: {path}") from error
+    if not isinstance(payload, Mapping):
+        raise DefaultGapCardAuditError("IAP 主段来源审计根节点必须是对象")
+    if payload.get("diagnostic") != "iap-primary-source-audit-v1":
+        raise DefaultGapCardAuditError("IAP 主段来源审计格式不匹配")
+    if (
+        payload.get("read_only") is not True
+        or payload.get("reference_records_read") is not False
+        or payload.get("fenix_records_read") is not False
+        or payload.get("model_mutated") is not False
+        or payload.get("projection_changed") is not False
+    ):
+        raise DefaultGapCardAuditError("IAP 主段来源审计不满足只读边界")
+    items = payload.get("items")
+    if not isinstance(items, list):
+        raise DefaultGapCardAuditError("IAP 主段来源审计缺少明细")
+    result: dict[tuple[str, str], Mapping[str, object]] = {}
+    for item in items:
+        if not isinstance(item, Mapping):
+            raise DefaultGapCardAuditError("IAP 主段来源审计明细格式无效")
+        airport = item.get("airport")
+        label = item.get("label")
+        source = item.get("source")
+        if (
+            not isinstance(airport, str)
+            or not isinstance(label, str)
+            or not isinstance(source, Mapping)
+            or item.get("projection_allowed") is not False
+        ):
+            raise DefaultGapCardAuditError("IAP 主段来源审计明细缺少安全字段")
+        key = (airport, label)
+        if key in result:
+            raise DefaultGapCardAuditError("IAP 主段来源审计包含重复分组")
+        result[key] = item
+    return result
+
+
 def _projection_airway_cards(
     model: NavModel,
     projection: Mapping[str, object],
@@ -202,7 +243,10 @@ def _projection_waypoint_cards(
     ]
 
 
-def _iap_cards(model: NavModel) -> list[dict[str, object]]:
+def _iap_cards(
+    model: NavModel,
+    primary_source_audit: Mapping[tuple[str, str], Mapping[str, object]] | None,
+) -> list[dict[str, object]]:
     unresolved = model.iap_coverage.get("unresolved_groups")
     if not isinstance(unresolved, list):
         raise DefaultGapCardAuditError("NavModel 缺少 IAP 未决分组审计")
@@ -228,7 +272,7 @@ def _iap_cards(model: NavModel) -> list[dict[str, object]]:
         rejected_item = rejected.get((airport, label))
         if rejected_item is None:
             raise DefaultGapCardAuditError("IAP 未决分组未同步到 RejectedProcedure")
-        cards.append({
+        card: dict[str, object] = {
             "kind": "iap_primary_selection",
             "key": f"{airport}:{label}",
             "disposition": "rejected_no_unique_primary",
@@ -241,7 +285,28 @@ def _iap_cards(model: NavModel) -> list[dict[str, object]]:
                 "可重放且多次一致的 OCR 直接标题或角色证据",
                 "唯一、保守的同页主段归属规则及正反例",
             ],
-        })
+        }
+        if primary_source_audit is not None:
+            evidence = primary_source_audit.get((airport, label))
+            if evidence is None:
+                raise DefaultGapCardAuditError("IAP 主段来源审计未覆盖冻结未决分组")
+            if evidence.get("source") != _source_payload(rejected_item.source):
+                raise DefaultGapCardAuditError("IAP 主段来源审计与冻结来源不一致")
+            disposition = evidence.get("disposition")
+            if not isinstance(disposition, str):
+                raise DefaultGapCardAuditError("IAP 主段来源审计缺少处置结论")
+            card["primary_source_audit"] = {
+                "disposition": disposition,
+                "model_sections": evidence.get("model_sections"),
+                "direct_database_sections": evidence.get("direct_database_sections"),
+                "evidence_pages": evidence.get("evidence_pages"),
+            }
+            if disposition == "rejected_transition_and_missed_without_primary":
+                card["disposition"] = disposition
+                card["allowed_next_evidence"] = [
+                    "同一标签、同一来源页中可证明主进近存在的直接 424 证据",
+                ]
+        cards.append(card)
     if len(cards) != len(model.rejected_procedures):
         raise DefaultGapCardAuditError("IAP 未决分组与拒绝程序数量不一致")
     return sorted(cards, key=lambda card: card["key"])
@@ -283,6 +348,8 @@ def _unclassified_cards(model: NavModel) -> list[dict[str, object]]:
 def audit_default_gap_cards(
     model: NavModel,
     candidate_report_path: Path,
+    *,
+    iap_primary_source_audit_path: Path | None = None,
 ) -> dict[str, object]:
     """Create source-linked, target-safe cards for the remaining default gaps.
 
@@ -294,13 +361,18 @@ def audit_default_gap_cards(
     report = _load_candidate_report(candidate_report_path)
     projection = report["projection"]
     assert isinstance(projection, Mapping)
+    primary_source_audit = (
+        _load_iap_primary_source_audit(iap_primary_source_audit_path)
+        if iap_primary_source_audit_path is not None
+        else None
+    )
     airway_cards, unresolved_idents = _projection_airway_cards(model, projection)
     waypoint_cards = _projection_waypoint_cards(
         model,
         projection,
         unresolved_idents,
     )
-    iap_cards = _iap_cards(model)
+    iap_cards = _iap_cards(model, primary_source_audit)
     procedure_cards = _unclassified_cards(model)
     categories = {
         "airway_endpoint_region": airway_cards,
@@ -318,6 +390,11 @@ def audit_default_gap_cards(
             "model_root": str(model.root),
             "candidate_report": str(candidate_report_path.expanduser().resolve()),
             "candidate_status": report["status"],
+            "iap_primary_source_audit": (
+                str(iap_primary_source_audit_path.expanduser().resolve())
+                if iap_primary_source_audit_path is not None
+                else None
+            ),
         },
         "summary": {
             "total": sum(totals.values()),
