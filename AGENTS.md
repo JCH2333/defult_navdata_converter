@@ -1454,3 +1454,12 @@
 - 结束每轮后：基于实际命令更新测试数、模型哈希、候选状态、自重放、参考 `x/29`、缺口卡、节表看板、部署状态、Git 领先数、已确认经验和下一项单一任务。没有参考增加时必须写“字节收敛未推进”。
 - 代码或仓库文档变更后：运行 `pytest -q`、`git diff --check`，精确审查暂存区，提交一个主题并尝试普通 `git push`。诊断、缓存、候选、日志、数据库、备份、SDK 中间产物和外部测试包不得提交。
 - r218 的唯一任务：从 r216 的 12 张航路端点区域卡中按诊断稳定排序选择一条精确端点身份，执行一次只读的同周期 FIR/ACC/服务机场/邻接证据复核。该轮只允许新增审计、fixture 或明确拒绝记录；除非取得唯一的新直接来源并通过阶段 C 证据，不得修改 `NavModel`、BGL 投影、候选、Community 或部署逻辑。
+
+## 2026-08-19 r218 P225 航路端点直接来源复核
+
+- 实验编号：`r218-p225-airway-endpoint-card-source-audit`。唯一假设是：稳定排序首张端点卡 `H34:3` 的精确身份 `DESIGNATED_POINT/P225` 是否能通过此前未显式复核的同周期指定点 FIR、服务机场、关联 `RTE_SEG` 端点 FIR、ACC 或邻接证据唯一恢复区域。唯一变量是新增只读 CLI `airway-endpoint-card-audit`；不修改 `NavModel`、BGL XML、候选、Community 或部署逻辑。
+- 新模块按 `DESIGNATED_POINT.csv.SIGNIFICANT_POINT_ID` UUID（非仅按名称）关联 `RTE_SEG.csv.POINT_START_ID/POINT_END_ID`，输出直接指定点字段、关联航段端点 FIR、ACC 名称、能由 `AIRSPACE.csv` 明确映射的 ACC 地区，以及模型中已由 424 规则恢复的相邻地区。它固定声明 `read_only=true`、`model_changed=false`、`projection_changed=false`、`reference_records_read=false`、`fenix_records_read=false`，并记录三个输入 CSV 的 SHA-256。任何重复指定点身份、缺少 UUID 或没有精确关联航段都必须失败，不能选择性取一行。
+- 真实命令以 r187 冻结模型和当前 2608 原始目录生成 `diagnostics\r218-p225-airway-endpoint-card-source-audit-20260819.json`。`P225` 的唯一指定点行为 `58`、UUID 为 `3dab1bcf-b242-415d-a649-7d70e9ec4e11`；其 `CODE_FIR`、`SERVICED_AIRPORT` 均为空。H34 的精确关联段为 `RTE_SEG.csv` 第 `4132`、`4133` 行，P225 端点 FIR 均为空；两段只给出“西安 ACC”备注，而 `AIRSPACE.csv` 不提供可直接把该 ACC 名称映射为区域键的 FIR 证据。
+- 模型侧的同一精确身份仍有两个已来源化相邻地区：`P612 -> ZH` 和 `SHX -> ZL`。因此处置为 `rejected_multiple_neighbor_regions_with_blank_direct_region`，`projection_allowed=false`：不能从一个 ACC 名称、任一相邻地区或 BGL 节表选择 `ZH` 或 `ZL`。这是对 r198 “多地区邻接”拒绝的直接原始行复核，不是新模型规则。
+- 自动化新增精确 UUID 关联、空直接地区加多相邻地区拒绝、重复 `CODE_ID` 身份失败和 CLI 路径回归；全量回归为 `433 passed`。r188/r189 自重放仍 `29/29`，参考一致仍 `0/29`、`deployable=false`，字节收敛未推进。
+- 下一项唯一任务：按剩余端点卡稳定排序复核 `H35:2` 的精确身份 `DESIGNATED_POINT/P127`。该轮仍只允许对指定点 FIR/服务机场、精确 UUID 关联航段 FIR、ACC 映射及邻接证据做只读审计；多地区或缺乏唯一直接来源时保持拒绝，不得修改模型、候选或部署状态。
