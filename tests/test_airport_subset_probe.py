@@ -1,3 +1,4 @@
+import json
 import struct
 from xml.etree import ElementTree as ET
 
@@ -18,6 +19,7 @@ from scripts.airport_subset_probe import (
     parse_root_object_specs,
     select_airports,
     select_holding_patterns,
+    write_probe_report,
 )
 
 
@@ -318,3 +320,16 @@ def test_probe_layout_summary_reads_only_bgl_headers(tmp_path) -> None:
             "section_sizes": [64],
         },
     }]
+
+
+def test_probe_report_is_persisted_as_utf8_json(tmp_path) -> None:
+    path = tmp_path / "probe-report.json"
+    report = {
+        "label": "two-tile-empty-airports",
+        "airport_idents": ["ZUAL", "ZUUU"],
+        "bgl_layouts": [{"path": "scenery/zu_airports.bgl", "size": 565}],
+    }
+
+    write_probe_report(path, report)
+
+    assert json.loads(path.read_text(encoding="utf-8")) == report

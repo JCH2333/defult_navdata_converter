@@ -43,6 +43,16 @@ def inspect_bgl_layouts(package_root: Path) -> list[dict[str, object]]:
     return rows
 
 
+def write_probe_report(path: Path, report: dict[str, object]) -> None:
+    """Persist the complete diagnostic result beside its reproducible inputs."""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(report, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
 def select_holding_patterns(
     airport: ET.Element,
     *,
@@ -728,8 +738,7 @@ def main() -> int:
                 "failure_artifacts": str(artifacts) if artifacts.is_dir() else None,
             }
 
-    print(json.dumps(
-        {
+    report = {
             "label": args.label,
             "source_xml": str(source_xml),
             "airport_range": [args.start, args.end],
@@ -772,7 +781,11 @@ def main() -> int:
             "package_root": str(package_root),
             "bgl_layouts": inspect_bgl_layouts(package_root),
             "reader": reader_status,
-        },
+    }
+    report_path = probe_root / "probe-report.json"
+    write_probe_report(report_path, report)
+    print(json.dumps(
+        {**report, "report_path": str(report_path)},
         ensure_ascii=False,
         indent=2,
     ))

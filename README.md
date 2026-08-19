@@ -205,7 +205,7 @@ python -m fenix_default_navdata.cli build `
 - 参考成品只用于只读差分，绝不复制参考 BGL 冒充转换结果。
 - `semantic-diff` 不返回参考 SQLite 的坐标、频率、磁差、高程、名称或航路端点字段值，不能作为候选内容的反向来源。调用时必须显式提供候选和参考各自的预期 BGL 数；`bgl_file` 登记数不精确相等即拒绝生成报告。
 - `bgl-layout-audit` 以参考包的顶层包名确定比较范围，只读取候选和参考最终包内 BGL 的文件路径、文件大小、SHA-256 相等性、头部版本、QMID 和节表类型/计数/尺寸；候选根目录下的 SDK `_work` 中间产物和不在参考范围内的官方依赖副本始终排除，数量会记录在 `scope`。它不读取或导出任何参考导航记录，输出仅用于定位 SDK 编译布局与内容覆盖差异。
-- `scripts/airport_subset_probe.py` 的隔离构建报告会自动记录每个探针 BGL 的文件大小、头部版本、QMID 和节表类型/计数/尺寸。它只用于验证 SDK 输入对象如何影响编译布局，不读取参考 BGL 的内容。
+- `scripts/airport_subset_probe.py` 的隔离构建会在本次诊断目录写入 `probe-report.json`，记录完整输入选择、每个探针 BGL 的文件大小、头部版本、QMID、节表类型/计数/尺寸和读取器状态。它只用于验证 SDK 输入对象如何影响编译布局，不读取参考 BGL 的内容。
 - 该探针的 `--set-airport-attribute name=value` 仅为隔离编译实验设置 XML 属性，绝不写入 `NavModel` 或正式候选。
 - `--append-airport-child "TAG;NAME=VALUE;..."` 可在每个被选机场末尾追加属性型 SDK 子对象，用于可复现的单变量布局实验；它同样永远不写入 `NavModel` 或正式候选。
 - `--append-root-child "TAG;NAME=VALUE;..."` 以同样约束在 `FSData` 根节点追加对象，用于区分根节点和机场作用域的 SDK 编译布局。

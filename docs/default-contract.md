@@ -210,7 +210,7 @@ SID/STAR 名称碰撞。该网格由 XML 中的 `AiracCycle` 触发。无 `Airac
 
 `bgl-layout-audit` 以参考包的顶层包名确定比较范围，只读对比候选和参考最终包内每个 BGL 的文件大小、SHA-256 是否相等以及 BGL 头部/节表布局；候选根目录下的 SDK `_work` 中间产物和不在参考范围内的官方依赖副本必须排除，数量记入 `scope`。不解析或输出导航记录，不能作为内容反向来源。它用于区分 SDK 编译布局差异与更深层的 424 内容覆盖差异。回归：`test_bgl_layout_audit_reports_only_file_and_header_contract`、`test_bgl_layout_audit_ignores_sdk_work_area`、`test_bgl_layout_audit_excludes_candidate_support_packages`。
 
-`airport_subset_probe.py` 的报告必须自动记录被编译 BGL 的文件大小、头部版本、QMID 和节表类型/计数/尺寸，不读取任何参考 BGL 记录。2026-08-19 对 `ZUAL` 的受控 Package Tool 构建表明：只保留跑道时节为 `0x3/0x13/0x32/0x35`、计数均为 1；保留机场内终端点、程序和等待航线时出现 `0x22`/`0x34`，计数为 `1/1/10/1/1/1`；再保留根节点终端点时仅将 `0x22` 提升到 153，仍不产生参考机场 BGL 的 `0x17/0x33`。因此根节点终端点重复写入不是参考索引节差异的充分解释，后续必须继续通过隔离 SDK 探针验证其他可控输入。回归：`test_probe_layout_summary_reads_only_bgl_headers`。
+`airport_subset_probe.py` 必须在每次诊断目录写入 `probe-report.json`，保存完整输入选择、编译产物根目录、读取器状态，以及每个 BGL 的文件大小、头部版本、QMID 和节表类型/计数/尺寸；不读取任何参考 BGL 记录。2026-08-19 对 `ZUAL` 的受控 Package Tool 构建表明：只保留跑道时节为 `0x3/0x13/0x32/0x35`、计数均为 1；保留机场内终端点、程序和等待航线时出现 `0x22`/`0x34`，计数为 `1/1/10/1/1/1`；再保留根节点终端点时仅将 `0x22` 提升到 153，仍不产生参考机场 BGL 的 `0x17/0x33`。因此根节点终端点重复写入不是参考索引节差异的充分解释，后续必须继续通过隔离 SDK 探针验证其他可控输入。回归：`test_probe_layout_summary_reads_only_bgl_headers`、`test_probe_report_is_persisted_as_utf8_json`。
 
 2026-08-19 的 r140/r141 扩展探针以属性型 `--append-airport-child TAG;NAME=VALUE` 与 `--append-root-child TAG;NAME=VALUE` 受控附加 SDK 子对象，且两者永远不进入 `NavModel` 或正式候选。对同一份 `ZUAL` 输入，`Com`、`Tower`、`Start` 与完整的 `RunwayAlias` 均保持 `0x3/0x13/0x22/0x32/0x34/0x35`；一个完整属性的机场内或根节点 `Ndb` 均会稳定增加 `0x17` 与 `0x33`，各增加一条，故对象位置不能解释参考计数差异。叠加 `onlyAddIfReplace=TRUE` 后节类型可变为参考同类集合 `0x3/0x13/0x17/0x22/0x32/0x33/0x34`，但该标记不能进入通用投影：同日对新增机场 `ZBCF` 的隔离包经 Navdatareader 读取，机场与跑道记录均为 0，只剩航点与 ILS。因此它只可作为布局诊断，不构成运行时兼容规则。NDB 结果也只证明该对象是两个节的充分触发条件，不证明参考机场 BGL 的数千条索引记录来自 424 机场关联 NDB：2608 `NDB.csv` 只有 39 条可精确关联中国机场的记录，数量不足以解释参考各分区的 2,003 至 3,614 条节计数。因此不得据此把 NDB 接入机场投影，除非另有独立的 424 来源规则同时解释记录数量、作用域与加载契约。回归：`test_airport_child_specs_are_attribute_only_and_append_in_order`、`test_root_children_reuse_diagnostic_specs_without_reparenting`。
 
@@ -232,6 +232,8 @@ SID/STAR 名称碰撞。该网格由 XML 中的 `AiracCycle` 触发。无 `Airac
 两者均生成 363 字节、`0x3/0x35`、QMID `0x92319` 的 BGL，SHA-256 相同。因此这两套
 已安装 Package Tool 不能解释参考机场 BGL 与当前候选不同的顶层 QMID 指纹；后续诊断
 应继续检查源支持的对象投影和参考包的历史构建契约，不得将 SDK 版本切换当作内容修复。
+
+随后以相同的受控流程继续验证：带 `onlyAddIfReplace=TRUE` 的空 `ZUAL` 生成 220 字节、仅 `0x3`，而常规空机场是 363 字节、`0x3/0x35`；将空 `ZUAL` 与空 `ZUUU` 置于两个 QMID 后生成 565 字节 BGL，`0x3` 增为两个空间桶条目。它与 r143-r150 的设施/航点两瓦片实验一致，进一步证明空间节计数来自 QMID 分桶，不能从计数反推对象记录数量。上述输入 XML、Package Tool 产物和 `probe-report.json` 都保留在对应诊断目录；正式适配器不改变。
 
 同日对同一空 `ZUAL` 机场施加 `onlyAddIfReplace=TRUE` 后，BGL 从常规的 363 字节
 `0x3/0x35` 变为 220 字节、仅 `0x3`，QMID 仍为 `0x92319`。该标记可解释参考机场
