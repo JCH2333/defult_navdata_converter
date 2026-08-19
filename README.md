@@ -86,6 +86,11 @@ python -m fenix_default_navdata.cli source-gap-audit `
   --raw "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
   --semantic-diff diagnostics\navdatareader\semantic-diff.json `
   --output diagnostics\source-gap-audit.json
+python -m fenix_default_navdata.cli airway-diff-audit `
+  --model output\nav-model-2608.json.gz `
+  --semantic-diff diagnostics\navdatareader\semantic-diff.json `
+  --source-audit diagnostics\source-gap-audit.json `
+  --output diagnostics\airway-diff-audit.json
 python -m fenix_default_navdata.cli terminal-coordinate-audit `
   --raw "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
   --semantic-diff diagnostics\navdatareader\semantic-diff.json `
@@ -234,3 +239,6 @@ python -m fenix_default_navdata.cli build `
 - 参考成品采用 `00_enroute.bgl` 加十个机场分区 BGL，并另有十个机场补丁 BGL；当前完整转换仍需按相同边界拆分。
 - SID、STAR、IAP、航路与导航设施的 BGL 投影仍需补齐和逐项验证。
 - 必须完成 BGL 结构差分、逐文件 SHA-256 收敛，以及 ZBCF、ZUNZ、ZUUU 实机回归。
+### 航路差异审计
+
+`airway-diff-audit` 是可复用的航路差异分类步骤。它消费 `NavModel` 快照、完整脱敏 `semantic-diff` 和可选的脱敏 `source-gap-audit`，按几何、拓扑、最低/最高高度和航路元数据分类，并将候选逻辑键与 424 `(airway, sequence)` 输出为 SHA-256 摘要。报告不包含航路名、航点、坐标、高度、参考字段或参考独有逻辑身份，因此可以作为后续 SDK 探针和其他目标适配器的安全输入。

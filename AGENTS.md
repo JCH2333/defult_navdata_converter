@@ -244,3 +244,11 @@
 4. 记录候选/诊断目录、提交号、测试、构建、参考文件数、严格相等行、字段差异、来源审计和保留/否决结论。
 5. 代码或文档变更后运行测试、`git diff --check`，检查暂存区，只提交一个可解释变更并推送 GitHub。
 6. 状态报告必须分别说明自动化测试、结构化构建、本地读取器诊断、用户实机验证和正式发布状态。
+### 2026-08-19 航路差异分类器执行日志
+
+- 实验编号：`airway-diff-audit-v1`；输入为 r162 完整脱敏 `semantic-diff`、r162 `source-gap` 审计和 `output/intermediate-2608-r155-airway-identities.json.gz`。未读取 Fenix 数据、参考字段值或参考 BGL 记录，未修改正式 `CODE_DIR` 投影。
+- 新增 `src/fenix_default_navdata/airway_diff_audit.py` 和 CLI 子命令 `airway-diff-audit`。模块消费 `NavModel` 快照，按几何、拓扑、最低/最高高度、航路元数据分组，并对候选逻辑键与 424 `(airway, sequence)` 输出 SHA-256 关联摘要。
+- 新增 `tests/test_airway_diff_audit.py`，覆盖字段分组、混合字段、来源匹配/缺失、脱敏、截断输入、未知字段和 CLI 输出。
+- 定向测试：`25 passed`（航路分类器、source-gap 和 CLI）。
+- r162 实际诊断：总字段差异 `2045`；几何组 `2045`；高度组 `30`；独占分类为几何 `2015`、混合 `30`；2045 条均为 `same_source_airway_and_sequence`，来源航路名数量 `1354`，唯一来源 `(airway, sequence)` 摘要 `2045`。报告路径：`diagnostics/r162-airway-diff-audit.json`。
+- 结论：本轮确认 r162 字段差异不是来源航路名/序号缺失造成的，主要应继续研究目标 BGL 的坐标/包围盒表达与 Package Tool 记录归并。该结论只用于下一轮最小 SDK 探针，不直接改变正式适配器。

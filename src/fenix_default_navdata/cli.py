@@ -9,6 +9,12 @@ from .ad219_ndb import (
     build_ad219_ndb_ocr_cache,
     write_ad219_ndb_ocr_audit,
 )
+from .airway_diff_audit import (
+    audit_airway_differences,
+    load_airway_diff_report,
+    load_source_audit,
+    write_airway_diff_audit,
+)
 from .bgl import find_compiler
 from .airway_connection_shape_probe import run_airway_connection_shape_probe
 from .airway_coordinate_precision_probe import (
@@ -201,6 +207,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="可选的候选 BGL XML；仅用于区分源航路段未投影和片段连通性差异",
     )
     source_gap.add_argument("--output", help="可选的本地来源缺口审计 JSON 输出路径")
+    airway_diff = sub.add_parser(
+        "airway-diff-audit",
+        help="只读分类航路字段差异并生成脱敏的 424 航路序号关联摘要",
+    )
+    airway_diff.add_argument(
+        "--model",
+        required=True,
+        help="可复用 NavModel 快照（JSON 或 JSON.GZ）",
+    )
+    airway_diff.add_argument(
+        "--semantic-diff",
+        required=True,
+        help="完整、只读且已脱敏的 airway semantic-diff JSON",
+    )
+    airway_diff.add_argument(
+        "--source-audit",
+        help="可选的 source-gap-audit JSON，仅作为脱敏聚合旁证",
+    )
+    airway_diff.add_argument(
+        "--association-sample-limit",
+        type=int,
+        default=100,
+        help="最多输出多少条哈希化关联样本（默认 100）",
+    )
+    airway_diff.add_argument("--output", help="可选的本地航路差异审计 JSON 输出路径")
     terminal_coordinate = sub.add_parser(
         "terminal-coordinate-audit",
         help="只读分类参考缺失航点在 424 终端坐标页中的来源覆盖",
@@ -855,6 +886,23 @@ def main(argv: list[str] | None = None) -> int:
             output = Path(args.output).expanduser().resolve()
             report["output"] = str(output)
             write_source_gap_audit(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "airway-diff-audit":
+        report = audit_airway_differences(
+            load_model(Path(args.model)),
+            load_airway_diff_report(Path(args.semantic_diff)),
+            source_audit=(
+                load_source_audit(Path(args.source_audit))
+                if args.source_audit
+                else None
+            ),
+            association_sample_limit=args.association_sample_limit,
+        )
+        if args.output:
+            output = Path(args.output).expanduser().resolve()
+            report["output"] = str(output)
+            write_airway_diff_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "terminal-coordinate-audit":
