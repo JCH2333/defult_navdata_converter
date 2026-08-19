@@ -348,3 +348,9 @@
 - 正式投影已改为稳定的 `Previous* -> Next*` 排序；`airway-route-child-order-probe` 改为三种 XSD 合法场景：线性、两个 `Previous` 的汇聚、两个 `Next` 的分叉。回归：`test_enroute_projection_writes_previous_before_next_in_shared_route`。
 - r171：探针已生成 XML、项目和 `probe-report.json`，但检测到 `FlightSimulator2024.exe` 仍在运行而在编译门禁退出。报告的 `status=failed`、`failure_stage=compile` 是外部状态阻断，不是 XML 合法性或目标投影失败。探针现在保证在编译或读取器失败时仍写入结构化报告；对应自动化测试：`test_run_probe_writes_compile_failure_report`。
 - 待执行：模拟器关闭后，使用 r171 的同一三种场景重新运行新的 r 编号，要求 Package Tool 成功、读取器完整登记一个 BGL，并检查三种场景的片段号、序号和几何。该验证通过后才可把阶段 A 标记为完成并构建新的完整候选。
+
+### 7. 2026-08-19 未决航路端点来源审计日志
+
+- 新增可复用 CLI `airway-endpoint-audit`，只消费 `DESIGNATED_POINT.csv` 和 `RTE_SEG.csv` 归一化后的 `NavModel`；报告 `read_only=true`、`reference_values_redacted=true`，用于输出空区域端点、相邻地区、ACC 名称、关联源行和拒绝类别，不能作为参考成品回填通道。
+- r173 报告：11 个空区域端点身份关联 25 条源航段。其中 8 个是多地区邻接的 FIR 边界点，2 个为不在 `DESIGNATED_POINT.csv` 唯一身份集合中的端点，1 个 `LELIM` 虽只有 `ZG` 邻接但其 `M503` 航段同时含上海/广州 ACC 证据，不能绕过 ACC 一致性门禁恢复。r162 的 12 条未投影航段仍无可安全恢复项。
+- 自动化覆盖：`tests/test_airway_endpoint_audit.py` 与 CLI 回归。后续只有发现能唯一绑定到端点、且与全部 FIR/ACC/邻接证据一致的当前 424 直接来源时，才可新增恢复规则；否则保持拒绝并在候选报告计数。

@@ -15,6 +15,10 @@ from .airway_diff_audit import (
     load_source_audit,
     write_airway_diff_audit,
 )
+from .airway_endpoint_audit import (
+    audit_unresolved_airway_endpoints,
+    write_unresolved_airway_endpoint_audit,
+)
 from .bgl import find_compiler
 from .airway_connection_shape_probe import run_airway_connection_shape_probe
 from .airway_coordinate_precision_probe import (
@@ -208,6 +212,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="可选的候选 BGL XML；仅用于区分源航路段未投影和片段连通性差异",
     )
     source_gap.add_argument("--output", help="可选的本地来源缺口审计 JSON 输出路径")
+    endpoint_audit = sub.add_parser(
+        "airway-endpoint-audit",
+        help="只读审计因来源区域未决而无法投影的航路端点",
+    )
+    endpoint_audit.add_argument("--raw", help="2608 原始 CSV/PDF 目录")
+    endpoint_audit.add_argument("--output", required=True, help="本地诊断 JSON 输出路径")
     airway_diff = sub.add_parser(
         "airway-diff-audit",
         help="只读分类航路字段差异并生成脱敏的 424 航路序号关联摘要",
@@ -907,6 +917,18 @@ def main(argv: list[str] | None = None) -> int:
             output = Path(args.output).expanduser().resolve()
             report["output"] = str(output)
             write_source_gap_audit(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "airway-endpoint-audit":
+        raw = _path(args.raw) or detect_paths().raw_root
+        if not raw:
+            raise SystemExit("无法自动检测 424 原始目录，请显式传入 --raw")
+        report = audit_unresolved_airway_endpoints(
+            load_naip(raw, include_terminal_documents=False)
+        )
+        output = Path(args.output).expanduser().resolve()
+        report["output"] = str(output)
+        write_unresolved_airway_endpoint_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "airway-diff-audit":

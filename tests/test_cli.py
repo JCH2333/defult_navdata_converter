@@ -183,6 +183,38 @@ def test_airway_route_child_order_probe_passes_sdk_and_reader_options(
     }
 
 
+def test_airway_endpoint_audit_writes_requested_report(monkeypatch) -> None:
+    received: dict[str, object] = {}
+
+    monkeypatch.setattr(cli, "detect_paths", lambda: type("P", (), {
+        "raw_root": Path("auto-raw"),
+    })())
+    monkeypatch.setattr(cli, "load_naip", lambda raw, **kwargs: received.update(
+        raw=raw,
+        **kwargs,
+    ) or NavModel(raw))
+    monkeypatch.setattr(
+        cli,
+        "audit_unresolved_airway_endpoints",
+        lambda model: {"diagnostic": "airway-endpoint-source-audit-v1"},
+    )
+    monkeypatch.setattr(
+        cli,
+        "write_unresolved_airway_endpoint_audit",
+        lambda path, report: received.update(output=path, report=report),
+    )
+
+    result = cli.main([
+        "airway-endpoint-audit",
+        "--output", "diagnostics/endpoints.json",
+    ])
+
+    assert result == 0
+    assert received["raw"] == Path("auto-raw")
+    assert received["include_terminal_documents"] is False
+    assert received["output"] == Path("diagnostics/endpoints.json").resolve()
+
+
 def test_export_model_command_passes_source_and_output(monkeypatch) -> None:
     captured: dict[str, object] = {}
 

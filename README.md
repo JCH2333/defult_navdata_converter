@@ -86,6 +86,9 @@ python -m fenix_default_navdata.cli source-gap-audit `
   --raw "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
   --semantic-diff diagnostics\navdatareader\semantic-diff.json `
   --output diagnostics\source-gap-audit.json
+python -m fenix_default_navdata.cli airway-endpoint-audit `
+  --raw "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
+  --output diagnostics\airway-endpoint-audit.json
 python -m fenix_default_navdata.cli airway-diff-audit `
   --model output\nav-model-2608.json.gz `
   --semantic-diff diagnostics\navdatareader\semantic-diff.json `
