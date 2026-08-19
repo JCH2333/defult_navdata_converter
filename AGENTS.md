@@ -2369,3 +2369,29 @@
 - 下一项唯一工作：按稳定键审计 `ZYDD:R01` 或 `ZYDD:R01-Y` 之前，先核对既有 r208 对同标签族
   的审计覆盖；若其已覆盖二者，则选择下一张没有精确单卡报告的未决 IAP 卡。不得重复已覆盖的
   `ZJSY:I08-X`、`ZSNJ:I25`、`ZSOF:R15/R33`、`ZSWY:I03` 或 `ZUAL:I15`。
+
+## 2026-08-19 r252 IAP 来源审计覆盖复核
+
+- 实验编号：`r252-iap-source-audit-coverage-recheck`。本轮只读取 r187、r188 的
+  `conversion-report.json` 与既有 `r208-zydd-related-label-primary-source-audit`；通过
+  `default-gap-cards-audit` 生成
+  `diagnostics\r252-default-gap-cards-iap-coverage-20260819.json`。不读取参考导航 payload、
+  Fenix、OCR、候选 BGL/SQLite，不修改模型、投影、候选、Community 或部署。
+- r208 已实际覆盖全部 10 张 IAP 卡，而不只是 `ZYDD` 标签族：`ZBAD:R29R`、`ZYTL:R10` 的直接
+  数据库页同时含过渡与复飞、无主进近，处置为
+  `rejected_transition_and_missed_without_primary`；其余
+  `ZJSY:I08-X`、`ZSNJ:I25`、`ZSOF:R15/R33`、`ZSWY:I03`、`ZUAL:I15`、`ZYDD:R01/R01-Y`
+  均为 `unresolved_direct_database_evidence_inconclusive`，且全部
+  `projection_allowed=false`。
+- `ZYDD:R01` 与 `ZYDD:R01-Y` 不应重复做单卡审计：精确来源页 `ZYDD-0C-2.pdf` 分别只含 6 条
+  过渡和 3 条复飞，而同一严格标签族的另一页存在 `R01-Z` 主进近；因此既不能将它当作“无主段”
+  精确拒绝，也不能将 `R01-Z` 主段继承给 `R01` 或 `R01-Y`。
+- r252 报告仍有 40 张卡：航路端点 12、航路点 5、IAP 10、未分类程序 13，且
+  `all_cards_rejected_or_blocked=true`。IAP 卡精确分布为 2 张可拒绝、8 张
+  `rejected_no_unique_primary`；来源闭合进度仍为 `32/40`，参考字节验收仍为 `0/29`，
+  `deployable=false`，字节收敛未推进。
+- 阶段 B 的已缓存数据库页和已绑定仪表图已无可重复的单卡审计工作。下一项唯一工作为 r253
+  的只读“原始 424 终端 PDF 与证据缓存覆盖清单”：仅枚举这 8 张未决 IAP 所在机场的原始 PDF、
+  已缓存 PDF、图页类型、页码和 SHA-256，寻找尚未进入缓存且能提供同标签直接主段或直接角色的
+  同周期来源页。未发现此类页时，必须登记 `no_unread_direct_424_evidence`，而非扩大 OCR、
+  猜测继承或修改投影。
