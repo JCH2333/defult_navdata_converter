@@ -527,16 +527,26 @@ def _explicit_endpoint_acc_evidence(
     remark: str,
     endpoints: tuple[tuple[str, str, float, float], ...],
     acc_countries: dict[str, str],
+    endpoint_name_aliases: dict[tuple[str, str, float, float], set[str]],
 ) -> dict[tuple[str, str, float, float], dict[str, set[str]]]:
     """Bind ACC evidence only to an explicitly labelled source route endpoint."""
     labels: list[tuple[int, int, tuple[str, str, float, float]]] = []
     for endpoint_type, ident, latitude, longitude in endpoints:
         key = _airway_endpoint_key(endpoint_type, ident, latitude, longitude)
         normalized_ident = (ident or "").strip()
-        if key is None or key[0] != "DESIGNATED_POINT" or not normalized_ident:
+        if key is None or not normalized_ident:
+            continue
+        names = {normalized_ident}
+        names.update(endpoint_name_aliases.get(key, set()))
+        label_pattern = "|".join(
+            re.escape(name)
+            for name in sorted(names, key=lambda name: (-len(name), name))
+            if name
+        )
+        if not label_pattern:
             continue
         pattern = re.compile(
-            rf"{re.escape(normalized_ident)}\s*[:\uFF1A]",
+            rf"(?:{label_pattern})(?:\s*(?:VOR(?:/DME)?|NDB(?:/DME)?|DME))?\s*[:\uFF1A]",
             re.IGNORECASE,
         )
         labels.extend(
@@ -563,6 +573,31 @@ def _explicit_endpoint_acc_evidence(
     return evidence
 
 
+def _airway_endpoint_name_aliases(
+    model: NavModel,
+) -> dict[tuple[str, str, float, float], set[str]]:
+    """Expose source navaid names only as explicit ACC-label boundaries.
+
+    Some RTE_SEG remarks label a VOR/DME endpoint with its Chinese 424 name
+    rather than its ident.  The name cannot establish a region by itself, but
+    an exact identity match lets it delimit the preceding explicitly labelled
+    endpoint without leaking the next endpoint's ACC into that evidence.
+    """
+    aliases: dict[tuple[str, str, float, float], set[str]] = {}
+    for navaid in model.navaids:
+        endpoint_type = "VORDME" if navaid.kind == "VOR" else navaid.kind
+        key = _airway_endpoint_key(
+            endpoint_type,
+            navaid.ident,
+            navaid.latitude,
+            navaid.longitude,
+        )
+        name = navaid.name.strip()
+        if key is not None and name:
+            aliases.setdefault(key, set()).add(name)
+    return aliases
+
+
 def _restore_waypoint_countries_from_airway_acc(
     model: NavModel,
     countries: dict[tuple[str, str, float, float], set[str]],
@@ -579,6 +614,7 @@ def _restore_waypoint_countries_from_airway_acc(
     explicit_evidence: dict[
         tuple[str, str, float, float], dict[str, set[str]]
     ] = {}
+    endpoint_name_aliases = _airway_endpoint_name_aliases(model)
     for leg in model.airway_legs:
         endpoints = (
             (leg.start_type, leg.start_ident, leg.start_latitude, leg.start_longitude),
@@ -588,6 +624,7 @@ def _restore_waypoint_countries_from_airway_acc(
             leg.source_airspace_remark,
             endpoints,
             acc_countries,
+            endpoint_name_aliases,
         ).items():
             item = explicit_evidence.setdefault(key, {"regions": set(), "unknown": set()})
             item["regions"].update(direct_item["regions"])
