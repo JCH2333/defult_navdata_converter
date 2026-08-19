@@ -1487,3 +1487,12 @@
 - ACC 名称为“广州、长沙”；“广州”唯一映射 `ZG`，“长沙”无映射。模型侧相邻地区为 `ZG/ZS`。处置保持 `rejected_multiple_neighbor_regions_with_incomplete_acc_evidence`、`projection_allowed=false`；部分 `ZG` 映射不能覆盖或替代另一侧 `ZS` 邻接。
 - 本轮只复用 r219 的已通过回归，不增加投影规则；模型、BGL、候选、Community 和部署均未变，参考一致仍 `0/29`、`deployable=false`，字节收敛未推进。完整回归、提交前检查待本轮完成。
 - 下一项唯一任务：按稳定排序复核 `X62:1` 的精确身份 `DESIGNATED_POINT/P188`。仅做同一只读来源卡审计；没有唯一直接来源时继续拒绝。
+
+## 2026-08-19 r222 P188 部分 ACC 映射复核
+
+- 实验编号：`r222-p188-airway-endpoint-card-source-audit`。P188 是最后一个存在于 `DESIGNATED_POINT.csv` 的未决端点身份；本轮复用 r219 的部分 ACC 映射门禁，只读取原始 CSV 和 r187 冻结模型，不修改代码、模型、BGL、候选或部署。
+- 真实报告为 `diagnostics\r222-p188-airway-endpoint-card-source-audit-20260819.json`。P188 的唯一指定点行为 `1615`、UUID `af9bc75e-95a0-4dfc-bf78-b5c4afd3d757`，自身 FIR/服务机场为空；X62 第 `2292`、`2293` 行端点 FIR 也为空。
+- ACC 名称为“北京、济南、郑州”；仅“北京”可映射到 `ZB`，“济南、郑州”无映射。模型侧相邻地区为 `ZH/ZS`。处置为 `rejected_multiple_neighbor_regions_with_incomplete_acc_evidence`、`projection_allowed=false`；不得以不相关的部分 `ZB` 映射或任一邻接地区补写 P188。
+- 至此，来源缺口中的五个 `DESIGNATED_POINT` 区域身份 `P121/P127/P188/P225/P239` 均已通过 UUID 精确卡审计并保持拒绝。它们覆盖了所有 `DESIGNATED_POINT` 类型的 11 张航路端点卡和 5 张全局航点卡；没有任何卡获得新的唯一地区。M771 的 `****` 是唯一剩余航路端点卡，但它不是指定点，不能强行套用 UUID 审计。
+- 本轮不增加投影规则，完整回归、提交前检查待本轮完成。模型、BGL、候选、Community 和部署状态均未变，参考一致仍 `0/29`、`deployable=false`，字节收敛未推进。
+- 下一项唯一任务：为 M771 的非指定点 `****` 建立可复用的只读端点身份审计，验证其无法回链 `DESIGNATED_POINT.csv` 且不能仅凭单侧 `ZJ` 邻接恢复；该任务不得将 `****` 伪装为指定点或修改模型。
