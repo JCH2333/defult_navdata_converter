@@ -1626,3 +1626,11 @@
 - `CC5-32` 直接命中 `0`，无同文本行标签-类别链接。`CC608` 腿标识、`RWY30R` 类别标题和跑道一致性均不能构成程序类别映射；它们只能用于说明同页存在相关航图内容。
 - 处置继续为 `rejected_missing_direct_label_anchor`、`source_proven_kind=null`、`target_mapping_allowed=false`。模型、投影、候选、Community 和部署不变；自重放 `29/29`、参考一致 `0/29`、`deployable=false`，字节收敛未推进。
 - 下一项唯一任务：按稳定排序审计 `ZPDQ:EO-16:16:7`。该卡切换到 `eo_numeric` 标签族和新的机场来源，必须从 PDF 哈希和直接标签锚点重新开始，不得泛化 ZHCC 结论。
+
+## 2026-08-19 r231 ZPDQ EO-16 程序卡直接来源审计
+
+- 实验编号：`r231-zpdq-eo-16-16-unclassified-procedure-card-audit`。唯一变量是切换到 `eo_numeric` 标签族和新机场的精确卡 `ZPDQ:EO-16:16:7`；只读 `ZPDQ-4J.pdf` 第 1 页，不修改代码、模型、候选、Community 或部署。
+- 真实报告为 `diagnostics\r231-zpdq-eo-16-16-unclassified-procedure-card-audit-20260819.json`。来源 SHA-256 `928990a1d84556c6cfd005f179fb43b6fc2c5715c48ca3c59367f928ce7111e8` 与模型一致；程序腿为 `IF DER16`、`TF DQ510`、`RF DQ514`、`RF DQ517`。页面有 7 条类别标题事实，均为 `RWY16` 离场标题及其命名变体。
+- `EO-16` 直接命中 `0`，无同文本行标签-类别链接。离场标题、`DER16`、RF 腿或跑道 `16` 都不能将该数据库标签归类为离场；它们不满足直接来源关联门禁。
+- 处置为 `rejected_missing_direct_label_anchor`、`source_proven_kind=null`、`target_mapping_allowed=false`。模型、投影、候选、Community 和部署不变；自重放 `29/29`、参考一致 `0/29`、`deployable=false`，字节收敛未推进。
+- 下一项唯一任务：按稳定排序审计 `ZPDQ:EO-34:34:8`。该卡来源页和跑道均不同，必须按精确卡重新审计，禁止由 EO-16 或 RF 腿形态推断类别。
