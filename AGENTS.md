@@ -499,3 +499,10 @@
 3. 实验后记录候选/诊断目录、提交号、测试、SDK 构建、读取器完整性与可重复性、参考 `29` 文件哈希、稳定表语义差分、来源审计、保留或否决结论。
 4. 代码或仓库文档修改后运行相应测试、`git diff --check`、审查暂存区，只提交单一可解释变更并推送。数据库、备份、日志、诊断产物、SDK 中间输出和外部测试包不得进入 Git。
 5. 所有状态报告必须分别说明自动化测试、SDK 构建、本地读取器诊断、参考哈希、用户实机验证和正式发布，任何一项都不能替代另一个阶段。
+
+### 2026-08-19 r178 未分类程序来源审计日志
+
+- 实验编号：`r178-unclassified-procedure-audit`。假设为“可以先以来源模型和直接 terminal-database-coding 图页建立未分类程序的可复用审计边界，而不猜测目标程序类型”。唯一变量是新增只读审计器；输入为冻结的 `output/intermediate-2608-r155-airway-identities.json.gz`。未读取 Fenix、参考 BGL/SQLite、参考坐标、参考节表或候选投影记录，未修改 `source.py`、BGL adapter 或候选包。
+- 新增 `unclassified-procedure-audit` CLI、来源审计模块和最小 fixture。报告逐条保留机场、标签、标签族、跑道、航段类型/固定点、原始 PDF SHA-256、直接图页类型及目标拒绝原因；固定声明 `read_only=true`、`reference_records_read=false`、`fenix_records_read=false`。
+- 实际报告：`diagnostics/r178-unclassified-procedure-audit.json`。`13` 条均唯一回链到 `terminal_database_coding` 图页；标签族为 `rnp_numeric=4`（ZGBS `RNP-0`）、`cc_numeric=3`（ZHCC `CC3-09`/`CC5-17`/`CC5-32`）、`eo_numeric=6`（ZPDQ/ZUKD/ZUSH 的 `EO-*`）。全部 `target_mapping_allowed=0`、`source_proven_kind=null`、`disposition=rejected_for_target_mapping`。
+- 结论：`EO-*` 的名称、`RNP-0` 的字面形式以及 `CC*-*` 的前缀都不是离场、进场或进近的直接类型证据，不能写入 BGL 或改变 `ProcedureSegment.kind`。下一轮只允许对每个标签族继续读取同一 424 PDF 的直接标题/编码字段，或以其显式拒绝状态进入未来目标 profile 的降级策略；不得以“减少未分类数”为目标伪造映射。

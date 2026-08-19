@@ -253,6 +253,40 @@ def test_airport_source_inventory_reads_model_and_writes_report(monkeypatch) -> 
     assert received["report"]["output"] == str(received["output"])
 
 
+def test_unclassified_procedure_audit_reads_model_and_writes_report(monkeypatch) -> None:
+    received: dict[str, object] = {}
+    model = NavModel(Path("raw"))
+
+    monkeypatch.setattr(cli, "load_model", lambda path: received.update(
+        model_path=path
+    ) or model)
+    monkeypatch.setattr(
+        cli,
+        "audit_unclassified_procedures",
+        lambda received_model: received.update(model=received_model)
+        or {"diagnostic": "unclassified-procedure-audit-v1"},
+    )
+    monkeypatch.setattr(
+        cli,
+        "write_unclassified_procedure_audit",
+        lambda path, report: received.update(output=path, report=report),
+    )
+
+    result = cli.main([
+        "unclassified-procedure-audit",
+        "--model", "output/model.json.gz",
+        "--output", "diagnostics/unclassified-procedures.json",
+    ])
+
+    assert result == 0
+    assert received["model_path"] == Path("output/model.json.gz")
+    assert received["model"] is model
+    assert received["output"] == Path(
+        "diagnostics/unclassified-procedures.json"
+    ).resolve()
+    assert received["report"]["output"] == str(received["output"])
+
+
 def test_export_model_command_passes_source_and_output(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
