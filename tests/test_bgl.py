@@ -1572,7 +1572,11 @@ def test_enroute_projection_normalizes_sdk_identity_and_route_requirements(tmp_p
 
     root = ET.parse(output).getroot()
     waypoints = root.findall("Waypoint")
-    assert len([point for point in waypoints if point.attrib["waypointIdent"] == "DUP"]) == 1
+    assert [
+        point.attrib["waypointIdent"]
+        for point in waypoints
+        if point.attrib["waypointRegion"] == "ZB"
+    ] == ["DUP", "DUP001"]
     assert root.find("Waypoint[@waypointIdent='AIWD5']") is not None
     unicode_point = next(
         point for point in waypoints if point.attrib["waypointRegion"] == "CN"
@@ -1587,6 +1591,46 @@ def test_enroute_projection_normalizes_sdk_identity_and_route_requirements(tmp_p
         "waypointType": "NAMED",
         "altitudeMinimum": "0F",
     }
+
+
+def test_enroute_projection_keeps_same_ident_distinct_route_coordinates(
+    tmp_path: Path,
+) -> None:
+    model = NavModel(Path("source"))
+    source = SourceRef("RTE_SEG.csv", 2)
+    model.airway_legs.extend((
+        AirwayLeg(
+            "A1", 1, "DUP", "END1", source,
+            start_latitude=30.0, start_longitude=110.0,
+            end_latitude=30.1, end_longitude=110.1,
+            start_country="ZB", end_country="ZB",
+        ),
+        AirwayLeg(
+            "A2", 1, "DUP", "END2", source,
+            start_latitude=31.0, start_longitude=111.0,
+            end_latitude=31.1, end_longitude=111.1,
+            start_country="ZB", end_country="ZB",
+        ),
+    ))
+
+    output = tmp_path / "enroute-colliding-ident.xml"
+    write_bglcomp_xml(model, DEFAULT_CYCLE, output, scope="enroute")
+
+    root = ET.parse(output).getroot()
+    points = {
+        point.attrib["waypointIdent"]: point
+        for point in root.findall("Waypoint")
+    }
+    assert float(points["DUP"].attrib["lat"]) == 30.0
+    assert float(points["DUP001"].attrib["lat"]) == 31.0
+    assert points["DUP"].find("Route[@name='A1']/Next") is not None
+    assert points["DUP001"].find("Route[@name='A2']/Next") is not None
+    assert points["END1"].find("Route[@name='A1']/Previous").attrib[
+        "waypointIdent"
+    ] == "DUP"
+    assert points["END2"].find("Route[@name='A2']/Previous").attrib[
+        "waypointIdent"
+    ] == "DUP001"
 
 
 def test_enroute_projection_uses_named_route_shadows_and_preserves_facilities(

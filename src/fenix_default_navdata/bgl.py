@@ -1664,6 +1664,78 @@ def _airway_waypoint_identity(
     return ("NAMED", (country or "").upper()[:2], normalized_ident)
 
 
+def _airway_waypoint_coordinate_key(
+    ident: str,
+    country: str | None,
+    latitude: float,
+    longitude: float,
+) -> tuple[str, str, float, float]:
+    """Return the physical 424 identity behind an SDK NAMED waypoint."""
+
+    identity = _airway_waypoint_identity(ident, country, latitude, longitude)
+    return (
+        identity[1],
+        identity[2],
+        round(float(latitude), 6),
+        round(float(longitude), 6),
+    )
+
+
+def _airway_waypoint_identities(
+    points: list[object],
+) -> dict[tuple[str, str, float, float], tuple[str, str, str]]:
+    """Allocate unique SDK identities for source points sharing an ident.
+
+    SDK airway links identify named waypoints only by region and ident.  The
+    424 source can legally publish the same normalized ident in one region at
+    different coordinates.  Collapsing those physical identities rewires
+    route endpoints to the first coordinate.  Keep the first deterministic
+    coordinate unchanged and suffix only the additional physical locations.
+    """
+
+    grouped: dict[
+        tuple[str, str, str],
+        set[tuple[str, str, float, float]],
+    ] = {}
+    for point in points:
+        key = _airway_waypoint_coordinate_key(
+            str(point.ident),
+            str(point.country or ""),
+            float(point.latitude),
+            float(point.longitude),
+        )
+        grouped.setdefault(("NAMED", key[0], key[1]), set()).add(key)
+
+    reserved_by_country: dict[str, set[str]] = {}
+    for _, country, ident in grouped:
+        reserved_by_country.setdefault(country, set()).add(ident)
+
+    identities: dict[
+        tuple[str, str, float, float],
+        tuple[str, str, str],
+    ] = {}
+    for base_identity in sorted(grouped):
+        _, country, base_ident = base_identity
+        coordinates = sorted(grouped[base_identity])
+        for index, coordinate_key in enumerate(coordinates):
+            if index == 0:
+                identities[coordinate_key] = base_identity
+                continue
+            suffix = 1
+            while suffix <= 999:
+                candidate = f"{base_ident[:5]}{suffix:03d}"[:8]
+                if candidate not in reserved_by_country[country]:
+                    reserved_by_country[country].add(candidate)
+                    identities[coordinate_key] = ("NAMED", country, candidate)
+                    break
+                suffix += 1
+            else:
+                raise ValueError(
+                    f"无法为航路点 {base_ident!r} 分配唯一的 8 字符 SDK 标识"
+                )
+    return identities
+
+
 def _shared_terminal_enroute_points(
     model: NavModel,
     existing_identities: set[tuple[str, str, str]],
@@ -1812,6 +1884,7 @@ def _append_enroute(
         existing_identities,
     )
     points.extend(shared_terminal_points)
+    identities = _airway_waypoint_identities(points)
     deduped: dict[tuple[str, str, str], object] = {}
     for point in sorted(
         points,
@@ -1823,29 +1896,30 @@ def _append_enroute(
             str(item.key),
         ),
     ):
-        deduped.setdefault(_airway_waypoint_identity(
+        identity = identities[_airway_waypoint_coordinate_key(
             str(point.ident),
             str(point.country or ""),
             float(point.latitude),
             float(point.longitude),
-        ), point)
+        )]
+        deduped.setdefault(identity, point)
     route_children: dict[
         tuple[str, str, str],
         list[tuple[str, str, str, dict[str, str]]],
     ] = {}
     for leg in sorted(resolved_legs, key=lambda item: (item.airway, item.sequence)):
-        start_key = _airway_waypoint_identity(
+        start_key = identities[_airway_waypoint_coordinate_key(
             leg.start_ident,
             leg.start_country,
             leg.start_latitude,
             leg.start_longitude,
-        )
-        end_key = _airway_waypoint_identity(
+        )]
+        end_key = identities[_airway_waypoint_coordinate_key(
             leg.end_ident,
             leg.end_country,
             leg.end_latitude,
             leg.end_longitude,
-        )
+        )]
         route_children.setdefault(start_key, []).append((
             leg.airway,
             _route_type(leg.route_type),
@@ -1870,12 +1944,12 @@ def _append_enroute(
         str(item.ident).upper(), float(item.latitude), float(item.longitude), str(item.key),
     ))
     for point in ordered_points:
-        identity = _airway_waypoint_identity(
+        identity = identities[_airway_waypoint_coordinate_key(
             str(point.ident),
             str(point.country or ""),
             float(point.latitude),
             float(point.longitude),
-        )
+        )]
         point_element = ET.SubElement(root, "Waypoint", _attrs(
             lat=_float(point.latitude),
             lon=_float(point.longitude),
