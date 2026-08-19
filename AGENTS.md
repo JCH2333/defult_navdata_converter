@@ -2315,3 +2315,29 @@
    `git ls-remote --heads origin main`，禁止强推或重写历史。
 4. 诊断、候选、数据库、备份、缓存、模型快照、SDK 中间产物、日志和外部测试包继续留在 Git
    之外。未完成参考 `29/29`、干净复建和恢复演练前，禁止覆盖 Community。
+
+## 2026-08-19 r250 本机替代工具链可用性审计
+
+- 实验编号：`r250-local-alternate-toolchain-audit`。唯一问题是“本机是否存在可哈希、可恢复且
+  不同于当前构建器的 SDK/Package Tool/模板变量”；本轮不构建候选、不读取参考导航 payload、
+  不读取 Fenix、不修改模型、adapter、Community 或部署状态。
+- 重新核对的冻结输入为 r187 `NavModel`，SHA-256
+  `7cec24bd4a57545d39aab037abe4125c763ad12f364bd5f8f0073b0e050fdb4b`；r188/r189 候选及
+  r248 收敛报告均存在。审计时 Git 工作树干净，`main` 比 `origin/main` 领先 70 个提交。
+- 只读搜索范围为当前 `C:\MSFS 2024 SDK`、用户 `Downloads`、`Desktop`、`Documents`、
+  `AppData\Local\Temp`，以及 Windows 卸载登记。所有位置中仅发现
+  `C:\MSFS 2024 SDK\Tools\bin\fspackagetool.exe`，大小 75,264 字节，SHA-256
+  `EDA75A7D187FB45EDE71B59DD3189E614880F44642294600AA1AEBDD781A6F51`；SDK
+  `version.txt` 与已安装登记均为 `1.6.9`。未发现第二份 Package Tool、旧 SDK 安装项或可直接
+  使用的本地离线模板版本。
+- r248 ASCII 暂存项目的根项目和 PackageDefinitions 仍可复核：主包依赖
+  `navigraph-nav-base@0.1.0` 与 `navigraph-nav-jepp@2.26.16`、顺序
+  `CUSTOM_NAVDATA_PATCH`；机场补丁依赖主包、顺序 `CUSTOM_AIRPORT_PATCH`。这只是当前项目定义
+  的可复核基线，不是替代模板变量，也不得从参考包元数据推导导航内容。
+- 结论：`no_local_alternate_toolchain`。在当前可审计范围内，不存在合法的 SDK/模板单变量构建
+  探针；不得下载未知工具、覆盖现有 SDK、伪造版本、复制参考派生文件或把“可能存在旧版本”当成
+  根因。阶段 A 至此结束，字节收敛未推进，参考仍为 `0/29`，`deployable=false`。
+- 下一项唯一工作转为阶段 B：从剩余 8 张 IAP 主进近来源卡中按稳定键选择第一张尚未做精确
+  `iap-primary-source-audit --card` 审计的卡。读取范围继续限定为 r187、同周期 424 终端
+  数据库编码页和带 SHA-256 的直接图页缓存；没有唯一主段/图页归属/直接角色关联时必须写入
+  精确拒绝，而非扩展 OCR 或拼接同跑道信息。
