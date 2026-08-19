@@ -141,6 +141,7 @@ def audit_airway_endpoint_card(
         if name in fir_acc_countries
     }
     unmapped_acc = sorted(set(acc_names) - mapped_acc.keys())
+    mapped_acc_regions = sorted(set(mapped_acc.values()))
     direct_firs = sorted({
         str(segment["endpoint_fir"]).strip()
         for segment in raw_segments
@@ -164,6 +165,18 @@ def audit_airway_endpoint_card(
             "相邻已解析地区不唯一，且至少一个航段 ACC 名称不能由 "
             "AIRSPACE.csv 的 FIR 标题唯一映射；不能以部分 ACC 映射或任一相邻地区"
             "发明区域键"
+        )
+    elif (
+        model_category == "multiple_neighbor_regions"
+        and len(mapped_acc_regions) > 1
+    ):
+        disposition = (
+            "rejected_multiple_neighbor_regions_with_conflicting_acc_regions"
+        )
+        projection_allowed = False
+        reason = (
+            "相邻已解析地区不唯一，且所有可映射 ACC 本身指向多个地区；"
+            "不能从冲突的 ACC 映射或任一相邻地区选择区域键"
         )
     elif (
         direct_region_blank
@@ -208,6 +221,7 @@ def audit_airway_endpoint_card(
             "acc_names": acc_names,
             "fir_acc_region_mappings": mapped_acc,
             "unmapped_acc_names": unmapped_acc,
+            "mapped_acc_regions": mapped_acc_regions,
         },
         "model_source_evidence": {
             "category": model_category,

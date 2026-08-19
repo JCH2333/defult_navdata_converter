@@ -1471,3 +1471,11 @@
 - 原始 ACC 名称为“广州、长沙、成都”；只有“广州”可由 `AIRSPACE.csv` FIR 标题映射到 `ZG`，“长沙、成都”均无可用映射。模型侧相邻地区同时为 `ZG`、`ZP`、`ZU`。因此处置为 `rejected_multiple_neighbor_regions_with_incomplete_acc_evidence`、`projection_allowed=false`；不得用部分 `ZG` 映射覆盖或选择任一邻接地区。
 - 自动化新增“部分 ACC 映射加多地区边界必须拒绝”反例，并将 P225 同类未知 ACC 防护对齐该门禁；定向回归 `18 passed`，完整回归、提交前检查待本轮完成。模型、BGL、候选和 Community 未变，参考一致仍 `0/29`、`deployable=false`，字节收敛未推进。
 - 下一项唯一任务：按稳定排序复核 `H38:2` 的精确身份 `DESIGNATED_POINT/P239`。仅复用 UUID 精确关联、FIR/服务机场、ACC 映射和邻接来源审计；无唯一直接来源不得修改 `NavModel`、BGL 投影、候选或部署状态。
+
+## 2026-08-19 r220 P239 冲突 ACC 映射拒绝
+
+- 实验编号：`r220-p239-airway-endpoint-card-source-audit`。唯一假设是：当所有 ACC 名称都可由 FIR 标题映射、但映射到多个地区时，是否能够结合邻接地区选择区域。变量仅为 `airway-endpoint-card-audit` 新增已映射 ACC 地区集合及冲突处置；它不改变来源恢复算法，只把已有“多 ACC 地区保持未决”门禁变为可审计输出。
+- 真实报告为 `diagnostics\r220-p239-airway-endpoint-card-source-audit-20260819.json`。P239 的唯一指定点行为 `350`、UUID `3c15573d-8400-41f6-b61d-49135bfc3bc5`，自身 FIR/服务机场为空；H38 第 `2056`、`2057` 行的 P239 端点 FIR 同样为空。
+- 两个 ACC 名称均可映射，但“广州 -> ZG”、“武汉 -> ZH”，映射地区集合为 `ZG/ZH`；模型侧相邻地区为 `ZH/ZP`。处置为 `rejected_multiple_neighbor_regions_with_conflicting_acc_regions`、`projection_allowed=false`。不得根据共同出现的 `ZH`、任一 ACC 或相邻地区发明唯一区域。
+- 自动化新增“全部 ACC 已映射但映射地区冲突必须拒绝”反例；定向回归 `19 passed`，完整回归、提交前检查待本轮完成。模型、BGL、候选、Community 和部署状态均未变，参考一致仍 `0/29`、`deployable=false`，字节收敛未推进。
+- 下一项唯一任务：按稳定排序复核 `J35:1` 的精确身份 `DESIGNATED_POINT/P121`。继续仅做 UUID 精确关联、FIR/服务机场、ACC 映射和邻接来源审计；未获得唯一直接来源时保持拒绝。

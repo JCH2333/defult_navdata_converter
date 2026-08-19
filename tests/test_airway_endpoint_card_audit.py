@@ -76,6 +76,7 @@ def test_card_audit_rejects_blank_direct_region_at_multiple_region_boundary(
         "acc_names": ["西安"],
         "fir_acc_region_mappings": {},
         "unmapped_acc_names": ["西安"],
+        "mapped_acc_regions": [],
     }
     assert report["model_source_evidence"]["neighbor_regions"] == ["ZH", "ZL"]
     assert report["disposition"] == (
@@ -142,6 +143,69 @@ def test_card_audit_rejects_partially_mapped_acc_at_multi_region_boundary(
     assert report["direct_evidence"]["unmapped_acc_names"] == ["长沙"]
     assert report["disposition"] == (
         "rejected_multiple_neighbor_regions_with_incomplete_acc_evidence"
+    )
+    assert report["projection_allowed"] is False
+
+
+def test_card_audit_rejects_conflicting_mapped_acc_regions_at_boundary(
+    tmp_path: Path,
+) -> None:
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    _write_csv(
+        raw / "DESIGNATED_POINT.csv",
+        "\n".join((
+            "SIGNIFICANT_POINT_ID,CODE_FIR,CODE_ID,GEO_LAT_ACCURACY,GEO_LONG_ACCURACY,SERVICED_AIRPORT",
+            "point-p239,,P239,N302146,E1092628,",
+        )),
+    )
+    _write_csv(
+        raw / "RTE_SEG.csv",
+        "\n".join((
+            "RTE_SEG_ID,VAL_SORT,CODE_POINT_START,CODE_TYPE_START,CODE_FIR_START,POINT_START_ID,CODE_POINT_END,CODE_TYPE_END,CODE_FIR_END,POINT_END_ID,TXT_DESIG,Airspace_Remark",
+            "first,2,P616,DESIGNATED_POINT,,other-zp,P239,DESIGNATED_POINT,,point-p239,H38,广州ACC武汉ACC",
+            "second,3,P239,DESIGNATED_POINT,,point-p239,IGITA,DESIGNATED_POINT,,other-zh,H38,广州ACC武汉ACC",
+        )),
+    )
+    _write_csv(
+        raw / "AIRSPACE.csv",
+        "\n".join((
+            "AIRSPACE_ID,CODE_TYPE,CODE_ID,TXT_NAME",
+            "fir-zg,FIR,ZGZU,广州飞行情报区",
+            "fir-zh,FIR,ZHWH,武汉飞行情报区",
+        )),
+    )
+    model = NavModel(
+        raw,
+        waypoints=[Waypoint(
+            "p239", "P239", "", 30.362778, 109.441111, SourceRef(
+                "DESIGNATED_POINT.csv", 2
+            ), "",
+        )],
+        airway_legs=[
+            AirwayLeg(
+                "H38", 2, "P616", "P239", SourceRef("RTE_SEG.csv", 3),
+                start_type="DESIGNATED_POINT", end_type="DESIGNATED_POINT",
+                start_latitude=30.2, start_longitude=109.2, start_country="ZP",
+                end_latitude=30.362778, end_longitude=109.441111,
+                source_airspace_remark="广州ACC武汉ACC",
+            ),
+            AirwayLeg(
+                "H38", 3, "P239", "IGITA", SourceRef("RTE_SEG.csv", 4),
+                start_type="DESIGNATED_POINT", end_type="DESIGNATED_POINT",
+                start_latitude=30.362778, start_longitude=109.441111,
+                end_latitude=30.4, end_longitude=109.5, end_country="ZH",
+                source_airspace_remark="广州ACC武汉ACC",
+            ),
+        ],
+    )
+
+    report = audit_airway_endpoint_card(raw, model, ident="P239")
+
+    assert report["direct_evidence"]["mapped_acc_regions"] == ["ZG", "ZH"]
+    assert report["direct_evidence"]["unmapped_acc_names"] == []
+    assert report["disposition"] == (
+        "rejected_multiple_neighbor_regions_with_conflicting_acc_regions"
     )
     assert report["projection_allowed"] is False
 
