@@ -111,12 +111,18 @@ def _cache_section_summary(
     label: str,
     runway: str,
     source: SourceRef,
-) -> tuple[dict[str, int], dict[str, list[dict[str, object]]], list[dict[str, object]]]:
+) -> tuple[
+    dict[str, int],
+    dict[str, list[dict[str, object]]],
+    list[dict[str, object]],
+    list[dict[str, object]],
+]:
     sections: Counter[str] = Counter()
     legs: dict[str, list[dict[str, object]]] = {
         kind: [] for kind in sorted(_SOURCE_SECTION_KINDS)
     }
     evidence_pages: list[dict[str, object]] = []
+    same_page_labels: dict[tuple[str, str], Counter[str]] = {}
     for chart in charts:
         if (
             chart.get("airport") != airport
@@ -131,10 +137,15 @@ def _cache_section_summary(
         for leg in terminal_legs:
             if not isinstance(leg, Mapping):
                 raise IapPrimarySourceAuditError("数据库编码图页包含无效航段")
-            if leg.get("procedure_label") != label or leg.get("runway") != runway:
-                continue
             kind = _cache_section_kind(leg)
             if kind not in _SOURCE_SECTION_KINDS:
+                continue
+            leg_label = leg.get("procedure_label")
+            leg_runway = leg.get("runway")
+            if not isinstance(leg_label, str) or not isinstance(leg_runway, str):
+                raise IapPrimarySourceAuditError("数据库编码图页 IAP 航段缺少标签或跑道")
+            same_page_labels.setdefault((leg_label, leg_runway), Counter())[kind] += 1
+            if leg_label != label or leg_runway != runway:
                 continue
             sections[kind] += 1
             selected_legs.append(leg)
@@ -149,10 +160,21 @@ def _cache_section_summary(
             "source": chart.get("source"),
             "matching_leg_count": len(selected_legs),
         })
+    page_label_summaries = [
+        {
+            "label": page_label,
+            "runway": page_runway,
+            "sections": {
+                kind: counts[kind] for kind in sorted(_SOURCE_SECTION_KINDS)
+            },
+        }
+        for (page_label, page_runway), counts in sorted(same_page_labels.items())
+    ]
     return (
         {kind: sections[kind] for kind in sorted(_SOURCE_SECTION_KINDS)},
         legs,
         evidence_pages,
+        page_label_summaries,
     )
 
 
@@ -206,9 +228,12 @@ def audit_iap_primary_sources(
         model_sections, model_legs = _model_section_summary(
             model, airport, label, runway,
         )
-        cache_sections, cache_legs, evidence_pages = _cache_section_summary(
-            charts, airport, label, runway, rejected_item.source,
-        )
+        (
+            cache_sections,
+            cache_legs,
+            evidence_pages,
+            same_page_labels,
+        ) = _cache_section_summary(charts, airport, label, runway, rejected_item.source)
         if not evidence_pages:
             disposition = "not_evaluated_no_matching_direct_database_chart"
         elif (
@@ -236,6 +261,7 @@ def audit_iap_primary_sources(
             "direct_database_sections": cache_sections,
             "direct_database_legs": cache_legs,
             "evidence_pages": evidence_pages,
+            "same_page_iap_labels": same_page_labels,
             "projection_allowed": False,
         })
     return {

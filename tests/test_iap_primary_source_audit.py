@@ -159,6 +159,15 @@ def test_audit_rejects_transition_and_missed_without_primary(
         "approach_transition": 1,
         "missed": 1,
     }
+    assert item["same_page_iap_labels"] == [{
+        "label": "R29R",
+        "runway": "29R",
+        "sections": {
+            "approach": 0,
+            "approach_transition": 1,
+            "missed": 1,
+        },
+    }]
     assert item["projection_allowed"] is False
 
 

@@ -967,3 +967,10 @@
 - r202 将 r201 只读报告绑定到 `default-gap-cards-audit --iap-primary-source-audit <r201.json>`，产物为 `diagnostics/r202-default-gap-cards-iap-primary-20260819.json`。40 张卡总数和四类计数不变；IAP 卡现精确分为 `rejected_transition_and_missed_without_primary=2` 与 `rejected_no_unique_primary=8`。绑定器强制检查报告格式、只读边界、`projection_allowed=false`、完整覆盖和每张卡的 `SourceRef`，任一来源不一致即失败。
 - 新增正例、缓存含主段反例、空缓存拒绝、来源不一致拒绝和 CLI 绑定测试。全量 `pytest -q` 为 `419 passed`。本轮仅改变审计与卡片处置，不改变模型、BGL、候选或部署状态；参考字节一致仍为 `0/29`、`deployable=false`。
 - 下一轮只从余下 `8` 张 IAP 未决卡中选取一个单一问题。先检查相同页面是否有可证明主段存在的直接 424 证据；若没有，保持拒绝/未决并转向另一张卡或 OCR 运行时恢复，禁止以“已有过渡或复飞”为由创造主进近。
+
+## 2026-08-19 r203 ZJSY/I08-X 同页基础主段继承否决
+
+- 实验编号：`r203-zjsy-i08-x-same-page-primary`。唯一假设是 `ZJSY:I08-X` 的同一数据库编码页是否存在可按已证实“同机场、同跑道、同页”条件继承的基础主进近。只读取 r187 与 r43 的精确来源缓存；禁止参考成品、Fenix、OCR 或跨页/跨跑道推断。
+- `iap-primary-source-audit` 新增通用 `same_page_iap_labels` 输出：对每一份精确匹配数据库编码页列出全部 IAP 标签、跑道和主进近/过渡/复飞段计数。这是只读来源上下文，不参与投影选择。
+- 实际报告为 `diagnostics/r203-all-unresolved-iap-primary-source-audit-20260819.json`。`ZJSY/I08-X` 在跑道 `08` 只有自身复飞 `4` 腿；同页 `R26` 在跑道 `26` 有过渡 `6` 腿，`R26-Y` 在跑道 `26` 有主进近 `3` 腿和复飞 `2` 腿。没有同跑道的基础主段，因此结论保持 `unresolved_direct_database_evidence_inconclusive`，不得将 `R26-Y` 或任何跑道 26 段继承给 `I08-X`。
+- 回归覆盖同页标签摘要，完整 `pytest -q` 为 `419 passed`。本轮未改变模型、IAP 投影、候选或参考 `0/29` 字节状态；后续不得重试 `ZJSY:I08-X` 的跨跑道/跨标签继承，除非出现新的同周期直接来源页。
