@@ -2058,3 +2058,9 @@
 - 新增只读 `sdk-bgl-expression-matrix-audit`。它只读取 r243 来源库存、r244 航路投影矩阵、r216 BGL 固定头统计及 r163/r174 的本地探针报告；不读取参考 payload、参考记录、Fenix 或 OCR，也不改模型和候选。
 - 真实报告为 `diagnostics\r245-sdk-bgl-expression-matrix-20260819.json`：r244 确认航路 XML 完整，r163/r174 均有可读取的航路行，r216 节表差继续仅作为无语义定位量。矩阵结论为 `blocked_on_machine_readable_target_evidence`：没有新的来源完整、未验证 XML 表达可安全选择。
 - r243 的跑道阈值位移仍显示为 `eligible_for_sdk_probe`，但 r195 的已否决结论尚未是该矩阵可验证的标准探针报告，因此不得凭历史文字再次选择或接入。下一项 r246 只允许把 r194/r195/r215 等历史单变量探针归档为统一、只读、机器可校验的证据清单；归档后若所有候选仍已否决，则正式冻结“当前周期无可接入 SDK 单变量”的结论，转向模板/SDK 版本与派生包格式的独立研究。
+
+## 2026-08-19 r246 历史 SDK 探针证据标准化
+
+- 新增可复用 `historical-sdk-probe-evidence` 归档器，统一读取既有控制组/变量组 `probe-report.json` 的读取器完整性和 BGL 布局，不读取参考 payload 或重跑 SDK。
+- 真实报告 `diagnostics\r246-historical-sdk-probe-evidence-20260819.json`：r194 跑道表面、r195 阈值位移、r215 `DeleteAirport` 三组均 `reader_complete=true`；三组的 BGL 节类型、节计数和节大小均未改变。r195/r215 仅改变文件总大小，r194 连总大小也不变。
+- 结论：跑道表面和阈值位移均为 `rejected_no_section_cardinality_effect`；`DeleteAirport` 为 `required_overlay_contract_not_cardinality_fix`。因此冻结当前周期的机场 SDK 单变量队列，r245 不再把阈值位移视为可重试候选。下一项 r247 转向不含导航内容的 Package Tool/模板版本与派生包元数据可控性审计，先区分 SDK 版本、项目定义、布局/清单/索引等派生差异，禁止读取参考导航 payload 或修改模型。
