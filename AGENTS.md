@@ -887,3 +887,10 @@
 - 实际报告：`diagnostics/r198-default-gap-cards-endpoints-20260819.json`。12 条跳过航路段中 `11` 条的空端点为 `multiple_neighbor_regions`，邻接地区集合分别为 `ZH/ZL`、`ZG/ZP/ZU`、`ZH/ZP`、`ZG/ZS`、`ZH/ZS` 等跨地区组合；`M771:1` 的 `****` 为 `non_designated_endpoint_identity_unavailable`，不在 `DESIGNATED_POINT.csv` 的唯一身份集合中。
 - 结论：当前五个可识别航路点和其关联的 11 条航段均已有直接来源拒绝理由，不得再次使用单一邻接地区、反转方向或参考结构推断恢复；`M771/****` 不得创建全局航点。除非新增同周期直接 FIR/ACC 证据且与全部现有邻接证据一致，否则这 12 张航路卡保持阻断。
 - 自动化：缺口卡测试加入端点来源理由回归，全量 `pytest -q` 为 `412 passed`。报告仍为 `read_only=true`、`reference_records_read=false`、`fenix_records_read=false`。下一轮不再重复航路邻接方向，转入一个 IAP 或未分类程序卡的直接 PDF/OCR 证据核验。
+
+## 2026-08-19 r199 ZBAD/R29R OCR 取证运行时门禁
+
+- 实验编号：`r199-zbad-r29r-ocr-runtime`。对象为 r198 缺口卡 `ZBAD:R29R`，直接来源页为 `Terminal/ZBAD/ZBAD-0C-19.pdf`。唯一假设是本机 OCR 运行时可复跑，从而只将 OCR 用于消歧已有 IAP 主段；禁止读取参考包、Fenix、参考坐标或手工转录内容。
+- 运行 `ocr-skill extract <ZBAD-0C-19.pdf> --json` 失败：`engine_unavailable`，`llama-server` 在 `http://127.0.0.1:8090` 返回 `WinError 10061`。随后 `ocr-skill doctor --json` 返回 `status=broken`、`ready=false`；Python/PDF 依赖和缓存目录正常，唯一警告为 `engine_llamacpp` 未监听。不得用 mock、单次人工答案或替代 OCR 引擎伪造该页内容。
+- 结论：本轮未获得任何直接标题或角色证据，`ZBAD/R29R` 继续保持 `no_unique_primary` 和 `RejectedProcedure`。这不是对 IAP 内容的否定，也不是放宽投影规则的理由；OCR 服务恢复、页面哈希和多次结果满足缓存门禁前，禁止修改 `iap_coverage`、`ProcedureSegment` 或 BGL。
+- 后续：先恢复可复跑的本地 OCR 服务，再以 r197/r198 IAP 卡逐项执行“数据库主段 -> PDF/OCR 直接证据 -> 唯一规则 -> 正反 fixture -> 模型门禁 -> 投影”。未恢复前可继续处理不依赖 OCR 的结构化 424 规则，但不得重复航路邻接实验。
