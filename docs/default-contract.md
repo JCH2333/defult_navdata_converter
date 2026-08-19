@@ -214,12 +214,13 @@ SID/STAR 名称碰撞。该网格由 XML 中的 `AiracCycle` 触发。无 `Airac
 
 2026-08-19 的 r140/r141 扩展探针以属性型 `--append-airport-child TAG;NAME=VALUE` 与 `--append-root-child TAG;NAME=VALUE` 受控附加 SDK 子对象，且两者永远不进入 `NavModel` 或正式候选。对同一份 `ZUAL` 输入，`Com`、`Tower`、`Start` 与完整的 `RunwayAlias` 均保持 `0x3/0x13/0x22/0x32/0x34/0x35`；一个完整属性的机场内或根节点 `Ndb` 均会稳定增加 `0x17` 与 `0x33`，各增加一条，故对象位置不能解释参考计数差异。叠加 `onlyAddIfReplace=TRUE` 后节类型可变为参考同类集合 `0x3/0x13/0x17/0x22/0x32/0x33/0x34`，但该标记不能进入通用投影：同日对新增机场 `ZBCF` 的隔离包经 Navdatareader 读取，机场与跑道记录均为 0，只剩航点与 ILS。因此它只可作为布局诊断，不构成运行时兼容规则。NDB 结果也只证明该对象是两个节的充分触发条件，不证明参考机场 BGL 的数千条索引记录来自 424 机场关联 NDB：2608 `NDB.csv` 只有 39 条可精确关联中国机场的记录，数量不足以解释参考各分区的 2,003 至 3,614 条节计数。因此不得据此把 NDB 接入机场投影，除非另有独立的 424 来源规则同时解释记录数量、作用域与加载契约。回归：`test_airport_child_specs_are_attribute_only_and_append_in_order`、`test_root_children_reuse_diagnostic_specs_without_reparenting`。
 
-2026-08-19 的 r143-r149 继续使用隔离 `ZUAL` 项目，新增
+2026-08-19 的 r143-r150 继续使用隔离 `ZUAL` 项目，新增
 `--append-root-object 'Vor;...|Dme;...'` 以表达一层 SDK 子对象。空机场的节表只有
-`0x3/0x35`；根 `Vor/Dme` 增加 `0x13`，根 `Ndb` 增加 `0x17/0x33`。两条落在同一
-QMID 的设施使相应节保持 `count=1,size=16`；把第二条移动到另一 QMID 后，VOR 的
-`0x13` 和 NDB 的 `0x17` 都变为 `count=2,size=32`，`0x33` 仍为单一全局条目。
-因此 BGL 节表的这些计数是空间分桶条目数，不是源设施或航点记录总数。参考机场 BGL
+`0x3/0x35`；根 `Vor/Dme` 增加 `0x13`，根 `Ndb` 增加 `0x17/0x33`，根 `Waypoint`
+增加 `0x22/0x34`。两条落在同一 QMID 的设施使相应空间节保持 `count=1,size=16`；
+把第二条移动到另一 QMID 后，VOR 的 `0x13`、NDB 的 `0x17` 与航点的 `0x22` 都变为
+`count=2,size=32`，而 `0x33`、`0x34` 仍为单一全局条目。因此 BGL 节表的这些计数
+是空间分桶条目数，不是源设施或航点记录总数。参考机场 BGL
 的 `0x13/0x17/0x22=3604` 不能作为“要补齐的 424 行数”，也不能单独证明缺少某类
 导航实体。探针规格不写入 `NavModel` 或正式候选；SDK Package Tool 构建必须串行，
 不能并发运行。回归：`test_root_object_specs_support_one_level_sdk_children`。
