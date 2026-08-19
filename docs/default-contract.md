@@ -239,6 +239,12 @@ SID/STAR 名称碰撞。该网格由 XML 中的 `AiracCycle` 触发。无 `Airac
 中“已有机场”的来源支持索引后，才能单独评估替换机场的混合投影，新增机场必须保留
 常规投影。
 
+2026-08-19 对当前允许的 `navigraph-nav-base` 与 `navigraph-nav-jepp` 官方索引进行
+只读检查：虽包含 `airport` 表定义，但实际中国机场行数为 0，无法提供“官方已有机场”
+的身份集合。因此官方无 NAIP 基线不能支持按机场选择 `onlyAddIfReplace` 的混合策略；
+从参考成品读取该集合会越过内容来源边界。默认适配器必须继续使用能加载新增机场的
+常规投影，并把 `onlyAddIfReplace` 限定为不可部署的 SDK 布局诊断。
+
 机场覆盖必须先写入 `DeleteAirport`，且仅删除 `Approaches`、`Departures`、`Arrivals`，再投影 424 的跑道、终端点、程序和等待航线。证据：2026-08-19 对 2608R1 `ZUAL` 参考 BGL 的 SDK BglExplorer 读取显示 `FAC_TYPE_AIRPORT_DELETE` 的三项删除标记；同一份隔离 XML 仅新增该标记后，Package Tool 生成相同节表、文件增量 12 字节，并确认生成该设施记录及机场替换标记。此规则是默认通用数据的目标覆盖契约，不使用参考内容补写任何航行记录。回归：`test_bgl_xml_is_deterministic`、`test_airport_procedure_deletion_is_inserted_before_source_children`。
 
 ### 导航台区域键
