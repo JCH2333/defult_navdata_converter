@@ -27,6 +27,10 @@ from .airport_bgl_cardinality_audit import (
     audit_airport_bgl_cardinality,
     write_airport_bgl_cardinality_audit,
 )
+from .enroute_bgl_cardinality_audit import (
+    audit_enroute_bgl_cardinality,
+    write_enroute_bgl_cardinality_audit,
+)
 from .default_gap_cards import (
     audit_default_gap_cards,
     write_default_gap_cards,
@@ -291,6 +295,14 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help="本地机场 BGL 节表基数审计 JSON 输出路径",
     )
+    enroute_bgl_cardinality = sub.add_parser(
+        "enroute-bgl-cardinality-audit",
+        help="只读比较航路 BGL 节表基数与 NavModel 来源规模，不读取参考记录",
+    )
+    enroute_bgl_cardinality.add_argument("--model", required=True)
+    enroute_bgl_cardinality.add_argument("--candidate", required=True)
+    enroute_bgl_cardinality.add_argument("--reference")
+    enroute_bgl_cardinality.add_argument("--output", required=True)
     model_replay = sub.add_parser(
         "model-replay-audit",
         help="只读比较两个 NavModel 快照，并以精确路径和哈希执行白名单门禁",
@@ -1161,6 +1173,22 @@ def main(argv: list[str] | None = None) -> int:
         )
         report["output"] = str(output)
         write_airport_bgl_cardinality_audit(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "enroute-bgl-cardinality-audit":
+        reference = _path(args.reference) or detect_paths().reference_root
+        if not reference:
+            raise SystemExit("无法自动检测 Default navdata 2608R1 参考目录，请显式传入 --reference")
+        model_path = Path(args.model).expanduser().resolve()
+        output = Path(args.output).expanduser().resolve()
+        report = audit_enroute_bgl_cardinality(
+            load_model(model_path),
+            Path(args.candidate),
+            reference,
+            model_path=model_path,
+        )
+        report["output"] = str(output)
+        write_enroute_bgl_cardinality_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "model-replay-audit":
