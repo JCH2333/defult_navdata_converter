@@ -10,6 +10,10 @@ from .ad219_ndb import (
     write_ad219_ndb_ocr_audit,
 )
 from .bgl import find_compiler
+from .airway_coordinate_precision_probe import (
+    run_airway_coordinate_precision_probe,
+    write_source_airway_coordinate_precision_audit,
+)
 from .bgl_format import audit_bgl_layouts, write_bgl_layout_audit
 from .convert import convert, export_intermediate_model
 from .deployment import deploy, restore
@@ -635,6 +639,52 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_READER_TIMEOUT_SECONDS,
         help=f"读取器超时秒数（默认 {DEFAULT_READER_TIMEOUT_SECONDS}）",
     )
+    coordinate_precision_probe = sub.add_parser(
+        "airway-coordinate-precision-probe",
+        help="以合成航路端点验证 SDK 坐标和包围盒编码，不修改转换候选",
+    )
+    coordinate_precision_probe.add_argument(
+        "--output",
+        required=True,
+        help="新的本地诊断目录",
+    )
+    coordinate_precision_probe.add_argument(
+        "--bglcomp",
+        help="合法 fspackagetool.exe 路径；未提供时自动探测",
+    )
+    coordinate_precision_probe.add_argument(
+        "--reader",
+        help="本机 Navdatareader.exe 路径",
+    )
+    coordinate_precision_probe.add_argument(
+        "--cache-root",
+        help="纯 ASCII 的本地读取器暂存目录",
+    )
+    coordinate_precision_probe.add_argument(
+        "--build-timeout",
+        type=int,
+        default=3600,
+        help="Package Tool 构建超时秒数（默认 3600）",
+    )
+    coordinate_precision_probe.add_argument(
+        "--reader-timeout",
+        type=int,
+        default=DEFAULT_READER_TIMEOUT_SECONDS,
+        help=f"读取器超时秒数（默认 {DEFAULT_READER_TIMEOUT_SECONDS}）",
+    )
+    coordinate_precision_audit = sub.add_parser(
+        "airway-coordinate-precision-audit",
+        help="只读审计 424 DMS 航路坐标在 SDK float32 前是否被 6 位格式化改变",
+    )
+    coordinate_precision_audit.add_argument(
+        "--raw",
+        help="2608 原始 CSV/PDF 目录",
+    )
+    coordinate_precision_audit.add_argument(
+        "--output",
+        required=True,
+        help="本地只读审计 JSON 输出路径",
+    )
     validate = sub.add_parser("validate", help="验证候选")
     validate.add_argument("--candidate", required=True)
     validate.add_argument("--reference")
@@ -1046,6 +1096,28 @@ def main(argv: list[str] | None = None) -> int:
             cache_root=_path(args.cache_root),
             build_timeout_seconds=args.build_timeout,
             reader_timeout_seconds=args.reader_timeout,
+        )
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "airway-coordinate-precision-probe":
+        report = run_airway_coordinate_precision_probe(
+            Path(args.output),
+            compiler=find_compiler(_path(args.bglcomp)),
+            reader=_path(args.reader),
+            cache_root=_path(args.cache_root),
+            build_timeout_seconds=args.build_timeout,
+            reader_timeout_seconds=args.reader_timeout,
+        )
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "airway-coordinate-precision-audit":
+        detected = detect_paths()
+        raw = _path(args.raw) or detected.raw_root
+        if raw is None:
+            raise SystemExit("无法自动检测 2608 原始目录，请显式传入 --raw")
+        report = write_source_airway_coordinate_precision_audit(
+            raw,
+            Path(args.output),
         )
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0

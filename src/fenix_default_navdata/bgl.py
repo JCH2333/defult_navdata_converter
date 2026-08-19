@@ -322,6 +322,12 @@ def _float(value: object, digits: int = 6) -> str:
     return f"{float(value):.{digits}f}".rstrip("0").rstrip(".")
 
 
+def _coordinate(value: object) -> str:
+    """Preserve source DMS precision through the SDK's float32 quantization."""
+
+    return _float(value, 12)
+
+
 def _attrs(**values: object) -> dict[str, str]:
     return {key: str(value) for key, value in values.items() if value is not None and value != ""}
 
@@ -1877,8 +1883,8 @@ def _append_enroute(
             float(point.longitude),
         )
         point_element = ET.SubElement(root, "Waypoint", _attrs(
-            lat=_float(point.latitude),
-            lon=_float(point.longitude),
+            lat=_coordinate(point.latitude),
+            lon=_coordinate(point.longitude),
             waypointType=identity[0],
             waypointRegion=identity[1],
             waypointIdent=identity[2],

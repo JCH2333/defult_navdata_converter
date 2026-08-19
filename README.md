@@ -16,6 +16,8 @@
 - 自动探测 MSFS 2024 SDK `fspackagetool.exe`。
 - 通过纯 ASCII 暂存项目调用 Package Tool，生成 BGL、`bglIndex.bout`、包元数据与 ContentInfo。
 - 提供 `route-fragment-probe`：用最小合成航路复现实测 SDK 的片段、序号和 `routeType` 编码，不修改任何转换候选。
+- 提供 `airway-coordinate-precision-probe`：以 6、9、12 位小数的合成航路端点回读 SDK 的端点与包围盒字段，用于确定坐标量化规则，不读取参考成品或修改任何转换候选。
+- 提供 `airway-coordinate-precision-audit`：只读统计 424 DMS 航路端点经过旧版 6 位坐标格式化后是否改变 SDK 的 `float32` 值；正式航路 XML 使用 12 位坐标文本，避免在编译前丢失可表达精度。
 - 将 PDF 解析证据缓存到本机可复用目录，长时间转换中断后可以断点续跑。
 - OCR 缓存绑定渲染比例、固定图像预处理和本地识别配置；可将完整 OCR 缓存与重跑缓存逐页比对，并独立审计每条记录是否可唯一回链到直接 424。仅 IAP 多图页消歧可在至少三份缓存完全一致后受限使用，不能新增程序或航段。
 - 本地 llama.cpp OCR 启动器固定记录随机种子和温度，并生成可验证的运行时描述文件；OCR 缓存通过 `--runtime-profile-file` 绑定 llama 构建号、模型哈希、视觉投影哈希、种子与温度，避免手工简写混用不同推理配置。
@@ -70,6 +72,12 @@ python -m fenix_default_navdata.cli read-package `
 python -m fenix_default_navdata.cli route-fragment-probe `
   --output diagnostics\route-fragment-probe `
   --bglcomp "C:\MSFS 2024 SDK\Tools\bin\fspackagetool.exe"
+python -m fenix_default_navdata.cli airway-coordinate-precision-probe `
+  --output diagnostics\airway-coordinate-precision-probe `
+  --bglcomp "C:\MSFS 2024 SDK\Tools\bin\fspackagetool.exe"
+python -m fenix_default_navdata.cli airway-coordinate-precision-audit `
+  --raw "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
+  --output diagnostics\airway-coordinate-precision-audit.json
 python -m fenix_default_navdata.cli source-gap-audit `
   --raw "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
   --semantic-diff diagnostics\navdatareader\semantic-diff.json `
