@@ -1813,3 +1813,12 @@
 - 处置为 `unresolved_direct_database_evidence_inconclusive`、`projection_allowed=false`。不得把 `ZSNJ-5G` 的 IAF/IF、`ZSNJ-5H` 的空角色、同跑道、图题或任一复飞腿拼接成 `I25` 主进近；模型、BGL、候选、Community 和部署均未改变，自重放仍以 r188/r189 的 `29/29` 为基线，参考一致仍 `0/29`、`deployable=false`，字节收敛未推进。
 - 自动化新增精确卡筛选、未知卡拒绝、缓存 `SourceRef`/直接角色绑定和 CLI 参数回归；定向回归 `10 passed`。完整回归、提交前检查和 Git 提交必须在本轮结束前完成。
 - 下一项唯一任务：按剩余 IAP 未决卡稳定排序，对尚无精确补充审计的 `ZSOF:R33` 建立同样的数据库主段、候选标题、直接角色和缓存哈希只读卡。不得重做 `ZSOF:R15`、`ZJSY:I08-X`、`ZYDD` 或 `ZSNJ:I25`，无唯一来源时继续保守拒绝。
+
+## 2026-08-19 r239 ZSOF R33 精确 IAP 主段来源审计
+
+- 实验编号：`r239-zsof-r33-exact-iap-primary-source-audit`。本轮只复用 r238 的精确 `--card` 只读审计，不修改代码、模型、投影、候选、Community 或部署。允许读取 r187、`ZSOF-4P.pdf` 的数据库编码缓存及同跑道 `ZSOF-5C/5D/6B.pdf` 仪表图缓存；禁止读取参考、Fenix、OCR 或候选内容。
+- 真实报告为 `diagnostics\r239-zsof-r33-exact-iap-primary-source-audit-20260819.json`。直接数据库页 `Terminal\ZSOF\ZSOF-4P.pdf` 第 1 页 SHA-256 `14eb661a95735d30075faa643834229de102193f0dd7bea4d31e65cfb325835e` 有 5 条 `R33` 进近过渡腿（`OF105/OF106 -> OF104 -> OF103`），主进近和复飞均为零；模型还有来自另一页的 `OF108` 过渡，但不属于本精确来源页。
+- 三张缓存验证的同跑道仪表图均不匹配 `R33`：`ZSOF-5C.pdf`（SHA-256 `3ecbe812d33568de83cc6abd52dc55f4b33bd4c23e3e91789d9bc714c5e08f29`）标题候选仅为 `I33/I33-Z`，直接角色 `OF103/IF`、`OF105/OF106/OF108 IAF`；`ZSOF-5D.pdf` 仅为 `I33/I33-Y`；`ZSOF-6B.pdf` 仅为 `D33`。因此不存在匹配 `R33` 的标题候选，更不存在可关联的数据库主段或主段角色交集。
+- 处置为 `unresolved_direct_database_evidence_inconclusive`、`projection_allowed=false`。不得根据同跑道、`OF103`/`OF105` 等过渡腿与图页角色、RNAV ILS 图题或参考差分发明 `R33` 主进近。模型、BGL、候选、Community 和部署不变；r188/r189 自重放仍 `29/29`，参考一致仍 `0/29`、`deployable=false`，字节收敛未推进。
+- 本轮无代码变化；完整回归、提交前检查和文档提交必须在结束前完成。
+- 下一项唯一任务：按稳定排序对尚无精确补充审计的 `ZSWY:I03` 建立同样的精确来源卡。必须分别核对数据库主段、候选图标题、缓存直接角色和固定点；无唯一来源时保持拒绝。
