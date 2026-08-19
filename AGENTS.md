@@ -1359,3 +1359,12 @@
 - 自动化新增最小伪 BGL/模型 fixture，覆盖参考有 `0x17/0x33`、候选缺失、候选支持包排除、模型区域来源计数和禁止 payload/语义推断的报告门禁。全量回归为 `429 passed`。r188/r189 自重放仍为 `29/29`，参考一致仍为 `0/29`，`deployable=false`；字节收敛未推进。
 - 已确认经验：当节表差异与来源对象计数同时存在时，二者只能构成下一步 SDK 探针的量化输入，不能证明映射关系。后续探针必须从单个、来源完整且未否决的 SDK 对象出发，验证其是否同时解释节类型、作用域和记录数量；无法满足三者时不得接入 adapter。
 - 下一项唯一任务：基于 r214 看板选择一个尚未否决、具备同周期直接来源的机场 SDK 子对象，先设计单变量隔离探针，要求结果能同时报告对象作用域、节表变化和记录基数。不得重试已否决的跑道表面、阈值位移、机场关联 VOR/NDB、空域通信、根终端点重复或等待航线隔离；在探针结论前不得修改正式投影。
+
+## 2026-08-19 r215 ZUAL DeleteAirport 覆盖表达探针
+
+- 实验编号：`r215-zual-deleteairport-overlay-contract`。唯一变量是保留或移除 `ZUAL` 的 `<DeleteAirport deleteAllApproaches="TRUE" deleteAllDepartures="TRUE" deleteAllArrivals="TRUE"/>`。两组均从 r188 冻结 `china-navdata.xml` 选择同一 ZUAL，均移除根级 `AiracCycle`、`Vor`、`Ndb` 以避免根对象污染，均保留同一份 424 来源机场、跑道、ILS、终端点、SID、STAR、IAP 和等待航线；不读取参考 BGL/SQLite/坐标/Fenix，不改模型或正式候选。
+- 生成 XML 的结构核对证明变量唯一：控制组输入为 `45,795` 字节、SHA-256 `a9bb052587ea1884ff6749ec01baba224be0ef1a13f3cff13b8145c6cdb7ee82`，变体为 `45,693` 字节、SHA-256 `630c5999a37bfc8e9b5a7248509f132062dfff0451b5749ffa4fc3cb4efa2bfb`；除 `DeleteAirport` 外，两组均为 1 条跑道、81 个终端点、1 个 ILS、2 条离场、2 条进场、3 条进近和 4 条等待航线。
+- Package Tool 两次均按已确认异步契约启动并等待新的 `FlightSimulator2024.exe` 退出后产出完整包；工具前台返回 `1`，但两组都有成功包产物、无新增 BuilderLog 错误、完整 BGL 和读取器登记，因此以产物判定构建成功。控制组 BGL 为 `23,559` 字节、SHA-256 `c0a7fb20f89abc85fc32369dc5cf51ac8daac3d55560519050732cbaddc11fa9`；移除组为 `23,547` 字节、SHA-256 `3e68ac9d013583e2de7bca312e7f5a638be91a37c745eb76ed7e2dcbb694ff7a`。
+- 两组节表均为 `0x3/0x13/0x22/0x32/0x34/0x35`，记录基数均为 `1/1/10/1/1/1`；读取器均完整登记 1 个 BGL，并读取 81 个航点、1 个 ILS，其他目标表为零。删除语义仅改变二进制负载 12 字节，未改变节类型、节表基数或读取器可见对象，不能解释 r214 中参考机场 BGL 缺失的 `0x17/0x33`。
+- 结论：`DeleteAirport` 是正式覆盖加载策略所需的目标表达，不是机场节表基数缺口的来源；保持现有适配器的程序删除行为，不得为了追逐哈希移除它。r188/r189 自重放仍 `29/29`，参考一致仍 `0/29`、`deployable=false`，字节收敛未推进。诊断目录为 `diagnostics\r215-zual-deleteairport-retained-20260819` 与 `diagnostics\r215-zual-deleteairport-removed-20260819`，不得提交。
+- 下一项唯一任务：机场来源完整且尚未单独验证的对象已被 r177/r194/r195/r213/r215 逐项排除或证伪；停止扩大机场子对象探针，转入航路 `00_enroute.bgl` 的来源闭合与 SDK 表达差异，先从 `12` 条航路端点区域和 `5` 个全局航点区域的拒绝卡中选择一项能够取得新同周期直接来源的对象。无新来源时保留拒绝，禁止从 r214 节表、参考内容或 Fenix 推断补值。
