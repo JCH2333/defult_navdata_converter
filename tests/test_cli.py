@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from fenix_default_navdata import cli
 from fenix_default_navdata.bgl import CompilerInfo
 from fenix_default_navdata.model import NavModel
@@ -170,6 +172,7 @@ def test_build_command_loads_intermediate_model_and_skips_raw_requirement(
     result = cli.main([
         "build",
         "--model", "model.json.gz",
+        "--baseline-db", "official-navaids.sqlite",
         "--output", "output/candidate",
         "--nav-base", "base",
         "--nav-jepp", "jepp",
@@ -178,4 +181,37 @@ def test_build_command_loads_intermediate_model_and_skips_raw_requirement(
     assert result == 0
     assert captured["model"] is model
     assert captured["model_path"] == Path("model.json.gz")
+    assert captured["baseline_db"] == Path("official-navaids.sqlite")
     assert captured["cycle"] == DEFAULT_CYCLE
+
+
+def test_build_from_model_requires_an_official_navaid_index(monkeypatch):
+    model = NavModel(Path("source"))
+
+    monkeypatch.setattr(cli, "load_model", lambda path: model)
+    monkeypatch.setattr(
+        cli,
+        "detect_paths",
+        lambda: type(
+            "P",
+            (),
+            {
+                "raw_root": None,
+                "nav_base": Path("base"),
+                "nav_jepp": Path("jepp"),
+                "reference_root": None,
+            },
+        )(),
+    )
+
+    with pytest.raises(
+        SystemExit,
+        match="使用 --model 构建必须传入已校验的 --baseline-db",
+    ):
+        cli.main([
+            "build",
+            "--model", "model.json.gz",
+            "--output", "output/candidate",
+            "--nav-base", "base",
+            "--nav-jepp", "jepp",
+        ])

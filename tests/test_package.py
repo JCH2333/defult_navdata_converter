@@ -88,6 +88,7 @@ def test_build_candidate_uses_supplied_model_instead_of_loading_source(
     model.waypoints.append(
         Waypoint("ZB.P01", "P01", "P01", 40.1, 116.1, SourceRef("DESIGNATED_POINT.csv", 2), country="ZB"),
     )
+    model.iap_coverage = {"version": 1, "stale": True}
 
     def load_naip(*_args, **_kwargs):
         raise AssertionError("supplied NavModel must skip 424 parsing")
@@ -111,6 +112,8 @@ def test_build_candidate_uses_supplied_model_instead_of_loading_source(
     }
     assert report["model"]["waypoints"] == 1
     assert report["pdf_cache"] is None
+    assert report["iap_coverage"]["version"] == 24
+    assert "stale" not in report["iap_coverage"]
 
 
 def test_missing_navaid_baseline_keeps_candidate_non_deployable(

@@ -1323,6 +1323,7 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
     source_intersecting_direct_role_selections: list[dict[str, object]] = []
     source_plain_rnp_title_selections: list[dict[str, object]] = []
     source_unique_first_if_selections: list[dict[str, object]] = []
+    source_incomplete_chart_title_matches: list[dict[str, object]] = []
     selected_role_pages: set[tuple[str, str, int]] = set()
     matched_pages: set[tuple[str, str, int]] = set()
     complete_primary_groups = 0
@@ -1352,6 +1353,34 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
         ):
             donor, _inherited_selection = inherited
             primary = [replace(donor, label=label)]
+        if not primary:
+            title_matches = [
+                chart
+                for chart in charts
+                if chart.airport == airport
+                and runway in chart.runways
+                and label in approach_procedure_name_candidates(
+                    chart.chart_name,
+                    chart.runways,
+                    airport,
+                )
+            ]
+            if title_matches:
+                source_incomplete_chart_title_matches.append({
+                    "airport": airport,
+                    "label": label,
+                    "runway": runway,
+                    "source_sections": sorted({
+                        iap_section_kind(segment) for segment in selected
+                    }),
+                    "charts": [
+                        {
+                            "chart_name": chart.chart_name,
+                            "source": _source_report(chart.source),
+                        }
+                        for chart in title_matches
+                    ],
+                })
         if resolved_multi_primary:
             title_qualifier_partition = all(
                 multi_primary_variants[id(segment)].selection == "rnp_ar_title_qualifier"
@@ -1700,7 +1729,7 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
     role_evidence_pages = sum(bool(chart.route_fixes) for chart in charts)
     missed_evidence_pages = sum(bool(chart.has_missed_approach) for chart in charts)
     return {
-        "version": 23,
+        "version": 24,
         "chart_pages": {
             "total": len(charts),
             "with_route_role_evidence": role_evidence_pages,
@@ -1786,6 +1815,9 @@ def analyze_iap_coverage(model: NavModel) -> dict[str, object]:
         ),
         "source_plain_rnp_title_selections": source_plain_rnp_title_selections,
         "source_unique_first_if_selections": source_unique_first_if_selections,
+        "source_incomplete_chart_title_matches": (
+            source_incomplete_chart_title_matches
+        ),
         "shared_ils_primary_projection_count": len(
             model.shared_ils_primary_projections,
         ),

@@ -17,6 +17,7 @@ from .bgl import (
 )
 from .baseline import NavaidDiff
 from .default_navaids import DefaultNavaidSelection, select_default_navaids
+from .iap_coverage import analyze_iap_coverage
 from .iap_ocr_consensus import load_iap_ocr_role_evidence
 from .model import NavModel
 from .official_index import (
@@ -301,6 +302,9 @@ def build_candidate(
         )
     else:
         iap_ocr_role_evidence = model.iap_ocr_role_evidence
+    # Coverage is a derived adapter audit. Recompute it so an immutable source
+    # snapshot never preserves a stale report from an earlier converter version.
+    model.iap_coverage = analyze_iap_coverage(model)
     output.mkdir(parents=True)
     _copy_tree(nav_base, output / BASE_PACKAGE)
     _copy_tree(nav_jepp, output / JEPP_PACKAGE)

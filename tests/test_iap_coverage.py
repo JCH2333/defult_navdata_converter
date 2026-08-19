@@ -93,7 +93,7 @@ def test_iap_coverage_counts_unique_map_disambiguation():
 
     report = analyze_iap_coverage(model)
 
-    assert report["version"] == 23
+    assert report["version"] == 24
     assert report["chart_pages"]["total"] == 2
     assert report["chart_pages"]["matched_to_primary_group"] == 2
     assert report["chart_pages"]["selected_for_role_projection"] == 1
@@ -317,7 +317,7 @@ def test_iap_coverage_partitions_same_label_rnp_ar_primaries_by_title_qualifiers
         if segment.kind == "approach"
     ]
 
-    assert report["version"] == 23
+    assert report["version"] == 24
     assert report["procedure_groups"]["status_counts"] == {
         "multiple_primary_rnp_ar_title_qualifier": 1,
     }
@@ -2142,4 +2142,19 @@ def test_iap_coverage_does_not_create_a_primary_from_a_matching_chart_title():
             "sha256": "database-hash",
         },
         "status": "no_unique_primary",
+    }]
+    assert report["source_incomplete_chart_title_matches"] == [{
+        "airport": "ZJSY",
+        "label": "I08-X",
+        "runway": "08",
+        "source_sections": ["approach_transition", "missed"],
+        "charts": [{
+            "chart_name": "RNP ILS/DME x RWY08(AR)",
+            "source": {
+                "file": "Terminal/ZJSY/ZJSY-5L-3.pdf",
+                "row": 1,
+                "page": 1,
+                "sha256": "chart-hash",
+            },
+        }],
     }]

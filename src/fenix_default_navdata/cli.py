@@ -657,6 +657,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "build":
         model_path = _path(args.model)
         model = load_model(model_path) if model_path else None
+        baseline_db = _path(args.baseline_db)
         if model is None:
             raw, base, jepp, reference = _defaults(args)
         else:
@@ -667,6 +668,10 @@ def main(argv: list[str] | None = None) -> int:
             reference = _path(args.reference) or detected.reference_root
             if not base or not jepp:
                 raise SystemExit("无法自动检测 navigraph-nav-base 或 navigraph-nav-jepp，请显式传参")
+            if baseline_db is None:
+                raise SystemExit(
+                    "使用 --model 构建必须传入已校验的 --baseline-db 官方设施索引 SQLite"
+                )
         report = convert(
             raw,
             base,
@@ -684,7 +689,7 @@ def main(argv: list[str] | None = None) -> int:
             iap_ocr_cache_roots=tuple(
                 Path(value) for value in args.iap_ocr_cache_roots
             ),
-            baseline_db=_path(args.baseline_db),
+            baseline_db=baseline_db,
             baseline_tolerance_nm=args.baseline_tolerance_nm,
             model=model,
             model_path=model_path,

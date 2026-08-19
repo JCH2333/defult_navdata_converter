@@ -12,6 +12,17 @@ it. Default BGL, DFDv2, JSON, and future adapters therefore receive the same
 explicit distinction between a complete approach and an incomplete source
 group.
 
+Snapshot builds also require the separately verified official navaid index.
+`NavModel` remains purely source-derived, while that index supplies the
+official-template identity contract needed by the target adapter. The CLI
+rejects `build --model` without `--baseline-db` instead of producing a
+degraded candidate.
+
+IAP coverage is derived adapter audit data, not immutable source content. Each
+snapshot build recomputes it using the installed converter version, so a
+snapshot created by an older converter cannot preserve stale coverage rules or
+hide newly available diagnostics.
+
 ## 2608R1 Evidence
 
 The following 424 database-coding groups have no `approach` segment:
@@ -32,6 +43,9 @@ The following 424 database-coding groups have no `approach` segment:
 `Charts.csv` directly names compatible chart identities such as `I08-X`,
 `I25`, `I03`, `I15`, `R01`, and `R10`. Those titles do not change the source
 sections above. Each group remains `no_unique_primary` in the coverage audit.
+When a direct title match exists, the report records it under
+`source_incomplete_chart_title_matches`; this is diagnostic provenance only
+and cannot affect projection.
 
 ## Regression
 
