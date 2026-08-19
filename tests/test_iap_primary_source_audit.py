@@ -9,6 +9,7 @@ from fenix_default_navdata.iap_primary_source_audit import (
     audit_iap_primary_sources,
 )
 from fenix_default_navdata.model import (
+    ChartRouteFix,
     ChartTerminalLeg,
     NavModel,
     ProcedureChart,
@@ -433,6 +434,10 @@ def test_audit_reports_title_match_without_creating_missing_primary(
             (),
             (),
             chart_source,
+            route_fixes=(
+                ChartRouteFix("AD521", "IAF"),
+                ChartRouteFix("AD790", "IF"),
+            ),
         ),
     )
 
@@ -455,6 +460,11 @@ def test_audit_reports_title_match_without_creating_missing_primary(
         },
         "title_label_candidates": ["I29R", "R29R", "I29RZ", "I29R-Z", "R29R-Z"],
         "direct_label_match": True,
+        "direct_route_roles": [
+            {"ident": "AD521", "role": "IAF"},
+            {"ident": "AD790", "role": "IF"},
+        ],
+        "primary_leg_role_overlap": [],
     }]
     assert item["projection_allowed"] is False
 

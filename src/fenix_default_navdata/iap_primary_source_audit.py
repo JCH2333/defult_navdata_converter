@@ -206,6 +206,18 @@ def _instrument_chart_title_candidates(
     evidence only: it must never turn a title or an IAF/IF overlap into legs.
     """
 
+    primary_idents = {
+        leg.fix_ident
+        for segment in model.procedure_segments
+        if (
+            segment.airport == airport
+            and segment.label == label
+            and segment.runway == runway
+            and iap_section_kind(segment) == "approach"
+        )
+        for leg in segment.legs
+        if leg.fix_ident
+    }
     result: list[dict[str, object]] = []
     for chart in model.procedure_charts:
         if (
@@ -219,12 +231,30 @@ def _instrument_chart_title_candidates(
             chart.runways,
             chart.airport,
         )
+        direct_route_roles = [
+            {
+                "ident": route_fix.ident,
+                "role": route_fix.role,
+            }
+            for route_fix in sorted(
+                chart.route_fixes,
+                key=lambda route_fix: (route_fix.ident, route_fix.role),
+            )
+        ]
         result.append({
             "filename": chart.filename,
             "chart_name": chart.chart_name,
             "source": _source_payload(chart.source),
             "title_label_candidates": list(title_candidates),
             "direct_label_match": label in title_candidates,
+            # A chart role is source evidence only.  Report the intersection
+            # with an already decoded primary, but never synthesize one.
+            "direct_route_roles": direct_route_roles,
+            "primary_leg_role_overlap": [
+                role
+                for role in direct_route_roles
+                if role["ident"] in primary_idents
+            ],
         })
     return sorted(
         result,

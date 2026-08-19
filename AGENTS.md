@@ -1193,3 +1193,11 @@
 - 开始前记录：r 编号、唯一假设/变量、输入和工具哈希、允许/禁止来源、预期文件角色、成功和否决指标。
 - 结束后更新：诊断或候选路径、模型 SHA-256、代码/文档提交、测试、SDK/读取器结果、JSON 重读、候选自重放、参考 `x/29`、缺口卡状态、部署状态和下一项唯一任务。没有提升参考一致数时必须明确写“字节收敛未推进”。
 - 代码或仓库文档变更后必须运行 `pytest -q`、`git diff --check`、精确检查暂存区、创建单一主题提交并尝试普通 `git push`。数据库、备份、日志、诊断、候选、SDK 中间产物、外部测试包和生成导航包继续保持在 Git 之外。
+
+## 2026-08-19 r212 ZJSY/I08-X 标题候选直接角色审计
+
+- 实验编号：`r212-zjsy-title-direct-role-audit`。唯一假设是：当未决 IAP 的唯一同跑道标题命中图具有 424 PDF 直接角色时，审计应可复用地记录角色及其与已有模型主进近腿的身份交集；角色本身不得生成或补写主进近。
+- 允许读取 r187 冻结 `NavModel`、图页已解析的 `ChartRouteFix` 和 r43 精确数据库编码页缓存；禁止读取参考 BGL/SQLite/坐标、Fenix、人工转录或新增 OCR。`iap_primary_source_audit.py` 的 `instrument_chart_title_candidates` 现输出稳定排序的 `direct_route_roles` 和 `primary_leg_role_overlap`。后者只报告已存在的同标签、同跑道 `approach` 腿标识交集，永远不创建航段或改变投影。
+- 最小回归 `test_audit_reports_title_match_without_creating_missing_primary` 覆盖标题命中图含 `IAF`/`IF` 直接角色时，仍保持 `approach=0`、交集为空和 `projection_allowed=false`。定向回归：`3 passed, 52 deselected`。
+- 真实命令用 r187 与 r211 的 9 份精确缓存重跑 `iap-primary-source-audit`，报告为 `diagnostics\r212-zjsy-title-direct-role-audit-20260819.json`。`ZJSY:I08-X` 的唯一标题命中 `ZJSY-5L-3.pdf`（SHA-256 `637310e313614e12dbcad7c8d87915cbde476677d1f769aa594b627b845bd1ec`）直接角色为 `SY461/IF`、`SY462/IAF`、`SY935/IAF`；冻结模型和精确数据库页主进近均为 `0`，`primary_leg_role_overlap=[]`，处置继续为 `unresolved_direct_database_evidence_inconclusive`。
+- 结论：图页角色提供了可复用的来源审计信息，但缺失主进近的前提没有闭合，不得从 `SY462` 等既有复飞腿、图标题或同跑道图拼接主进近。模型、BGL、候选和 Community 未改变；参考一致仍为 `0/29`、`deployable=false`，字节收敛未推进。下一项工作从其余 7 张来源不足 IAP 卡、航路/航点区域或未分类程序中选择一张有新直接来源可能性的单卡。
