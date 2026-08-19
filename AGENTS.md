@@ -2167,3 +2167,14 @@
 - 本轮只更新协作计划，不读取或修改模型、候选、参考 BGL payload、Community 或部署状态。`pytest -q` 于 2026-08-19 通过，结果为 `448 passed in 3.91s`；`git diff --check` 通过。
 - 仓库计划提交为 `65b117c`（`docs: record r247 convergence plan`）。提交后普通 `git push` 在 2026-08-19 失败：`Failed to connect to 127.0.0.1 port 7897`。该失败说明本机代理未监听；未强推、未重写历史、未删除本地提交。
 - 当前下一项唯一实现工作仍为阶段 A 的 `package-derived-metadata-audit`。开始前必须重新核对 Git、冻结模型、r188/r189、r244-r246 诊断和游戏进程；该审计完成前不得改动正式 adapter 或候选内容。
+
+## 2026-08-19 r247 派生包元数据审计与 r248 时间正规化单变量探针
+
+- r247 新增只读 `package-derived-metadata-audit` CLI、最小正反 fixture 和 CLI 回归。它只读取 `layout.json`、`manifest.json`、`ContentHistory.json` 与 `bglIndex.bout`；对参考 BGL 不读取 payload 或导航记录，固定报告 `reference_payload_read=false` 与 `reference_records_exported=false`。审计范围严格以参考顶层包确定，r188 实际运行只覆盖 `zzz-pmdg-china-navdata` 与 `zzz-pmdg-china-navdata-airport-patch` 两包，并排除候选中的 2 个官方基线镜像。
+- r247 实际报告为 `diagnostics\r247-package-derived-metadata-audit-20260819.json`。两包的 manifest 核心契约字段（内容类型、标题、制造商、创建者、版本和最低兼容版本）均相同，只有 `total_package_size` 不同；ContentHistory 的条目数均为候选 `275`、参考 `279`。这些字段均随实际产物派生，不能脱离 BGL 内容手工改写。
+- r247 对 r188 的布局/索引结论均为 `unexplained_without_content_inference`：候选的 BGL FILETIME 已按既有确定性规则归零，参考索引的 FILETIME 关联精确；参考布局同时存在路径/大小差异，不能把 FILETIME 差异单独误判为可修复根因。r180 未归零历史候选虽能与参考一样完整关联索引 FILETIME，但其 29 文件参考一致同样为 `0/29`。
+- r248 将 `--preserve-package-tool-times` 作为仅限 `--model` 的隔离诊断开关。它仅关闭 `_normalize_package_tool_time_metadata`，不改变 r187 冻结模型、424 输入、官方双基线、官方索引、XML 投影或部署门禁；未提供 `--model` 时命令必须拒绝。自动化覆盖该开关传递和拒绝非冻结模型调用。
+- 游戏进程确认未运行后，r248 使用 r187 SHA-256 `7cec24bd4a57545d39aab037abe4125c763ad12f364bd5f8f0073b0e050fdb4b`、同一官方双基线、同一官方设施索引与本机 `C:\MSFS 2024 SDK\Tools\bin\fspackagetool.exe` 完成真实构建。候选 `output\candidate-2608-default-r248-preserve-package-tool-times` 通过 `validate`：`valid=true`、`local_contract_verified=true`、`package_contract=true`、`bgl_count=21`、`test_build=true`、`deployable=false`。
+- r248 文件收敛报告为 `diagnostics\r248-file-convergence-20260819.json`：相对 r188，`25/29` 受控文件 SHA-256 相同，变化恰为两个包各自的 `layout.json` 与 `bglIndex.bout`，证实唯一变量没有触及导航 BGL、manifest 或 ContentHistory；但对参考一致仍为 `0/29`。r248 元数据报告为 `diagnostics\r248-package-derived-metadata-audit-20260819.json`：两个包的候选与参考索引 FILETIME 关联均完整，索引差异仍为 `requires_sdk_or_template_version_probe`，整体布局仍不得作内容推断。
+- 可证伪结论：保留 Package Tool FILETIME 只能改变两包的布局/索引派生产物，不能提高参考一致数；默认时间正规化仍是候选确定性门禁，不得为追逐参考哈希而撤销、手工回写时间戳或再次重跑同变量。字节收敛未推进，模型、正式 adapter、Community 和部署状态不变。
+- 下一项唯一任务为 r249 的只读 SDK/模板版本与项目定义来源盘点：记录当前 Package Tool 可执行文件版本/哈希、r248 ASCII 暂存项目定义、参考 manifest 的非导航构建字段和可取得的同周期官方 SDK/模板证据；禁止读取参考导航 payload、修改模型、候选或 Community。只有得到明确且本机可用的不同 SDK/模板变量，才允许启动新的单变量构建探针。

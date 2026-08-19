@@ -371,6 +371,39 @@ def test_file_convergence_audit_writes_requested_report(monkeypatch) -> None:
     assert received["report"]["output"] == str(received["output"])
 
 
+def test_package_derived_metadata_audit_writes_requested_report(monkeypatch) -> None:
+    received: dict[str, object] = {}
+
+    monkeypatch.setattr(cli, "detect_paths", lambda: type("P", (), {
+        "reference_root": Path("auto-reference"),
+    })())
+    monkeypatch.setattr(
+        cli,
+        "audit_package_derived_metadata",
+        lambda candidate, reference: received.update(
+            candidate=candidate,
+            reference=reference,
+        ) or {"diagnostic": "package-derived-metadata-audit-v1"},
+    )
+    monkeypatch.setattr(
+        cli,
+        "write_package_derived_metadata_audit",
+        lambda path, report: received.update(output=path, report=report),
+    )
+
+    result = cli.main([
+        "package-derived-metadata-audit",
+        "--candidate", "output/r188",
+        "--output", "diagnostics/package-metadata.json",
+    ])
+
+    assert result == 0
+    assert received["candidate"] == Path("output/r188")
+    assert received["reference"] == Path("auto-reference")
+    assert received["output"] == Path("diagnostics/package-metadata.json").resolve()
+    assert received["report"]["output"] == str(received["output"])
+
+
 def test_model_replay_audit_fails_on_unexpected_difference(tmp_path: Path) -> None:
     baseline = NavModel(tmp_path / "raw")
     replay = NavModel(tmp_path / "raw")
@@ -573,6 +606,57 @@ def test_build_command_loads_intermediate_model_and_skips_raw_requirement(
     assert captured["model_path"] == Path("model.json.gz")
     assert captured["baseline_db"] == Path("official-navaids.sqlite")
     assert captured["cycle"] == DEFAULT_CYCLE
+
+
+def test_build_model_probe_can_preserve_package_tool_times(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    model = NavModel(tmp_path / "raw")
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(cli, "load_model", lambda path: model)
+    monkeypatch.setattr(
+        cli,
+        "convert",
+        lambda *args, **kwargs: captured.update(kwargs) or {"status": "candidate"},
+    )
+    monkeypatch.setattr(
+        cli,
+        "detect_paths",
+        lambda: type(
+            "P",
+            (),
+            {
+                "raw_root": None,
+                "nav_base": Path("base"),
+                "nav_jepp": Path("jepp"),
+                "reference_root": None,
+            },
+        )(),
+    )
+
+    result = cli.main([
+        "build",
+        "--model", "model.json.gz",
+        "--baseline-db", "official-navaids.sqlite",
+        "--output", "output/probe",
+        "--nav-base", "base",
+        "--nav-jepp", "jepp",
+        "--preserve-package-tool-times",
+    ])
+
+    assert result == 0
+    assert captured["normalize_package_tool_times"] is False
+
+
+def test_build_rejects_time_probe_without_frozen_model() -> None:
+    with pytest.raises(SystemExit, match="必须与 --model"):
+        cli.main([
+            "build",
+            "--output", "output/probe",
+            "--preserve-package-tool-times",
+        ])
 
 
 def test_build_from_model_requires_an_official_navaid_index(monkeypatch):

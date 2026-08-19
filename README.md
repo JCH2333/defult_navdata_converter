@@ -71,6 +71,10 @@ python -m fenix_default_navdata.cli file-convergence-audit `
   --repeat-candidate output\candidate-2608-default-r182-package-time-repeat `
   --reference "F:\我的世界动画\AI项目\导航数据\424源数据\2608\Default navdata 2608R1" `
   --output diagnostics\file-convergence-audit.json
+python -m fenix_default_navdata.cli package-derived-metadata-audit `
+  --candidate output\candidate-2608-default-r188-doviv-replay `
+  --reference "F:\我的世界动画\AI项目\导航数据\424源数据\2608\Default navdata 2608R1" `
+  --output diagnostics\package-derived-metadata-audit.json
 python -m fenix_default_navdata.cli airport-bgl-cardinality-audit `
   --model output\intermediate-2608-r187-navaid-label-replay.json.gz `
   --candidate output\candidate-2608-default-r188-doviv-replay `
@@ -269,6 +273,8 @@ python -m fenix_default_navdata.cli build `
 - `semantic-diff` 不返回参考 SQLite 的坐标、频率、磁差、高程、名称或航路端点字段值，不能作为候选内容的反向来源。调用时必须显式提供候选和参考各自的预期 BGL 数；`bgl_file` 登记数不精确相等即拒绝生成报告。
 - `bgl-layout-audit` 以参考包的顶层包名确定比较范围，只读取候选和参考最终包内 BGL 的文件路径、文件大小、SHA-256 相等性、头部版本、QMID 和节表类型/计数/尺寸；候选根目录下的 SDK `_work` 中间产物和不在参考范围内的官方依赖副本始终排除，数量会记录在 `scope`。它不读取或导出任何参考导航记录，输出仅用于定位 SDK 编译布局与内容覆盖差异。
 - `file-convergence-audit` 是逐文件收敛看板：它只读取候选、可选重复候选和参考包的相对路径、大小、SHA-256、固定文件角色及 BGL 头/节表摘要，并固定输出 `read_only=true` 与 `reference_records_exported=false`。它排除 SDK `_work` 和不在参考包范围内的支持包，用于分别验证候选自重放和参考 `29` 文件收敛；不得导出参考导航记录、坐标或字段，更不得用报告反向补写候选内容。
+- `package-derived-metadata-audit` 只读取包级 `layout.json`、`manifest.json`、`ContentHistory.json` 和 `bglIndex.bout`。它报告 JSON 键/结构、路径/大小/FILETIME、Package Tool 索引中可验证的 FILETIME 关联和未归因字节范围，不读取参考 BGL 导航 payload 或记录。结论仅用于区分当前时间正规化、项目定义、SDK/模板版本与不可在内容边界内推断的差异，不允许手工改包或反向补写导航内容。
+- `build --preserve-package-tool-times` 是仅限 `--model` 的隔离诊断开关，用于单变量验证 Package Tool FILETIME 对 `layout.json` 与 `bglIndex.bout` 的影响。它生成的仍是不可部署测试候选，不能替代默认时间正规化，也不能用于手工回写参考时间戳。
 - `airport-bgl-cardinality-audit` 只读取 r187 等 `NavModel` 的区域来源计数，以及候选和参考最终机场 BGL 的固定头和节表。它按区域文件记录节类型、基数、尺寸和存在性差异，明确输出 `reference_payload_read=false` 与 `section_type_semantics_inferred=false`；报告不能导出参考记录、坐标或 payload，也不能把 `0x17`、`0x33` 等节类型反向解释为应投影的对象。
 - `enroute-bgl-cardinality-audit` 以同样边界读取单个最终 `00_enroute.bgl` 的头和节表，并并列 VOR/NDB、全局航点、航路段、区域未决段和拒绝记录的模型计数。它只量化候选与参考的节表差异，不能将节类型、参考计数或哈希反向解释为应补写的内容。
 - `airway-endpoint-card-audit` 以 `DESIGNATED_POINT.csv` 的 UUID 精确关联 `RTE_SEG.csv`，并列指定点自身 FIR/服务机场、关联航段端点 FIR、ACC 名称、可直接映射的 FIR/ACC 和模型侧已来源化的邻接地区。它只输出一个端点的可复核拒绝或来源不足结论，不读取参考/Fenix，不改模型或候选。

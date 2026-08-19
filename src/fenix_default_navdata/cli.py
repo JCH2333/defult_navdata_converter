@@ -73,6 +73,10 @@ from .bgl_format import (
     write_bgl_layout_audit,
     write_file_convergence_audit,
 )
+from .package_metadata_audit import (
+    audit_package_derived_metadata,
+    write_package_derived_metadata_audit,
+)
 from .convert import convert, export_intermediate_model
 from .deployment import deploy, restore
 from .general_docs import (
@@ -185,6 +189,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--model",
         help="已导出的中间模型 JSON/JSON.GZ；提供后跳过 424 解析，只运行官方设施选择和 BGL 适配器",
     )
+    build.add_argument(
+        "--preserve-package-tool-times",
+        action="store_true",
+        help="仅限 --model 隔离探针：保留 Package Tool 的 layout/index FILETIME",
+    )
     export_model = sub.add_parser("export-model", help="导出可复用的 424 中间模型快照")
     export_model.add_argument("--raw", help="2608 原始 CSV/PDF 目录")
     export_model.add_argument("--output", required=True, help="中间模型 JSON 或 JSON.GZ 输出路径")
@@ -293,6 +302,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="可选的同输入重复候选，用于逐文件重放确定性比较",
     )
     convergence.add_argument("--output", required=True, help="本地收敛看板 JSON 输出路径")
+    package_metadata = sub.add_parser(
+        "package-derived-metadata-audit",
+        help="只读归因 Package Tool 派生包元数据，不读取参考导航 payload",
+    )
+    package_metadata.add_argument("--candidate", required=True, help="候选包根目录")
+    package_metadata.add_argument(
+        "--reference",
+        help="Default navdata 2608R1 参考包根目录；省略时自动检测",
+    )
+    package_metadata.add_argument(
+        "--output",
+        required=True,
+        help="本地派生元数据审计 JSON 输出路径",
+    )
     airport_bgl_cardinality = sub.add_parser(
         "airport-bgl-cardinality-audit",
         help="只读比较机场 BGL 节表基数与 NavModel 区域来源计数，不读取参考记录",
@@ -1109,6 +1132,8 @@ def main(argv: list[str] | None = None) -> int:
         model_path = _path(args.model)
         model = load_model(model_path) if model_path else None
         baseline_db = _path(args.baseline_db)
+        if args.preserve_package_tool_times and model is None:
+            raise SystemExit("--preserve-package-tool-times 必须与 --model 一起使用")
         if model is None:
             raw, base, jepp, reference = _defaults(args)
         else:
@@ -1144,6 +1169,7 @@ def main(argv: list[str] | None = None) -> int:
             baseline_tolerance_nm=args.baseline_tolerance_nm,
             model=model,
             model_path=model_path,
+            normalize_package_tool_times=not args.preserve_package_tool_times,
         )
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
@@ -1233,6 +1259,16 @@ def main(argv: list[str] | None = None) -> int:
         )
         report["output"] = str(output)
         write_file_convergence_audit(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "package-derived-metadata-audit":
+        reference = _path(args.reference) or detect_paths().reference_root
+        if not reference:
+            raise SystemExit("无法自动检测 Default navdata 2608R1 参考目录，请显式传入 --reference")
+        output = Path(args.output).expanduser().resolve()
+        report = audit_package_derived_metadata(Path(args.candidate), reference)
+        report["output"] = str(output)
+        write_package_derived_metadata_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "airport-bgl-cardinality-audit":

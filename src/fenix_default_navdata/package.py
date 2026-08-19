@@ -233,6 +233,7 @@ def _compile_xml_package(
     package_order_hint: str,
     title: str,
     selected_navaids: tuple = (),
+    normalize_package_tool_times: bool = True,
 ) -> dict[str, object]:
     work = package_root.parent / "_work" / "sdk-projects" / package_root.name
     work.mkdir(parents=True, exist_ok=True)
@@ -280,7 +281,8 @@ def _compile_xml_package(
         built_root = Path(str(compile_report["package_root"]))
         shutil.copytree(built_root, package_root, dirs_exist_ok=True)
         _normalize_package_tool_manifest(package_root)
-        _normalize_package_tool_time_metadata(package_root)
+        if normalize_package_tool_times:
+            _normalize_package_tool_time_metadata(package_root)
     else:
         compile_reports = []
         for xml_path in xml_paths:
@@ -325,6 +327,7 @@ def build_candidate(
     baseline_tolerance_nm: float = 0.25,
     model: NavModel | None = None,
     model_path: Path | None = None,
+    normalize_package_tool_times: bool = True,
 ) -> dict[str, object]:
     """复制全球官方基线并用 424 原始数据生成中国覆盖层候选。
 
@@ -433,6 +436,7 @@ def build_candidate(
         "status": "candidate",
         "deployable": False,
         "test_build": True,
+        "package_tool_time_metadata_normalized": normalize_package_tool_times,
         "local_contract_verified": False,
         "airac": cycle.number,
         "revision": cycle.revision,
@@ -583,6 +587,7 @@ def build_candidate(
                     package_order_hint=package_order_hint,
                     title=title,
                     selected_navaids=selected_navaids,
+                    normalize_package_tool_times=normalize_package_tool_times,
                 )
             except CompilerUnavailable as error:
                 report["packages"][output_name] = {

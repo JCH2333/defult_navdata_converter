@@ -31,6 +31,7 @@ def convert(
     baseline_tolerance_nm: float = 0.25,
     model: NavModel | None = None,
     model_path: Path | None = None,
+    normalize_package_tool_times: bool = True,
 ) -> dict[str, object]:
     validate_cycle(cycle)
     result = build_candidate(
@@ -52,6 +53,7 @@ def convert(
         baseline_tolerance_nm=baseline_tolerance_nm,
         model=model,
         model_path=model_path.resolve() if model_path else None,
+        normalize_package_tool_times=normalize_package_tool_times,
     )
     (output / "conversion-report.json").write_text(
         json.dumps(result, ensure_ascii=False, indent=2, default=str) + "\n", encoding="utf-8",
