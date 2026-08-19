@@ -10,6 +10,7 @@ from .ad219_ndb import (
     write_ad219_ndb_ocr_audit,
 )
 from .bgl import find_compiler
+from .airway_connection_shape_probe import run_airway_connection_shape_probe
 from .airway_coordinate_precision_probe import (
     run_airway_coordinate_precision_probe,
     write_source_airway_coordinate_precision_audit,
@@ -639,6 +640,39 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_READER_TIMEOUT_SECONDS,
         help=f"读取器超时秒数（默认 {DEFAULT_READER_TIMEOUT_SECONDS}）",
     )
+    connection_shape_probe = sub.add_parser(
+        "airway-connection-shape-probe",
+        help="以合成 Route 连接形态验证 SDK 航路几何编码，不修改转换候选",
+    )
+    connection_shape_probe.add_argument(
+        "--output",
+        required=True,
+        help="新的本地诊断目录",
+    )
+    connection_shape_probe.add_argument(
+        "--bglcomp",
+        help="合法 fspackagetool.exe 路径；未提供时自动探测",
+    )
+    connection_shape_probe.add_argument(
+        "--reader",
+        help="本机 Navdatareader.exe 路径",
+    )
+    connection_shape_probe.add_argument(
+        "--cache-root",
+        help="纯 ASCII 的本地读取器暂存目录",
+    )
+    connection_shape_probe.add_argument(
+        "--build-timeout",
+        type=int,
+        default=3600,
+        help="Package Tool 构建超时秒数（默认 3600）",
+    )
+    connection_shape_probe.add_argument(
+        "--reader-timeout",
+        type=int,
+        default=DEFAULT_READER_TIMEOUT_SECONDS,
+        help=f"读取器超时秒数（默认 {DEFAULT_READER_TIMEOUT_SECONDS}）",
+    )
     coordinate_precision_probe = sub.add_parser(
         "airway-coordinate-precision-probe",
         help="以合成航路端点验证 SDK 坐标和包围盒编码，不修改转换候选",
@@ -1090,6 +1124,17 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "route-fragment-probe":
         report = run_route_fragment_probe(
+            Path(args.output),
+            compiler=find_compiler(_path(args.bglcomp)),
+            reader=_path(args.reader),
+            cache_root=_path(args.cache_root),
+            build_timeout_seconds=args.build_timeout,
+            reader_timeout_seconds=args.reader_timeout,
+        )
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "airway-connection-shape-probe":
+        report = run_airway_connection_shape_probe(
             Path(args.output),
             compiler=find_compiler(_path(args.bglcomp)),
             reader=_path(args.reader),
