@@ -2096,3 +2096,50 @@ def test_iap_coverage_keeps_ambiguous_and_missing_primary_groups_auditable():
         "ambiguous_chart",
         "no_unique_primary",
     ]
+
+
+def test_iap_coverage_does_not_create_a_primary_from_a_matching_chart_title():
+    """A chart title can select evidence only after a source primary exists."""
+    model = _model_with_iap_segments()
+    source = SourceRef("Terminal/ZJSY/ZJSY-0C-8.pdf", 1, 1, "database-hash")
+    chart_source = SourceRef("Terminal/ZJSY/ZJSY-5L-3.pdf", 1, 1, "chart-hash")
+    model.procedure_segments = [
+        ProcedureSegment(
+            "ZJSY", "I08-X", "approach_transition", "08", "", (
+                ChartTerminalLeg("I08-X", "08", "IF", "SY463", "fixture", sequence=1),
+            ), source, approach_family="ILS",
+        ),
+        ProcedureSegment(
+            "ZJSY", "I08-X", "missed", "08", "", (
+                ChartTerminalLeg("I08-X", "08", "DF", "SY462", "fixture", sequence=1),
+            ), source, approach_family="ILS",
+        ),
+    ]
+    model.procedure_charts.append(
+        ProcedureChart(
+            "ZJSY", "ZJSY-5L-3.pdf", 1, "instrument-approach-index",
+            "RNP ILS/DME x RWY08(AR)", "text", (), ("08",), (), (), (),
+            chart_source,
+        ),
+    )
+
+    report = analyze_iap_coverage(model)
+
+    assert report["procedure_groups"]["status_counts"] == {
+        "no_unique_primary": 1,
+    }
+    assert report["unresolved_groups"] == [{
+        "airport": "ZJSY",
+        "label": "I08-X",
+        "matching_charts": 0,
+        "primary_legs": 0,
+        "primary_segments": 0,
+        "runway": "08",
+        "source": {
+            "file": "Terminal/ZJSY/ZJSY-0C-8.pdf",
+            "row": 1,
+            "page": 1,
+            "sha256": "database-hash",
+        },
+        "status": "no_unique_primary",
+    }]
