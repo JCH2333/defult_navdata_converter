@@ -8,6 +8,9 @@ from scripts.airport_subset_probe import (
     add_airport_procedure_deletion,
     append_airport_children,
     append_root_children,
+    describe_file,
+    describe_tree,
+    drop_root_children,
     drop_runway_children,
     drop_selected_waypoints,
     inspect_bgl_layouts,
@@ -18,8 +21,10 @@ from scripts.airport_subset_probe import (
     parse_airport_waypoint_selectors,
     parse_holding_attributes,
     parse_root_object_specs,
+    parse_runway_attributes,
     select_airports,
     select_holding_patterns,
+    set_runway_attributes,
     write_probe_report,
 )
 
@@ -152,6 +157,40 @@ def test_airport_attribute_assignments_are_diagnostic_and_deterministic():
 
     with pytest.raises(ValueError, match="--set-airport-attribute"):
         parse_airport_attributes(["country=China", "country=China"])
+
+
+def test_runway_attribute_assignments_only_change_existing_runways():
+    airport = ET.fromstring(
+        '<Airport ident="ZUAL"><Runway number="15" surface="CONCRETE">'
+        '<Ils ident="IKS" /></Runway><Waypoint waypointIdent="AK500" />'
+        "</Airport>"
+    )
+
+    attributes = parse_runway_attributes(["surface=ASPHALT"])
+    set_runway_attributes(airport, attributes)
+
+    runway = airport.find("Runway")
+    assert runway is not None
+    assert runway.attrib["surface"] == "ASPHALT"
+    assert runway.find("Ils").attrib["ident"] == "IKS"
+    assert airport.find("Waypoint").attrib["waypointIdent"] == "AK500"
+    with pytest.raises(ValueError, match="--set-runway-attribute"):
+        parse_runway_attributes(["surface=ASPHALT", "surface=CONCRETE"])
+
+
+def test_drop_root_children_keeps_selected_airport_and_unrelated_objects():
+    root = ET.fromstring(
+        "<FSData><AiracCycle cycleNumber=\"08\" />"
+        '<Vor ident="ALI" /><Ndb ident="ALS" />'
+        '<Airport ident="ZUAL" /><CustomData value="kept" /></FSData>'
+    )
+
+    drop_root_children(root, tags={"AiracCycle", "Vor", "Ndb"})
+
+    assert [(child.tag, child.attrib) for child in root] == [
+        ("Airport", {"ident": "ZUAL"}),
+        ("CustomData", {"value": "kept"}),
+    ]
 
 
 def test_airport_child_specs_are_attribute_only_and_append_in_order():
@@ -348,3 +387,23 @@ def test_probe_report_is_persisted_as_utf8_json(tmp_path) -> None:
     write_probe_report(path, report)
 
     assert json.loads(path.read_text(encoding="utf-8")) == report
+
+
+def test_probe_file_descriptions_use_content_hashes_and_stable_tree_paths(tmp_path) -> None:
+    root = tmp_path / "probe"
+    nested = root / "nested"
+    nested.mkdir(parents=True)
+    first = root / "a.txt"
+    second = nested / "b.bin"
+    first.write_text("airport=ZUAL\n", encoding="utf-8")
+    second.write_bytes(b"\x00\x01")
+
+    assert describe_file(first, relative_to=root) == {
+        "path": "a.txt",
+        "size": 14,
+        "sha256": "d086d4fe885e265b62672ac468eb76437cd55a965a7a04e990947c9705947012",
+    }
+    assert describe_tree(root) == [
+        describe_file(first, relative_to=root),
+        describe_file(second, relative_to=root),
+    ]

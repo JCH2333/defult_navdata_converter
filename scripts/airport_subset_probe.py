@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from copy import deepcopy
+import hashlib
 import json
 from pathlib import Path
 from xml.etree import ElementTree as ET
@@ -41,6 +42,39 @@ def inspect_bgl_layouts(package_root: Path) -> list[dict[str, object]]:
             }
         rows.append(row)
     return rows
+
+
+def describe_file(
+    path: Path,
+    *,
+    relative_to: Path | None = None,
+) -> dict[str, object]:
+    """Describe one reproducibility input or output without parsing its content."""
+
+    resolved = path.resolve()
+    display_path = (
+        resolved.relative_to(relative_to.resolve()).as_posix()
+        if relative_to is not None
+        else str(resolved)
+    )
+    digest = hashlib.sha256()
+    with resolved.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return {
+        "path": display_path,
+        "size": resolved.stat().st_size,
+        "sha256": digest.hexdigest(),
+    }
+
+
+def describe_tree(root: Path) -> list[dict[str, object]]:
+    """Return a stable hash manifest for all files retained by a probe."""
+
+    return [
+        describe_file(path, relative_to=root)
+        for path in sorted(path for path in root.rglob("*") if path.is_file())
+    ]
 
 
 def write_probe_report(path: Path, report: dict[str, object]) -> None:
@@ -147,6 +181,34 @@ def parse_airport_attributes(values: list[str]) -> dict[str, str]:
         values,
         option="--set-airport-attribute",
     )
+
+
+def parse_runway_attributes(values: list[str]) -> dict[str, str]:
+    """Parse diagnostic-only assignments applied to existing runway elements."""
+
+    return parse_attribute_assignments(
+        values,
+        option="--set-runway-attribute",
+    )
+
+
+def set_runway_attributes(
+    airport: ET.Element,
+    attributes: dict[str, str],
+) -> None:
+    """Apply controlled attributes without adding or removing runways."""
+
+    for runway in airport.findall("Runway"):
+        for attribute, value in attributes.items():
+            runway.set(attribute, value)
+
+
+def drop_root_children(root: ET.Element, *, tags: set[str]) -> None:
+    """Remove only explicitly requested root objects from a diagnostic tree."""
+
+    for child in list(root):
+        if child.tag in tags:
+            root.remove(child)
 
 
 def parse_airport_child_specs(values: list[str]) -> tuple[ET.Element, ...]:
@@ -426,6 +488,12 @@ def _parser() -> argparse.ArgumentParser:
         default=[],
         help="仅诊断用：从每条保留跑道移除指定的直接子节点，例如 Ils。",
     )
+    parser.add_argument(
+        "--drop-root-tag",
+        action="append",
+        default=[],
+        help="仅诊断用：移除 FSData 根节点的指定对象，例如 AiracCycle、Vor 或 Ndb。",
+    )
     parser.add_argument("--waypoint-start", type=int)
     parser.add_argument("--waypoint-end", type=int)
     parser.add_argument("--holding-start", type=int)
@@ -477,6 +545,12 @@ def _parser() -> argparse.ArgumentParser:
         action="append",
         default=[],
         help="仅诊断用：为每个保留机场设置 name=value 属性。",
+    )
+    parser.add_argument(
+        "--set-runway-attribute",
+        action="append",
+        default=[],
+        help="仅诊断用：为每条保留跑道设置 name=value 属性。",
     )
     parser.add_argument(
         "--append-airport-child",
@@ -576,6 +650,11 @@ def main() -> int:
     dropped_runway_child_tags = {
         tag.strip() for tag in args.drop_runway_child_tag if tag.strip()
     }
+    dropped_root_tags = {
+        tag.strip() for tag in args.drop_root_tag if tag.strip()
+    }
+    if "Airport" in dropped_root_tags:
+        raise SystemExit("--drop-root-tag 不能移除 Airport")
     requested_holding_idents = tuple(
         ident.strip().upper()
         for values in args.holding_ident
@@ -588,6 +667,9 @@ def main() -> int:
         )
         assigned_airport_attributes = parse_airport_attributes(
             args.set_airport_attribute
+        )
+        assigned_runway_attributes = parse_runway_attributes(
+            args.set_runway_attribute
         )
         appended_airport_children = parse_airport_child_specs(
             args.append_airport_child
@@ -612,11 +694,13 @@ def main() -> int:
         ident for ident in args.drop_root_waypoint if ident.strip()
     ]):
         raise SystemExit("--drop-root-waypoint 不能包含重复的航点标识")
+    drop_root_children(root, tags=dropped_root_tags)
     append_root_children(root, appended_root_children)
     selected_holding_idents: tuple[str, ...] = ()
     for airport in selected:
         for attribute, value in assigned_airport_attributes.items():
             airport.set(attribute, value)
+        set_runway_attributes(airport, assigned_runway_attributes)
         append_airport_children(airport, appended_airport_children)
         if args.delete_airport_procedures:
             add_airport_procedure_deletion(airport)
@@ -737,12 +821,12 @@ def main() -> int:
         package_order_hint="CUSTOM_NAVDATA_PATCH",
     )
     compiler = find_compiler(args.compiler)
-    report = compile_package(
+    compile_report = compile_package(
         project,
         compiler,
         package_name=args.package_name,
     )
-    package_root = Path(str(report["package_root"]))
+    package_root = Path(str(compile_report["package_root"]))
     reader_status: dict[str, object] | None = None
     if args.reader_output:
         try:
@@ -763,7 +847,23 @@ def main() -> int:
 
     report = {
             "label": args.label,
-            "source_xml": str(source_xml),
+            "source_xml": describe_file(source_xml),
+            "probe_script": describe_file(Path(__file__)),
+            "generated_inputs": [
+                describe_file(path, relative_to=input_dir)
+                for path in input_xmls
+            ],
+            "build": {
+                key: compile_report[key]
+                for key in (
+                    "compiler",
+                    "kind",
+                    "command",
+                    "stdout",
+                    "stderr",
+                    "attempts",
+                )
+            },
             "airport_range": [args.start, args.end],
             "airport_selection": (
                 "ident" if requested_airport_idents else "range"
@@ -771,6 +871,7 @@ def main() -> int:
             "airport_idents": [airport.attrib["ident"] for airport in selected],
             "dropped_tags": sorted(dropped_tags),
             "dropped_runway_child_tags": sorted(dropped_runway_child_tags),
+            "dropped_root_tags": sorted(dropped_root_tags),
             "waypoint_range": [args.waypoint_start, args.waypoint_end],
             "holding_range": [args.holding_start, args.holding_end],
             "holding_idents": list(selected_holding_idents),
@@ -781,6 +882,7 @@ def main() -> int:
             "dropped_holding_attributes": args.drop_holding_attribute,
             "assigned_holding_attributes": assigned_holding_attributes,
             "assigned_airport_attributes": assigned_airport_attributes,
+            "assigned_runway_attributes": assigned_runway_attributes,
             "appended_airport_children": [
                 {"tag": child.tag, "attributes": dict(child.attrib)}
                 for child in appended_airport_children
@@ -803,6 +905,7 @@ def main() -> int:
                 "root" if args.move_waypoints_to_root else "airport"
             ),
             "package_root": str(package_root),
+            "package_files": describe_tree(package_root),
             "bgl_layouts": inspect_bgl_layouts(package_root),
             "reader": reader_status,
     }
