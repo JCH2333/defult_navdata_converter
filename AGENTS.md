@@ -1674,3 +1674,11 @@
 - 本卡处置为 `rejected_missing_direct_label_anchor`、`source_proven_kind=null`、`target_mapping_allowed=false`。标题、`RW28`、RF 腿、`NS988` 和跑道都不能替代标签锚点；模型、投影、候选、Community 和部署不变，自重放 `29/29`、参考一致 `0/29`、`deployable=false`，字节收敛未推进。
 - 覆盖核对使用 r187、r188 `conversion-report.json` 与 `diagnostics\r236-default-gap-cards-unclassified-coverage-20260819.json`：当前缺口清单恰有 `13` 张未分类程序卡，r224-r236 恰有 `13` 份唯一精确卡诊断，缺失 `0`、额外 `0`、哈希/标签命中/处置门禁异常 `0`。全部卡均为 `rejected_missing_direct_label_anchor`；未分类程序类别来源卡已完整闭合，不能继续以标签/标题/腿形态扩大投影。
 - 下一项唯一任务：先对剩余 `10` 张 IAP 主段缺口卡做只读来源审计覆盖盘点，区分已有精确拒绝结论与仍缺精确来源卡的对象；不得重做已闭合 IAP 卡，也不得直接处理 `ZBAD:R29R` 等历史卡而跳过覆盖核对。盘点后按稳定排序选择第一张真正未闭合 IAP 卡。
+
+## 2026-08-19 r237 IAP 主段来源审计覆盖盘点
+
+- 实验编号：`r237-iap-primary-source-audit-coverage-inventory`。本轮只读取当前 r187、r188 `conversion-report.json`、最新缺口卡清单和既有 `r200/r203/r208/r209/r212` IAP 来源审计；不读取参考/Fenix，不修改代码、模型、候选、Community 或部署。
+- 当前缺口清单共有 `10` 张 IAP 主段卡：`ZBAD:R29R`、`ZJSY:I08-X`、`ZSNJ:I25`、`ZSOF:R15/R33`、`ZSWY:I03`、`ZUAL:I15`、`ZYDD:R01/R01-Y`、`ZYTL:R10`。`r203-all-unresolved-iap-primary-source-audit` 对全部 10 张均有直接数据库来源审计覆盖：`ZBAD:R29R` 与 `ZYTL:R10` 为 `rejected_transition_and_missed_without_primary`，其余 8 张为 `unresolved_direct_database_evidence_inconclusive`。
+- 已存在的精确补充审计不能重复：`ZBAD:R29R` 已由 r200 直接确认拒绝；`ZJSY:I08-X` 已由 r212 标题/直接角色审计保持未决；`ZYDD` 相关标题已由 r208 审计；`ZSOF:R15` 已由 r209 审计。它们均没有形成可投影主进近规则。
+- 结论：IAP 类别的 10 张卡都已有来源审计覆盖，但只有 2 张可作为明确拒绝闭合；剩余 8 张仍须逐张取得新的、精确且可重放的同周期 PDF/数据库证据，不能以全局审计的“inconclusive”把它们视为已闭合，也不得重做已有精确审计。
+- 下一项唯一任务：按稳定排序审计首张真正未闭合且无精确补充卡的 `ZSNJ:I25`。必须先限定其数据库主段、候选 PDF 标题和直接角色/固定点来源；无唯一主段或页面关联时保持 `unresolved_direct_database_evidence_inconclusive`，不得修改 IAP 投影。
