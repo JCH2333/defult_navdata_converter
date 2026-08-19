@@ -265,6 +265,135 @@ def _instrument_chart_title_candidates(
     )
 
 
+def _selected_card_keys(card_keys: Iterable[str] | None) -> set[tuple[str, str]] | None:
+    if card_keys is None:
+        return None
+    selected: set[tuple[str, str]] = set()
+    for value in card_keys:
+        airport, separator, label = value.partition(":")
+        airport = airport.strip().upper()
+        label = label.strip().upper()
+        if not separator or not airport or not label or ":" in label:
+            raise IapPrimarySourceAuditError(
+                f"IAP 精确卡必须为 AIRPORT:LABEL: {value!r}"
+            )
+        selected.add((airport, label))
+    if not selected:
+        raise IapPrimarySourceAuditError("至少需要一张 IAP 精确卡")
+    return selected
+
+
+def _cache_verified_instrument_chart_candidates(
+    model: NavModel,
+    charts: Iterable[Mapping[str, object]],
+    airport: str,
+    label: str,
+    runway: str,
+) -> list[dict[str, object]]:
+    """Report only cache-backed instrument-chart candidates for one exact card.
+
+    The cache must identify the same parsed ProcedureChart source.  This is
+    evidence inventory only: title and direct role facts never create a
+    missing database primary approach.
+    """
+
+    model_charts = {
+        (
+            chart.source.file,
+            chart.source.page,
+            chart.source.sha256,
+        ): chart
+        for chart in model.procedure_charts
+        if (
+            chart.airport == airport
+            and chart.chart_type == "instrument-approach-index"
+            and runway in chart.runways
+        )
+    }
+    result: list[dict[str, object]] = []
+    for chart in charts:
+        if (
+            chart.get("airport") != airport
+            or chart.get("chart_type") != "instrument-approach-index"
+        ):
+            continue
+        runways = chart.get("runways")
+        source = chart.get("source")
+        if (
+            not isinstance(runways, list)
+            or runway not in runways
+            or not isinstance(source, Mapping)
+        ):
+            continue
+        source_file = source.get("file")
+        source_page = source.get("page")
+        source_sha256 = source.get("sha256")
+        if (
+            not isinstance(source_file, str)
+            or not isinstance(source_page, int)
+            or not isinstance(source_sha256, str)
+        ):
+            raise IapPrimarySourceAuditError("仪表进近图缓存缺少有效 SourceRef")
+        model_chart = model_charts.get((source_file, source_page, source_sha256))
+        if model_chart is None:
+            continue
+        chart_name = chart.get("chart_name")
+        filename = chart.get("filename")
+        route_fixes = chart.get("route_fixes")
+        if not isinstance(chart_name, str) or not isinstance(filename, str):
+            raise IapPrimarySourceAuditError("仪表进近图缓存缺少标题或文件名")
+        if not isinstance(route_fixes, list):
+            raise IapPrimarySourceAuditError("仪表进近图缓存缺少 route_fixes")
+        cached_roles: list[dict[str, str]] = []
+        for route_fix in route_fixes:
+            if (
+                not isinstance(route_fix, Mapping)
+                or not isinstance(route_fix.get("ident"), str)
+                or not isinstance(route_fix.get("role"), str)
+            ):
+                raise IapPrimarySourceAuditError("仪表进近图缓存含有无效直接角色")
+            cached_roles.append({
+                "ident": route_fix["ident"],
+                "role": route_fix["role"],
+            })
+        cached_roles.sort(key=lambda item: (item["ident"], item["role"]))
+        model_roles = sorted(
+            (
+                {
+                    "ident": route_fix.ident,
+                    "role": route_fix.role,
+                }
+                for route_fix in model_chart.route_fixes
+            ),
+            key=lambda item: (item["ident"], item["role"]),
+        )
+        if cached_roles != model_roles:
+            raise IapPrimarySourceAuditError(
+                "仪表进近图缓存直接角色与冻结模型不一致"
+            )
+        title_candidates = approach_procedure_name_candidates(
+            chart_name,
+            tuple(runways),
+            airport,
+        )
+        result.append({
+            "filename": filename,
+            "chart_name": chart_name,
+            "source": _source_payload(model_chart.source),
+            "source_cache_verified": True,
+            "title_label_candidates": list(title_candidates),
+            "direct_label_match": label in title_candidates,
+            "direct_route_roles": cached_roles,
+        })
+    return sorted(
+        result,
+        key=lambda item: (
+            not bool(item["direct_label_match"]),
+            str(item["filename"]),
+        ),
+    )
+
+
 def _cache_section_summary(
     charts: Iterable[Mapping[str, object]],
     airport: str,
@@ -341,6 +470,8 @@ def _cache_section_summary(
 def audit_iap_primary_sources(
     model: NavModel,
     evidence_caches: Iterable[Path],
+    *,
+    card_keys: Iterable[str] | None = None,
 ) -> dict[str, object]:
     """Audit unresolved IAP groups using only exact-source database-chart caches.
 
@@ -352,6 +483,7 @@ def audit_iap_primary_sources(
     unresolved = model.iap_coverage.get("unresolved_groups")
     if not isinstance(unresolved, list):
         raise IapPrimarySourceAuditError("NavModel 缺少 IAP 未决分组审计")
+    selected_keys = _selected_card_keys(card_keys)
     rejected = {
         (item.airport, item.chart): item
         for item in model.rejected_procedures
@@ -367,16 +499,32 @@ def audit_iap_primary_sources(
 
     items: list[dict[str, object]] = []
     status_counts: Counter[str] = Counter()
+    parsed_groups: list[Mapping[str, object]] = []
+    available_keys: set[tuple[str, str]] = set()
+    for group in unresolved:
+        if not isinstance(group, Mapping):
+            raise IapPrimarySourceAuditError("IAP 未决分组格式无效")
+        airport = group.get("airport")
+        label = group.get("label")
+        if not isinstance(airport, str) or not isinstance(label, str):
+            raise IapPrimarySourceAuditError("IAP 未决分组缺少身份字段")
+        available_keys.add((airport, label))
+        if selected_keys is None or (airport, label) in selected_keys:
+            parsed_groups.append(group)
+    if selected_keys is not None:
+        missing = sorted(selected_keys - available_keys)
+        if missing:
+            rendered = ", ".join(f"{airport}:{label}" for airport, label in missing)
+            raise IapPrimarySourceAuditError(f"IAP 精确卡不在未决队列: {rendered}")
+
     for group in sorted(
-        unresolved,
+        parsed_groups,
         key=lambda item: (
             str(item.get("airport") or ""),
             str(item.get("label") or ""),
             str(item.get("runway") or ""),
         ),
     ):
-        if not isinstance(group, Mapping):
-            raise IapPrimarySourceAuditError("IAP 未决分组格式无效")
         airport = group.get("airport")
         label = group.get("label")
         runway = group.get("runway")
@@ -410,6 +558,17 @@ def audit_iap_primary_sources(
             airport,
             label,
             runway,
+        )
+        cache_verified_instrument_chart_candidates = (
+            _cache_verified_instrument_chart_candidates(
+                model,
+                charts,
+                airport,
+                label,
+                runway,
+            )
+            if selected_keys is not None
+            else []
         )
         if not evidence_pages:
             disposition = "not_evaluated_no_matching_direct_database_chart"
@@ -450,6 +609,9 @@ def audit_iap_primary_sources(
             "same_page_iap_labels": same_page_labels,
             "related_same_page_sections": related_same_page_sections,
             "instrument_chart_title_candidates": instrument_chart_candidates,
+            "cache_verified_instrument_chart_title_candidates": (
+                cache_verified_instrument_chart_candidates
+            ),
             "projection_allowed": False,
         })
     return {
@@ -462,6 +624,14 @@ def audit_iap_primary_sources(
         "source": {
             "model_root": str(model.root),
             "pdf_evidence_caches": cache_inputs,
+            "requested_card_keys": (
+                [
+                    f"{airport}:{label}"
+                    for airport, label in sorted(selected_keys)
+                ]
+                if selected_keys is not None
+                else None
+            ),
         },
         "summary": {
             "unresolved_group_total": len(items),

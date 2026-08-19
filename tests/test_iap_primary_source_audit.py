@@ -469,6 +469,97 @@ def test_audit_reports_title_match_without_creating_missing_primary(
     assert item["projection_allowed"] is False
 
 
+def test_audit_selected_card_requires_cache_verified_chart_roles(
+    tmp_path: Path,
+) -> None:
+    model, source = _model(tmp_path / "raw")
+    chart_source = SourceRef(
+        "Terminal/ZTEST/ZTEST-5A.pdf",
+        page=1,
+        sha256="chart-hash",
+    )
+    model.procedure_charts.append(
+        ProcedureChart(
+            "ZTEST",
+            "ZTEST-5A.pdf",
+            1,
+            "instrument-approach-index",
+            "ILS/DME y RWY29R",
+            "fixture",
+            (),
+            ("29R",),
+            (),
+            (),
+            (),
+            chart_source,
+            route_fixes=(
+                ChartRouteFix("AD521", "IAF"),
+                ChartRouteFix("AD790", "IF"),
+            ),
+        )
+    )
+    cache = _cache(tmp_path / "evidence.json", source)
+    payload = json.loads(cache.read_text(encoding="utf-8"))
+    payload["charts"].append({
+        "airport": "ZTEST",
+        "chart_name": "ILS/DME y RWY29R",
+        "chart_type": "instrument-approach-index",
+        "filename": "ZTEST-5A.pdf",
+        "source": {
+            "file": chart_source.file,
+            "page": chart_source.page,
+            "sha256": chart_source.sha256,
+        },
+        "runways": ["29R"],
+        "route_fixes": [
+            {"ident": "AD521", "role": "IAF"},
+            {"ident": "AD790", "role": "IF"},
+        ],
+    })
+    cache.write_text(json.dumps(payload), encoding="utf-8")
+
+    report = audit_iap_primary_sources(
+        model,
+        [cache],
+        card_keys=["ZTEST:R29R"],
+    )
+
+    assert report["source"]["requested_card_keys"] == ["ZTEST:R29R"]
+    assert report["summary"]["unresolved_group_total"] == 1
+    candidates = report["items"][0][
+        "cache_verified_instrument_chart_title_candidates"
+    ]
+    assert candidates == [{
+        "filename": "ZTEST-5A.pdf",
+        "chart_name": "ILS/DME y RWY29R",
+        "source": {
+            "file": chart_source.file,
+            "row": chart_source.row,
+            "page": chart_source.page,
+            "sha256": chart_source.sha256,
+        },
+        "source_cache_verified": True,
+        "title_label_candidates": ["I29R", "I29RY", "I29R-Y"],
+        "direct_label_match": False,
+        "direct_route_roles": [
+            {"ident": "AD521", "role": "IAF"},
+            {"ident": "AD790", "role": "IF"},
+        ],
+    }]
+    assert report["items"][0]["projection_allowed"] is False
+
+
+def test_audit_rejects_unknown_selected_card(tmp_path: Path) -> None:
+    model, source = _model(tmp_path / "raw")
+
+    with pytest.raises(IapPrimarySourceAuditError, match="不在未决队列"):
+        audit_iap_primary_sources(
+            model,
+            [_cache(tmp_path / "evidence.json", source)],
+            card_keys=["ZTEST:I99"],
+        )
+
+
 def test_audit_requires_at_least_one_evidence_cache(tmp_path: Path) -> None:
     model, _ = _model(tmp_path / "raw")
 
@@ -493,6 +584,7 @@ def test_cli_writes_iap_primary_source_audit(
         "iap-primary-source-audit",
         "--model", str(tmp_path / "model.json.gz"),
         "--pdf-evidence-cache", str(cache),
+        "--card", "ZTEST:R29R",
         "--output", str(output),
     ])
 

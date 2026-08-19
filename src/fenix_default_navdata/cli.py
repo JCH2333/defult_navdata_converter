@@ -460,6 +460,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="一个或多个受审计的 PDF 直接证据缓存 JSON；只允许精确 SourceRef 匹配",
     )
     iap_primary_source_audit.add_argument(
+        "--card",
+        action="append",
+        help="可重复指定的精确 IAP 卡 AIRPORT:LABEL；仅输出所选未决卡并验证仪表图缓存",
+    )
+    iap_primary_source_audit.add_argument(
         "--output",
         required=True,
         help="本地 IAP 主段来源审计 JSON 输出路径",
@@ -1356,6 +1361,7 @@ def main(argv: list[str] | None = None) -> int:
         report = audit_iap_primary_sources(
             load_model(Path(args.model)),
             [Path(path) for path in args.pdf_evidence_cache],
+            card_keys=args.card,
         )
         output = Path(args.output).expanduser().resolve()
         report["output"] = str(output)

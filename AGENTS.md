@@ -1803,3 +1803,13 @@
 3. 只读审计、SDK 探针、模型/adapter 变更、候选构建和部署逻辑必须分主题提交；不得将诊断结论和内容投影混在同一次规则变更中。
 4. 每次仓库代码或文档修改后必须运行 `pytest -q`、`git diff --check`、精确审查暂存区、创建单一主题提交，并尝试普通 `git push`。代理不可用时记录失败并保留本地提交；网络恢复后只允许 `git push` 和 `git ls-remote --heads origin main`，禁止强推或改写历史。
 5. `diagnostics`、`output`、数据库、备份、缓存、SDK 中间产物、日志和外部测试包继续留在 Git 之外。工作区根 `AGENTS.md` 不在仓库中，但仓库内说明发生变化时必须同步更新它。
+
+## 2026-08-19 r238 ZSNJ I25 精确 IAP 主段来源审计
+
+- 实验编号：`r238-zsnj-i25-exact-iap-primary-source-audit`。唯一变量是将既有全局 `iap-primary-source-audit` 扩展为可重复指定 `--card AIRPORT:LABEL` 的精确只读审计，并只在精确卡模式下要求仪表进近图缓存与冻结 `NavModel` 的 `SourceRef`、直接角色完全一致。允许读取 r187、四份带哈希的 424 PDF 直接证据缓存及其同源模型记录；禁止读取参考成品、Fenix、OCR、候选 BGL/SQLite 或修改模型/投影。
+- 新增可复用 CLI 参数 `iap-primary-source-audit --card`。它只输出所选的未决卡，拒绝不在未决队列的键，并额外报告 `cache_verified_instrument_chart_title_candidates`。缓存候选必须与模型的原始 PDF 路径、页码、SHA-256 和直接 `route_fixes` 完全一致；此字段只提供标题/角色来源库存，固定 `projection_allowed=false`，永远不能从缺失主段生成程序。
+- 真实报告为 `diagnostics\r238-zsnj-i25-exact-iap-primary-source-audit-20260819.json`。数据库编码页 `Terminal\ZSNJ\ZSNJ-4P.pdf` 第 1 页 SHA-256 `9dbc1378476911e587d4b8d5c1053e2e9ba46ded6d197acc1cdc9235db0c78ce` 只有 `NJ602/CF`、`CA`、`NJ216/DF` 三条复飞腿；模型和缓存的主进近、进近过渡均为零。
+- 缓存验证的同跑道仪表图有三张：`ZSNJ-5G.pdf`（SHA-256 `5014e49ad1e51fdd59de14fb22341510f6862759feb7b160f1eca76946a9853c`）标题候选 `I25/I25-Z`，直接角色为 `NJ206/IF`、`NJ209/IAF`、`NJ210/IAF`；`ZSNJ-5H.pdf`（SHA-256 `78a5fdeaffab06ae6077bd1dd442d7f96abd7a7eb3724be40b9e108b016dd72b`）标题候选 `I25/I25-Y`，无直接角色；`ZSNJ-9D.pdf` 为 `R25`，不匹配 `I25`。两张 `I25` 标题兼容图不能唯一归属同一个缺失主段，且既无数据库主段也无主段角色交集。
+- 处置为 `unresolved_direct_database_evidence_inconclusive`、`projection_allowed=false`。不得把 `ZSNJ-5G` 的 IAF/IF、`ZSNJ-5H` 的空角色、同跑道、图题或任一复飞腿拼接成 `I25` 主进近；模型、BGL、候选、Community 和部署均未改变，自重放仍以 r188/r189 的 `29/29` 为基线，参考一致仍 `0/29`、`deployable=false`，字节收敛未推进。
+- 自动化新增精确卡筛选、未知卡拒绝、缓存 `SourceRef`/直接角色绑定和 CLI 参数回归；定向回归 `10 passed`。完整回归、提交前检查和 Git 提交必须在本轮结束前完成。
+- 下一项唯一任务：按剩余 IAP 未决卡稳定排序，对尚无精确补充审计的 `ZSOF:R33` 建立同样的数据库主段、候选标题、直接角色和缓存哈希只读卡。不得重做 `ZSOF:R15`、`ZJSY:I08-X`、`ZYDD` 或 `ZSNJ:I25`，无唯一来源时继续保守拒绝。
