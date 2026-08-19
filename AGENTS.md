@@ -1136,3 +1136,10 @@
 - `iap-primary-source-audit` 新增只读字段 `instrument_chart_title_candidates`。它仅枚举同机场、同跑道 `instrument-approach-index` 图页、标题直接解析出的候选标签、来源页和是否精确命中数据库标签；不读取参考成品或 Fenix，不修改模型和投影。回归：`test_audit_reports_title_match_without_creating_missing_primary` 明确覆盖“标题可命中但无主段时仍不得放行”。
 - 实际 r187 中 `ZSOF:R15` 只有 `4` 段进近过渡、无主进近和复飞；其精确数据库页 `ZSOF-4M.pdf`（SHA-256 `0f7bd7cb344f0738d51a6b537629ecf2ae53027112f0c1cdfd5f3ac7d8feb1fc`）有 `13` 条进近过渡、无主进近和复飞。图页候选为 `ZSOF-5A.pdf` 的 `I15/I15-Z`、`ZSOF-5B.pdf` 的 `I15/I15-Y`、`ZSOF-6A.pdf` 的 `D15`，精确 `R15` 标题命中数为 `0`。
 - 报告为 `diagnostics\r209-zsof-r15-chart-title-source-audit-20260819.json`，绑定卡片为 `diagnostics\r209-default-gap-cards-20260819.json`。结论：`ZSOF:R15` 保持 `unresolved_direct_database_evidence_inconclusive`；不得根据相同跑道、候选 IAF/IF、RNAV ILS、ILS 或 VOR 图标题拼出 `R15` 主进近。模型、候选和 Community 均未改变；参考一致仍为 `0/29`、`deployable=false`。
+
+## 2026-08-19 r210 包元数据是派生输出而非独立收敛目标
+
+- r210 只读核对 r188 候选与 `Default navdata 2608R1` 的包级 `manifest.json`、`layout.json`、ContentHistory 和 r190 文件收敛看板；不读取参考 BGL/SQLite/坐标或任何导航记录，不修改模型、适配器、候选或 Community。
+- 主覆盖包 `manifest.json` 的依赖、兼容版本、包名、标题、构建器和顺序提示字段已与参考一致；`total_package_size` 不一致（候选 `10916053`，参考 `47584567`），它是 Package Tool 对最终包树的派生大小，不能作为来源字段或独立修复目标。
+- r190 已证明两个包的 `layout.json`、`bglIndex.bout`、ContentHistory 和 `manifest.json` 均属于同一 `29` 文件收敛范围；其中布局和大小字段依赖 BGL、索引及内容历史。手写总大小、布局日期、索引或 ContentHistory 既不能生成正确 BGL，也会使派生元数据与实际文件树不一致，禁止作为取得 SHA-256 的手段。
+- 结论：后续先闭合 424 来源投影和 SDK BGL 表达契约，再由正常构建链重生成包元数据；不得把包元数据作为独立字节收敛任务。当前参考一致仍为 `0/29`、候选自重放 `29/29`、`deployable=false`。
