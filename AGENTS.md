@@ -1618,3 +1618,11 @@
 - `CC5-17` 直接命中 `0`，没有同文本行标签-类别链接。页面的 `RWY30L` 标题、`DWS` 或 `CC` 前缀腿标识均不能取代缺失标签锚点；它们只表明同页存在相邻的航图内容，不能证明这段未分类数据库编码属于哪一类程序。
 - 处置保持 `rejected_missing_direct_label_anchor`、`source_proven_kind=null`、`target_mapping_allowed=false`。模型、投影、候选、Community 和部署不变；自重放 `29/29`、参考一致 `0/29`、`deployable=false`，字节收敛未推进。
 - 下一项唯一任务：按稳定排序审计不同来源页的 `ZHCC:CC5-32:30R:6`。不得将本页的腿/标题相邻事实跨页使用。
+
+## 2026-08-19 r230 ZHCC CC5-32 跨页程序卡直接来源审计
+
+- 实验编号：`r230-zhcc-cc5-32-30r-unclassified-procedure-card-audit`。唯一变量是将 r229 的精确卡键切换为跨页卡 `ZHCC:CC5-32:30R:6`，只读 `ZHCC-4Z13.pdf` 第 1 页，不修改代码、模型、候选、Community 或部署。
+- 真实报告为 `diagnostics\r230-zhcc-cc5-32-30r-unclassified-procedure-card-audit-20260819.json`。来源 SHA-256 `82b48a2d7c87a2086495fd78a85a9034214cceac2c5d99b072c5dc370d35bce0` 与模型一致；程序腿为 `IF CC608`、`TF CC533`、`TF CC312`、`TF CC534`。页面有 9 条类别标题事实，terminal-database-coding 图页列出 `12L/30R`。
+- `CC5-32` 直接命中 `0`，无同文本行标签-类别链接。`CC608` 腿标识、`RWY30R` 类别标题和跑道一致性均不能构成程序类别映射；它们只能用于说明同页存在相关航图内容。
+- 处置继续为 `rejected_missing_direct_label_anchor`、`source_proven_kind=null`、`target_mapping_allowed=false`。模型、投影、候选、Community 和部署不变；自重放 `29/29`、参考一致 `0/29`、`deployable=false`，字节收敛未推进。
+- 下一项唯一任务：按稳定排序审计 `ZPDQ:EO-16:16:7`。该卡切换到 `eo_numeric` 标签族和新的机场来源，必须从 PDF 哈希和直接标签锚点重新开始，不得泛化 ZHCC 结论。
