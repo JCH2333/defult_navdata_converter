@@ -2341,3 +2341,30 @@
   `iap-primary-source-audit --card` 审计的卡。读取范围继续限定为 r187、同周期 424 终端
   数据库编码页和带 SHA-256 的直接图页缓存；没有唯一主段/图页归属/直接角色关联时必须写入
   精确拒绝，而非扩展 OCR 或拼接同跑道信息。
+
+## 2026-08-19 r251 ZSOF R15 精确 IAP 主进近来源审计
+
+- 实验编号：`r251-zsof-r15-exact-iap-primary-source-audit`。按剩余 8 张 IAP 卡稳定键排序，
+  `ZSOF:R15` 是首张未执行精确 `--card` 审计的卡。允许读取 r187 冻结模型及 r43 中精确匹配的
+  4 份缓存：`ZSOF-4M.pdf` 数据库编码页、`ZSOF-5A.pdf`、`ZSOF-5B.pdf` 与 `ZSOF-6A.pdf`
+  仪表进近图。禁止读取参考成品、Fenix、OCR、候选 BGL/SQLite；禁止修改模型、投影、候选、
+  Community 或部署。
+- 初次将完整 r43 缓存逐项传给 Windows 命令行时超过参数长度，进程在启动前失败，未读取数据且
+  未产生输出。后续按卡片的机场、数据库 `SourceRef`、同跑道仪表图和 PDF SHA-256 选择最小缓存
+  集合；这是可复用的审计调用规则，不改变任何证据选择语义。
+- 真实报告为 `diagnostics\r251-zsof-r15-exact-iap-primary-source-audit-20260819.json`，固定声明
+  `read_only=true`、`reference_records_read=false`、`fenix_records_read=false`、
+  `model_mutated=false`、`projection_changed=false`。精确数据库页
+  `Terminal\ZSOF\ZSOF-4M.pdf` 第 1 页，SHA-256
+  `0f7bd7cb344f0738d51a6b537629ecf2ae53027112f0c1cdfd5f3ac7d8feb1fc`，有 13 条
+  `R15` 进近过渡腿，主进近和复飞均为 0；冻结模型同样只有 4 组过渡、没有主进近或复飞。
+- 缓存验证的同跑道图页为 `ZSOF-5A.pdf`（标题 `RNAV ILS/DME z RWY15`，候选
+  `I15/I15-Z`）、`ZSOF-5B.pdf`（`ILS/DME y RWY15`，`I15/I15-Y`）与
+  `ZSOF-6A.pdf`（`VOR/DME RWY15`，`D15`）。三者均不直接匹配 `R15`，数据库主进近腿为空，
+  所有 `primary_leg_role_overlap` 均为空；不得将标题、IAF/IF 或同跑道关系拼接为 `R15` 主段。
+- 结论为 `unresolved_direct_database_evidence_inconclusive`，`projection_allowed=false`。本卡
+  获得精确可重放拒绝证据，来源缺口闭合计数由 `32/40` 增至 `33/40`，剩余可审计 IAP 卡由 8 降为 7；
+  模型、正式 adapter、候选、Community、部署状态和参考 `0/29` 均不变，字节收敛未推进。
+- 下一项唯一工作：按稳定键审计 `ZYDD:R01` 或 `ZYDD:R01-Y` 之前，先核对既有 r208 对同标签族
+  的审计覆盖；若其已覆盖二者，则选择下一张没有精确单卡报告的未决 IAP 卡。不得重复已覆盖的
+  `ZJSY:I08-X`、`ZSNJ:I25`、`ZSOF:R15/R33`、`ZSWY:I03` 或 `ZUAL:I15`。
