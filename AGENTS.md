@@ -2597,3 +2597,6 @@ Package Tool 构建、验证和部署门禁已具备。它不能与来源闭合�
 - 下一项唯一工作：为 `RWY_DIRECTION.VAL_THR_DISPLACE` 编写最小正反 SDK fixture，并在纯 ASCII
   隔离项目中只改变 `OffsetThreshold`，确认两端映射、BGL 格式、标准 JSON 重读、受影响文件角色和
   自重放影响。未出现明确 SDK 表达或参考 `x/29` 实际增长时，结论必须为拒绝，不得接入正式 adapter。
+- r256 功能提交为 `9172218`（`feat: audit 424 model source completeness`）。同日普通 `git push`
+  失败：`Failed to connect to 127.0.0.1 port 7897 after 2116 ms`；未强推、未改写历史，远端未变更。
+  网络恢复后只可从当前 `main` 普通推送，并用 `git ls-remote --heads origin main` 复核。
