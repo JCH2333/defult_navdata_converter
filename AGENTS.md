@@ -753,3 +753,11 @@
 - 另 `2` 项来自 `885058f fix: refresh snapshot IAP coverage audit`：`iap_coverage.version` 从 `23` 升至 `24`，并新增七组 `source_incomplete_chart_title_matches`。代码只在无主进近时收集标题命中审计，未修改 `procedure_segments`、`rejected_records` 或 IAP 投影选择；`package.py` 构建前也会从模型内容重新计算覆盖报告。因此它是已验证的审计元数据升级，不是 424、PDF/OCR 缓存或目标内容漂移。
 - 本轮局部白名单 `diagnostics/r187-model-replay-allowlist.json` 含全部 `15` 项的精确路径和两侧 SHA-256。带 `--fail-on-unexpected` 的复跑报告 `diagnostics/r187-model-replay-audit-allowed.json` 为 `allowed_difference_count=15`、`unexpected_difference_count=0`、`consistent=true`。白名单和报告均为本地诊断产物，不得提交；不得把路径前缀、类别或计数阈值改成宽松白名单。
 - r187 已通过模型来源门禁，允许进入 r188/r189 的双重候选构建；仍须使用同一 r187 冻结模型、同一官方基线与设施索引。只有有效文件树再次完全自重放、`validate`、标准 JSON 解析和 `file-convergence-audit` 全部完成，才能评价参考 `0/29` 是否变化。继续禁止部署、实机验收和 Release。
+
+## 2026-08-19 r188/r189 DOVIV 候选重复构建结果
+
+- r188 `output/candidate-2608-default-r188-doviv-replay` 与 r189 `output/candidate-2608-default-r189-doviv-replay-repeat` 均从同一 r187 模型、同一官方双包和同一已验证官方设施索引独立调用 Package Tool 构建。两份候选均为 `status=candidate`、`local_contract_verified=true`、`valid=true`、`deployable=false`，各含 `21` 个 BGL。
+- `diagnostics/r190-r188-r189-file-convergence-audit.json` 使用标准 JSON 库复核，结果为候选重复范围 `29/29` SHA-256 一致，参考范围仍为 `0/29`。这再次证明本地构建确定性，不证明参考一致、游戏加载或可部署。
+- 与 r181 的只读影响范围审计 `diagnostics/r190-r188-vs-r181-file-convergence-audit.json` 显示 `25/29` 相同；四个变化文件精确为主覆盖包的 `00_enroute.bgl`、`bglindex.bout`、`layout.json` 和 `manifest.json`。十个区域机场 BGL、十个机场补丁 BGL、两个 ContentHistory 和补丁包元数据均未变化，符合 DOVIV 仅恢复航路区域的单变量假设。
+- 两份候选的独立 `validate` 均确认官方设施索引、官方区域恢复、导航台选择、包契约和本地候选契约通过；飞行验证清单仍全部未验证。构建后再次确认 `FlightSimulator2024.exe` 未运行；未覆盖 Community，未创建备份，未部署，未创建 Release。
+- 本轮 DOVIV 规则已完成“来源模型重放 -> 双构建 -> 本地验证 -> 影响范围审计”闭环。后续不得仅为重复此规则再构建候选；下一轮应从剩余 `12` 条航路段/`5` 个航点区域的明确来源卡，或一个来源完整的 SDK 表达缺口中选择单一假设，并继续要求影响文件角色与结果严格一致。
