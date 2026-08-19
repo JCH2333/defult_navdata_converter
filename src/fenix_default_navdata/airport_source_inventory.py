@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import csv
 from collections import Counter
 from pathlib import Path
 from xml.etree import ElementTree as ET
@@ -10,6 +11,95 @@ from .model import NavModel
 
 class AirportSourceInventoryError(RuntimeError):
     """机场来源库存输入不满足只读审计要求时抛出。"""
+
+
+def _csv_rows(path: Path) -> list[dict[str, str]]:
+    raw = path.read_bytes()
+    for encoding in ("utf-8-sig", "gbk"):
+        try:
+            text = raw.decode(encoding)
+            break
+        except UnicodeDecodeError:
+            continue
+    else:  # pragma: no cover - source.py has the same unsupported-input guard
+        raise AirportSourceInventoryError(f"不支持的 CSV 编码: {path}")
+    return list(csv.DictReader(text.splitlines()))
+
+
+def _positive_number(value: str) -> bool:
+    try:
+        return float((value or "").strip() or "0") > 0
+    except ValueError:
+        return False
+
+
+def _runway_offset_threshold_candidates(
+    root: Path,
+    *,
+    airport_key_to_icao: dict[str, str],
+) -> dict[str, object]:
+    """List only direct 424 displacement rows with one SDK object equivalent."""
+
+    runway_path = root / "RWY.csv"
+    direction_path = root / "RWY_DIRECTION.csv"
+    if not runway_path.is_file() or not direction_path.is_file():
+        return {
+            "source_records": 0,
+            "source_files": ["RWY.csv", "RWY_DIRECTION.csv"],
+            "source_fields": ["RWY_DIRECTION.VAL_THR_DISPLACE"],
+            "target_scope": "airport/runway",
+            "sdk_elements": ["Runway", "OffsetThreshold"],
+            "disposition": "unavailable",
+            "reason": "缺少用于跑道端位移审计的当期 424 CSV",
+            "examples": [],
+        }
+
+    runways = {
+        (row.get("RWY_ID") or "").strip(): row
+        for row in _csv_rows(runway_path)
+        if (row.get("RWY_ID") or "").strip()
+    }
+    matches: list[dict[str, object]] = []
+    airport_counts: Counter[str] = Counter()
+    for row_number, row in enumerate(_csv_rows(direction_path), start=2):
+        displacement = (row.get("VAL_THR_DISPLACE") or "").strip()
+        if not _positive_number(displacement):
+            continue
+        runway = runways.get((row.get("RWY_ID") or "").strip())
+        if runway is None:
+            continue
+        airport = airport_key_to_icao.get(
+            (runway.get("AD_HP_ID") or "").strip().upper(),
+            "",
+        )
+        if not airport:
+            continue
+        airport_counts[airport] += 1
+        matches.append({
+            "airport": airport,
+            "runway_ident": (row.get("TXT_DESIG") or "").strip().upper(),
+            "displacement_meters": displacement,
+            "source": {
+                "file": "RWY_DIRECTION.csv",
+                "row": row_number,
+            },
+        })
+
+    return {
+        "source_records": len(matches),
+        "source_files": ["RWY.csv", "RWY_DIRECTION.csv"],
+        "source_fields": ["RWY_DIRECTION.VAL_THR_DISPLACE"],
+        "airport_counts": dict(sorted(airport_counts.items())),
+        "target_scope": "airport/runway",
+        "sdk_elements": ["Runway", "OffsetThreshold"],
+        "disposition": "eligible_for_sdk_probe",
+        "reason": (
+            "424 字段和 SDK OffsetThreshold 的位移语义直接对应；"
+            "仍须以单跑道探针验证 PRIMARY/SECONDARY 端映射和二进制影响，"
+            "不得直接进入正式适配器"
+        ),
+        "examples": matches[:10],
+    }
 
 
 def _source_file_summary(records: list[object]) -> dict[str, object]:
@@ -281,7 +371,7 @@ def build_airport_source_inventory(
     }
 
     return {
-        "diagnostic": "airport-source-inventory-v1",
+        "diagnostic": "airport-source-inventory-v2",
         "read_only": True,
         "reference_records_read": False,
         "source": {
@@ -302,6 +392,36 @@ def build_airport_source_inventory(
             "unclassified_procedure_segment_total": len(unclassified_procedures),
         },
         "categories": categories,
+        "sdk_probe_candidates": {
+            "runway_offset_thresholds": _runway_offset_threshold_candidates(
+                model.root,
+                airport_key_to_icao=airport_key_to_icao,
+            ),
+            "runway_surface": {
+                "source_fields": ["RWY.CODE_COMPOSITION"],
+                "target_scope": "airport/runway",
+                "sdk_elements": ["Runway"],
+                "disposition": "rejected_after_r194",
+                "reason": (
+                    "r194 已证明 surface 仅改变既有 Runway 编码，"
+                    "不产生候选缺失的 0x17/0x33 节"
+                ),
+            },
+            "airport_associated_navaids": {
+                "source_fields": ["VOR.SERVICED_AIRPORT", "NDB.SERVICED_AIRPORT"],
+                "target_scope": "enroute_only",
+                "sdk_elements": ["Vor", "Ndb"],
+                "disposition": "rejected_by_source_scope",
+                "reason": "机场关联字段不能推导为机场子对象投影",
+            },
+            "airspace_radios": {
+                "source_fields": ["AIRSPACE_RADIO.csv"],
+                "target_scope": "unmodeled",
+                "sdk_elements": ["Com", "Tower"],
+                "disposition": "rejected_by_source_scope",
+                "reason": "空域扇区频率不构成机场通信设施来源",
+            },
+        },
         "source_rejection_reasons": dict(sorted(rejection_reasons.items())),
         "candidate_xml_tag_counts": _xml_tag_counts(candidate_xml),
     }

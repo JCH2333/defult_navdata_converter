@@ -8,6 +8,7 @@ from scripts.airport_subset_probe import (
     add_airport_procedure_deletion,
     append_airport_children,
     append_root_children,
+    append_runway_children,
     describe_file,
     describe_tree,
     drop_root_children,
@@ -22,6 +23,7 @@ from scripts.airport_subset_probe import (
     parse_holding_attributes,
     parse_root_object_specs,
     parse_runway_attributes,
+    keep_runways,
     select_airports,
     select_holding_patterns,
     set_runway_attributes,
@@ -212,6 +214,68 @@ def test_airport_child_specs_are_attribute_only_and_append_in_order():
     ]
     with pytest.raises(ValueError, match="--append-airport-child"):
         parse_airport_child_specs(["Com;frequency=118.0;frequency=121.0"])
+
+
+def test_runway_children_only_append_to_selected_existing_runways():
+    airport = ET.fromstring(
+        '<Airport ident="ZBAA"><Runway number="04" />'
+        '<Runway number="18" /></Airport>'
+    )
+    children = parse_airport_child_specs([
+        "OffsetThreshold;end=PRIMARY;length=984F;surface=CONCRETE",
+    ])
+
+    selected = append_runway_children(
+        airport,
+        children,
+        runway_numbers=("04",),
+    )
+
+    assert selected == ("04",)
+    assert airport.find("Runway[@number='04']/OffsetThreshold").attrib == {
+        "end": "PRIMARY",
+        "length": "984F",
+        "surface": "CONCRETE",
+    }
+    assert [
+        child.tag for child in airport.find("Runway[@number='04']")
+    ] == ["OffsetThreshold"]
+    assert airport.find("Runway[@number='18']/OffsetThreshold") is None
+    with pytest.raises(ValueError, match="--runway-number"):
+        append_runway_children(airport, children, runway_numbers=("36",))
+
+
+def test_runway_offset_threshold_is_inserted_before_existing_ils():
+    airport = ET.fromstring(
+        '<Airport ident="ZPPP"><Runway number="04"><Ils ident="ITH"/>'
+        '<RunwayStart end="PRIMARY"/></Runway></Airport>'
+    )
+    children = parse_airport_child_specs([
+        "OffsetThreshold;end=PRIMARY;length=984F;surface=CONCRETE",
+    ])
+
+    append_runway_children(airport, children, runway_numbers=("04",))
+
+    assert [child.tag for child in airport.find("Runway")] == [
+        "OffsetThreshold",
+        "Ils",
+        "RunwayStart",
+    ]
+
+
+def test_keep_runways_rejects_unknown_and_preserves_source_order():
+    airport = ET.fromstring(
+        '<Airport ident="ZPPP"><Runway number="03"/><Runway number="04"/>'
+        '<Runway number="22"/></Airport>'
+    )
+
+    assert keep_runways(airport, runway_numbers=("04", "03")) == ("03", "04")
+    assert [runway.attrib["number"] for runway in airport.findall("Runway")] == [
+        "03",
+        "04",
+    ]
+    with pytest.raises(ValueError, match="--keep-runway-number"):
+        keep_runways(airport, runway_numbers=("36",))
 
 
 def test_root_children_reuse_diagnostic_specs_without_reparenting():

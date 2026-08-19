@@ -64,7 +64,7 @@ def test_inventory_keeps_source_scope_and_rejection_boundaries(tmp_path: Path) -
 
     report = build_airport_source_inventory(_model(tmp_path / "raw"), candidate_xml=xml)
 
-    assert report["diagnostic"] == "airport-source-inventory-v1"
+    assert report["diagnostic"] == "airport-source-inventory-v2"
     assert report["read_only"] is True
     assert report["reference_records_read"] is False
     assert report["summary"]["airport_total"] == 1
@@ -88,3 +88,36 @@ def test_inventory_keeps_source_scope_and_rejection_boundaries(tmp_path: Path) -
         "FSData": 1,
         "Waypoint": 1,
     }
+    assert report["sdk_probe_candidates"]["runway_offset_thresholds"][
+        "disposition"
+    ] == "unavailable"
+
+
+def test_inventory_lists_direct_runway_offset_threshold_probe_candidates(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "raw"
+    root.mkdir()
+    (root / "RWY.csv").write_text(
+        "RWY_ID,AD_HP_ID\nR1,A1\n",
+        encoding="utf-8",
+    )
+    (root / "RWY_DIRECTION.csv").write_text(
+        "RWY_DIRECTION_ID,RWY_ID,TXT_DESIG,VAL_THR_DISPLACE\n"
+        "D1,R1,04R,300\n"
+        "D2,R1,22L,0\n",
+        encoding="utf-8",
+    )
+
+    report = build_airport_source_inventory(_model(root))
+    candidate = report["sdk_probe_candidates"]["runway_offset_thresholds"]
+
+    assert candidate["disposition"] == "eligible_for_sdk_probe"
+    assert candidate["source_records"] == 1
+    assert candidate["airport_counts"] == {"ZBAA": 1}
+    assert candidate["examples"] == [{
+        "airport": "ZBAA",
+        "runway_ident": "04R",
+        "displacement_meters": "300",
+        "source": {"file": "RWY_DIRECTION.csv", "row": 2},
+    }]

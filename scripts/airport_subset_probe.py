@@ -286,6 +286,76 @@ def append_airport_children(
         airport.append(deepcopy(child))
 
 
+def append_runway_children(
+    airport: ET.Element,
+    children: tuple[ET.Element, ...],
+    *,
+    runway_numbers: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Insert diagnostic-only children into explicitly selected existing runways."""
+
+    runways = list(airport.findall("Runway"))
+    selected = [
+        runway
+        for runway in runways
+        if not runway_numbers
+        or (runway.get("number") or "").upper() in set(runway_numbers)
+    ]
+    if runway_numbers:
+        present = {(runway.get("number") or "").upper() for runway in runways}
+        unknown = sorted(set(runway_numbers) - present)
+        if unknown:
+            raise ValueError(
+                "--runway-number 包含当前机场不存在的跑道: "
+                + ", ".join(unknown)
+            )
+    for runway in selected:
+        for child in children:
+            child_copy = deepcopy(child)
+            # ctRunway requires OffsetThreshold before Ils/IlsReference.  Keep
+            # probe children valid without teaching the generic airport-child
+            # helper target-specific ordering.
+            if child_copy.tag in {"OffsetThreshold", "BlastPad", "Overrun"}:
+                index = next(
+                    (
+                        position
+                        for position, existing in enumerate(list(runway))
+                        if existing.tag in {"Ils", "IlsReference", "RunwayStart"}
+                    ),
+                    len(runway),
+                )
+                runway.insert(index, child_copy)
+            else:
+                runway.append(child_copy)
+    return tuple((runway.get("number") or "").upper() for runway in selected)
+
+
+def keep_runways(
+    airport: ET.Element,
+    *,
+    runway_numbers: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Retain a controlled runway subset without changing source order."""
+
+    if not runway_numbers:
+        return tuple((runway.get("number") or "").upper() for runway in airport.findall("Runway"))
+    present = {
+        (runway.get("number") or "").upper()
+        for runway in airport.findall("Runway")
+    }
+    unknown = sorted(set(runway_numbers) - present)
+    if unknown:
+        raise ValueError(
+            "--keep-runway-number 包含当前机场不存在的跑道: "
+            + ", ".join(unknown)
+        )
+    retained = set(runway_numbers)
+    for runway in list(airport.findall("Runway")):
+        if (runway.get("number") or "").upper() not in retained:
+            airport.remove(runway)
+    return tuple((runway.get("number") or "").upper() for runway in airport.findall("Runway"))
+
+
 def append_root_children(
     root: ET.Element,
     children: tuple[ET.Element, ...],
@@ -563,6 +633,30 @@ def _parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--runway-number",
+        action="append",
+        nargs="+",
+        default=[],
+        help="仅诊断用：限制 --append-runway-child 到指定的既有跑道号。",
+    )
+    parser.add_argument(
+        "--keep-runway-number",
+        action="append",
+        nargs="+",
+        default=[],
+        help="仅诊断用：仅保留指定既有跑道号，保留源 XML 中的物理顺序。",
+    )
+    parser.add_argument(
+        "--append-runway-child",
+        action="append",
+        default=[],
+        metavar="TAG;NAME=VALUE",
+        help=(
+            "仅诊断用：向选定既有 Runway 附加 SDK 子对象；"
+            "例如 OffsetThreshold;end=PRIMARY;length=984F;surface=CONCRETE"
+        ),
+    )
+    parser.add_argument(
         "--append-root-child",
         action="append",
         default=[],
@@ -661,6 +755,22 @@ def main() -> int:
         for ident in values
         if ident.strip()
     )
+    requested_runway_numbers = tuple(
+        number.strip().upper()
+        for values in args.runway_number
+        for number in values
+        if number.strip()
+    )
+    if len(set(requested_runway_numbers)) != len(requested_runway_numbers):
+        raise SystemExit("--runway-number 不能包含重复跑道号")
+    retained_runway_numbers = tuple(
+        number.strip().upper()
+        for values in args.keep_runway_number
+        for number in values
+        if number.strip()
+    )
+    if len(set(retained_runway_numbers)) != len(retained_runway_numbers):
+        raise SystemExit("--keep-runway-number 不能包含重复跑道号")
     try:
         assigned_holding_attributes = parse_holding_attributes(
             args.set_holding_attribute
@@ -673,6 +783,9 @@ def main() -> int:
         )
         appended_airport_children = parse_airport_child_specs(
             args.append_airport_child
+        )
+        appended_runway_children = parse_airport_child_specs(
+            args.append_runway_child
         )
         appended_root_children = parse_airport_child_specs(
             args.append_root_child
@@ -697,11 +810,29 @@ def main() -> int:
     drop_root_children(root, tags=dropped_root_tags)
     append_root_children(root, appended_root_children)
     selected_holding_idents: tuple[str, ...] = ()
+    selected_runway_numbers: dict[str, list[str]] = {}
+    retained_runway_numbers_by_airport: dict[str, list[str]] = {}
     for airport in selected:
         for attribute, value in assigned_airport_attributes.items():
             airport.set(attribute, value)
         set_runway_attributes(airport, assigned_runway_attributes)
         append_airport_children(airport, appended_airport_children)
+        try:
+            retained_runway_numbers_by_airport[airport.attrib["ident"]] = list(
+                keep_runways(
+                    airport,
+                    runway_numbers=retained_runway_numbers,
+                )
+            )
+            selected_runway_numbers[airport.attrib["ident"]] = list(
+                append_runway_children(
+                    airport,
+                    appended_runway_children,
+                    runway_numbers=requested_runway_numbers,
+                )
+            )
+        except ValueError as error:
+            raise SystemExit(str(error)) from error
         if args.delete_airport_procedures:
             add_airport_procedure_deletion(airport)
         for child in list(airport):
@@ -883,9 +1014,17 @@ def main() -> int:
             "assigned_holding_attributes": assigned_holding_attributes,
             "assigned_airport_attributes": assigned_airport_attributes,
             "assigned_runway_attributes": assigned_runway_attributes,
+            "runway_numbers": list(requested_runway_numbers),
+            "selected_runway_numbers": selected_runway_numbers,
+            "keep_runway_numbers": list(retained_runway_numbers),
+            "retained_runway_numbers": retained_runway_numbers_by_airport,
             "appended_airport_children": [
                 {"tag": child.tag, "attributes": dict(child.attrib)}
                 for child in appended_airport_children
+            ],
+            "appended_runway_children": [
+                {"tag": child.tag, "attributes": dict(child.attrib)}
+                for child in appended_runway_children
             ],
             "appended_root_children": [
                 {"tag": child.tag, "attributes": dict(child.attrib)}

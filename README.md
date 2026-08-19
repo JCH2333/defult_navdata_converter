@@ -241,6 +241,7 @@ python -m fenix_default_navdata.cli build `
 - `scripts/airport_subset_probe.py` 的隔离构建会在本次诊断目录写入 `probe-report.json`，记录完整输入选择、每个探针 BGL 的文件大小、头部版本、QMID、节表类型/计数/尺寸和读取器状态。它只用于验证 SDK 输入对象如何影响编译布局，不读取参考 BGL 的内容。
 - 该探针的 `--set-airport-attribute name=value` 仅为隔离编译实验设置 XML 属性，绝不写入 `NavModel` 或正式候选。
 - `--append-airport-child "TAG;NAME=VALUE;..."` 可在每个被选机场末尾追加属性型 SDK 子对象，用于可复现的单变量布局实验；它同样永远不写入 `NavModel` 或正式候选。
+- `--keep-runway-number` 可将机场探针缩小到既有的物理跑道子集；`--append-runway-child` 只向 `--runway-number` 指定的既有跑道插入 SDK 子对象，并维护 `OffsetThreshold`、`BlastPad`、`Overrun` 位于 `Ils`/`IlsReference` 之前的 XSD 顺序。它们同样只用于诊断，不能绕过正式适配器的来源和字节收敛门禁。
 - `--append-root-child "TAG;NAME=VALUE;..."` 以同样约束在 `FSData` 根节点追加对象，用于区分根节点和机场作用域的 SDK 编译布局。
 - `--drop-runway-child-tag Ils` 仅在隔离探针中从保留跑道移除直接子节点，可用来源完整的同一机场/跑道 XML 建立严格单变量对照；不得用于修改正式适配器或删除来源 ILS。
 - `--delete-airport-procedures` 用于隔离编译实验，验证正式适配器同样使用的 `DeleteAirport` 进近、离场和进场删除语义。
