@@ -871,3 +871,12 @@
 ### 每轮维护协议
 
 每轮开始前记录实验编号、唯一假设、唯一变量、允许/禁止读取的数据、冻结输入/工具哈希、预期受影响文件角色、成功条件和否决条件。每轮结束后记录候选或诊断路径、测试、SDK 构建、读取器登记、标准 JSON 重读、文件树哈希、参考 `29` 文件统计、来源审计及保留/否决结论。代码或仓库文档改动后必须执行 `pytest -q`、`git diff --check`、审查暂存区、提交一个可解释变更并普通 `git push`；若代理 `http://127.0.0.1:7897` 不可用，则保留本地提交，待网络恢复后集中推送。
+
+## 2026-08-19 r197 默认来源缺口卡审计
+
+- 实验编号：`r197-default-gap-cards`。唯一假设是“冻结 `NavModel` 与本转换器自身的 candidate `conversion-report.json` 足以把现有默认通用数据缺口整理为逐项、可回链、不可反向填充的来源卡”。允许读取 r187 模型和 r188 候选报告的 `projection`；明确不读取参考 BGL/SQLite 导航记录、参考坐标、Fenix 数据或候选以外的外部目标产物。
+- 新增可复用 CLI：`default-gap-cards-audit --model <NavModel> --candidate-report <conversion-report.json> --output <JSON>`。它验证候选报告为 `status=candidate`，并要求跳过航路段、跳过航点、IAP `unresolved_groups`、`RejectedProcedure` 与未分类程序审计之间计数和来源身份一致；不一致即失败，防止不同模型/候选报告混用。
+- r188 实际报告：`diagnostics/r197-default-gap-cards-20260819.json`。共 `40` 张阻断卡，分为航路端点区域 `12`、航路点区域 `5`、IAP 主段选择 `10`、未分类程序 `13`。五个实际跳过航路点为 `P121`、`P127`、`P188`、`P225`、`P239`；`M771` 的 `****` 只作为无唯一 `DESIGNATED_POINT` 身份的航路端点卡保留，不得伪造全局航点。
+- 报告固定声明 `read_only=true`、`reference_records_read=false`、`fenix_records_read=false`。每张卡都保存直接 `SourceRef`、当前拒绝/阻断状态和允许的下一类证据；允许证据仍仅限同周期 424 CSV/PDF、FIR/ACC、受控邻接和符合 OCR 运行时/缓存门禁的直接文本。卡片不是恢复规则、不是参考成品输入，也不能单独触发模型或 BGL 投影。
+- 自动化结果：新增 `tests/test_default_gap_cards.py`，覆盖来源回链、四类计数、报告/模型不一致拒绝及 CLI 写出；全量 `pytest -q` 为 `412 passed`。本轮未构建新候选、未改变 `NavModel`、未改变 BGL adapter、未覆盖 Community。
+- 后续顺序更新：以 r197 的卡为唯一工作队列，优先处理五个航路点及其 12 条关联航段的直接 FIR/ACC 冲突证据；无新证据时保持拒绝。IAP 和未分类程序各卡必须分别完成直接文本/OCR 共识、唯一规则、正反 fixture 与模型门禁后，才允许进入目标投影。不得以“卡片数量下降”为目标放宽来源条件。

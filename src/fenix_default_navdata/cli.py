@@ -23,6 +23,10 @@ from .airport_source_inventory import (
     build_airport_source_inventory,
     write_airport_source_inventory,
 )
+from .default_gap_cards import (
+    audit_default_gap_cards,
+    write_default_gap_cards,
+)
 from .unclassified_procedure_audit import (
     audit_unclassified_procedures,
     write_unclassified_procedure_audit,
@@ -327,6 +331,25 @@ def build_parser() -> argparse.ArgumentParser:
         "--output",
         required=True,
         help="本地未分类程序审计 JSON 输出路径",
+    )
+    default_gap_cards = sub.add_parser(
+        "default-gap-cards-audit",
+        help="只读汇总默认通用数据候选的航路、航点、IAP 与未分类程序来源缺口卡",
+    )
+    default_gap_cards.add_argument(
+        "--model",
+        required=True,
+        help="冻结的可复用 NavModel 快照（JSON 或 JSON.GZ）",
+    )
+    default_gap_cards.add_argument(
+        "--candidate-report",
+        required=True,
+        help="本工具生成的 candidate conversion-report.json",
+    )
+    default_gap_cards.add_argument(
+        "--output",
+        required=True,
+        help="本地来源缺口卡 JSON 输出路径",
     )
     airway_diff = sub.add_parser(
         "airway-diff-audit",
@@ -1100,6 +1123,16 @@ def main(argv: list[str] | None = None) -> int:
         output = Path(args.output).expanduser().resolve()
         report["output"] = str(output)
         write_unclassified_procedure_audit(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "default-gap-cards-audit":
+        report = audit_default_gap_cards(
+            load_model(Path(args.model)),
+            Path(args.candidate_report),
+        )
+        output = Path(args.output).expanduser().resolve()
+        report["output"] = str(output)
+        write_default_gap_cards(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "airway-diff-audit":
