@@ -66,6 +66,11 @@ python -m fenix_default_navdata.cli bgl-layout-audit `
   --candidate output\candidate-2608-default `
   --reference "F:\我的世界动画\AI项目\导航数据\424源数据\2608\Default navdata 2608R1" `
   --output diagnostics\bgl-layout-audit.json
+python -m fenix_default_navdata.cli file-convergence-audit `
+  --candidate output\candidate-2608-default-r181-package-time-normalized `
+  --repeat-candidate output\candidate-2608-default-r182-package-time-repeat `
+  --reference "F:\我的世界动画\AI项目\导航数据\424源数据\2608\Default navdata 2608R1" `
+  --output diagnostics\file-convergence-audit.json
 python -m fenix_default_navdata.cli read-package `
   --package output\candidate-2608-default\zzz-pmdg-china-navdata `
   --output diagnostics\navdatareader\candidate.sqlite `
@@ -232,6 +237,7 @@ python -m fenix_default_navdata.cli build `
 - 参考成品只用于只读差分，绝不复制参考 BGL 冒充转换结果。
 - `semantic-diff` 不返回参考 SQLite 的坐标、频率、磁差、高程、名称或航路端点字段值，不能作为候选内容的反向来源。调用时必须显式提供候选和参考各自的预期 BGL 数；`bgl_file` 登记数不精确相等即拒绝生成报告。
 - `bgl-layout-audit` 以参考包的顶层包名确定比较范围，只读取候选和参考最终包内 BGL 的文件路径、文件大小、SHA-256 相等性、头部版本、QMID 和节表类型/计数/尺寸；候选根目录下的 SDK `_work` 中间产物和不在参考范围内的官方依赖副本始终排除，数量会记录在 `scope`。它不读取或导出任何参考导航记录，输出仅用于定位 SDK 编译布局与内容覆盖差异。
+- `file-convergence-audit` 是逐文件收敛看板：它只读取候选、可选重复候选和参考包的相对路径、大小、SHA-256、固定文件角色及 BGL 头/节表摘要，并固定输出 `read_only=true` 与 `reference_records_exported=false`。它排除 SDK `_work` 和不在参考包范围内的支持包，用于分别验证候选自重放和参考 `29` 文件收敛；不得导出参考导航记录、坐标或字段，更不得用报告反向补写候选内容。
 - `scripts/airport_subset_probe.py` 的隔离构建会在本次诊断目录写入 `probe-report.json`，记录完整输入选择、每个探针 BGL 的文件大小、头部版本、QMID、节表类型/计数/尺寸和读取器状态。它只用于验证 SDK 输入对象如何影响编译布局，不读取参考 BGL 的内容。
 - 该探针的 `--set-airport-attribute name=value` 仅为隔离编译实验设置 XML 属性，绝不写入 `NavModel` 或正式候选。
 - `--append-airport-child "TAG;NAME=VALUE;..."` 可在每个被选机场末尾追加属性型 SDK 子对象，用于可复现的单变量布局实验；它同样永远不写入 `NavModel` 或正式候选。

@@ -34,7 +34,12 @@ from .airway_coordinate_precision_probe import (
     write_source_airway_coordinate_precision_audit,
 )
 from .airway_route_child_order_probe import run_airway_route_child_order_probe
-from .bgl_format import audit_bgl_layouts, write_bgl_layout_audit
+from .bgl_format import (
+    audit_bgl_layouts,
+    audit_file_convergence,
+    write_bgl_layout_audit,
+    write_file_convergence_audit,
+)
 from .convert import convert, export_intermediate_model
 from .deployment import deploy, restore
 from .general_docs import (
@@ -235,6 +240,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="Default navdata 2608R1 参考包根目录；省略时自动检测",
     )
     bgl_layout.add_argument("--output", help="可选的本地 BGL 布局审计 JSON 输出路径")
+    convergence = sub.add_parser(
+        "file-convergence-audit",
+        help="只读建立候选、重复候选与参考包的逐文件收敛看板，不导出导航记录",
+    )
+    convergence.add_argument("--candidate", required=True, help="候选包根目录")
+    convergence.add_argument(
+        "--reference",
+        help="Default navdata 2608R1 参考包根目录；省略时自动检测",
+    )
+    convergence.add_argument(
+        "--repeat-candidate",
+        help="可选的同输入重复候选，用于逐文件重放确定性比较",
+    )
+    convergence.add_argument("--output", required=True, help="本地收敛看板 JSON 输出路径")
     source_gap = sub.add_parser(
         "source-gap-audit",
         help="只读按 424 原始记录分类已脱敏的航点/航路来源缺口",
@@ -984,6 +1003,20 @@ def main(argv: list[str] | None = None) -> int:
             output = Path(args.output).expanduser().resolve()
             report["output"] = str(output)
             write_bgl_layout_audit(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "file-convergence-audit":
+        reference = _path(args.reference) or detect_paths().reference_root
+        if not reference:
+            raise SystemExit("无法自动检测 Default navdata 2608R1 参考目录，请显式传入 --reference")
+        output = Path(args.output).expanduser().resolve()
+        report = audit_file_convergence(
+            Path(args.candidate),
+            reference,
+            repeat_candidate_root=_path(args.repeat_candidate),
+        )
+        report["output"] = str(output)
+        write_file_convergence_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "source-gap-audit":

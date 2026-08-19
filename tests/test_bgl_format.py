@@ -9,6 +9,7 @@ from fenix_default_navdata.bgl_format import (
     PACKAGE_TOOL_MAGVAR_SIZE,
     BglFormatError,
     audit_bgl_layouts,
+    audit_file_convergence,
     header_summary,
     parse_bgl_header,
 )
@@ -193,3 +194,52 @@ def test_bgl_layout_audit_excludes_candidate_support_packages(tmp_path) -> None:
     assert [row["path"] for row in report["files"]] == [
         "final-package/scenery/final.bgl",
     ]
+
+
+def test_file_convergence_audit_reports_hashes_roles_and_repeatability(tmp_path) -> None:
+    candidate = tmp_path / "candidate"
+    repeat = tmp_path / "repeat"
+    reference = tmp_path / "reference"
+    relative_bgl = "zzz-pmdg-china-navdata/scenery/pmdg-china-navdata/00_enroute.bgl"
+    relative_layout = "zzz-pmdg-china-navdata/layout.json"
+    for root, payload in (
+        (candidate, b"candidate"),
+        (repeat, b"candidate"),
+        (reference, b"reference"),
+    ):
+        bgl = root / relative_bgl
+        bgl.parent.mkdir(parents=True)
+        bgl.write_bytes(_header(
+            section_count=1,
+            qmid=(0x20,),
+            sections=((0x03, 1, 1, 0x6C, len(payload)),),
+        ) + payload)
+        layout = root / relative_layout
+        layout.write_text('{"content":[]}\n', encoding="utf-8")
+
+    report = audit_file_convergence(
+        candidate,
+        reference,
+        repeat_candidate_root=repeat,
+    )
+
+    assert report["diagnostic"] == "file-convergence-audit-v1"
+    assert report["read_only"] is True
+    assert report["reference_records_exported"] is False
+    assert report["summary"] == {
+        "reference_scope_files": 2,
+        "reference_equal_files": 1,
+        "reference_changed_or_missing_files": 1,
+        "repeat_scope_files": 2,
+        "repeat_equal_files": 2,
+        "repeat_changed_or_missing_files": 0,
+    }
+    rows = {row["path"]: row for row in report["files"]}
+    bgl = rows[relative_bgl]
+    assert bgl["role"] == "enroute_bgl"
+    assert bgl["source_group"] == "424_enroute"
+    assert bgl["reference_status"] == "changed"
+    assert bgl["repeat_status"] == "equal"
+    assert bgl["candidate"]["bgl_layout"]["section_types"] == ["0x3"]
+    assert set(bgl["candidate"]) == {"size", "sha256", "bgl_layout"}
+    assert rows[relative_layout]["role"] == "package_layout"

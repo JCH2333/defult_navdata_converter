@@ -215,6 +215,42 @@ def test_airway_endpoint_audit_writes_requested_report(monkeypatch) -> None:
     assert received["output"] == Path("diagnostics/endpoints.json").resolve()
 
 
+def test_file_convergence_audit_writes_requested_report(monkeypatch) -> None:
+    received: dict[str, object] = {}
+
+    monkeypatch.setattr(cli, "detect_paths", lambda: type("P", (), {
+        "reference_root": Path("auto-reference"),
+    })())
+    monkeypatch.setattr(
+        cli,
+        "audit_file_convergence",
+        lambda candidate, reference, **kwargs: received.update(
+            candidate=candidate,
+            reference=reference,
+            **kwargs,
+        ) or {"diagnostic": "file-convergence-audit-v1"},
+    )
+    monkeypatch.setattr(
+        cli,
+        "write_file_convergence_audit",
+        lambda path, report: received.update(output=path, report=report),
+    )
+
+    result = cli.main([
+        "file-convergence-audit",
+        "--candidate", "output/r181",
+        "--repeat-candidate", "output/r182",
+        "--output", "diagnostics/convergence.json",
+    ])
+
+    assert result == 0
+    assert received["candidate"] == Path("output/r181")
+    assert received["reference"] == Path("auto-reference")
+    assert received["repeat_candidate_root"] == Path("output/r182")
+    assert received["output"] == Path("diagnostics/convergence.json").resolve()
+    assert received["report"]["output"] == str(received["output"])
+
+
 def test_airport_source_inventory_reads_model_and_writes_report(monkeypatch) -> None:
     received: dict[str, object] = {}
     model = NavModel(Path("raw"))
