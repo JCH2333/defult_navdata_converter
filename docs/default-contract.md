@@ -232,6 +232,13 @@ SID/STAR 名称碰撞。该网格由 XML 中的 `AiracCycle` 触发。无 `Airac
 已安装 Package Tool 不能解释参考机场 BGL 与当前候选不同的顶层 QMID 指纹；后续诊断
 应继续检查源支持的对象投影和参考包的历史构建契约，不得将 SDK 版本切换当作内容修复。
 
+同日对同一空 `ZUAL` 机场施加 `onlyAddIfReplace=TRUE` 后，BGL 从常规的 363 字节
+`0x3/0x35` 变为 220 字节、仅 `0x3`，QMID 仍为 `0x92319`。该标记可解释参考机场
+覆盖 BGL 缺少 `0x35`，但不能解释其顶层空间 QMID 差异。由于已验证新增机场 `ZBCF`
+在该标记下不会被 Navdatareader 识别，正式转换不得全局启用它；只有建立了官方基线
+中“已有机场”的来源支持索引后，才能单独评估替换机场的混合投影，新增机场必须保留
+常规投影。
+
 机场覆盖必须先写入 `DeleteAirport`，且仅删除 `Approaches`、`Departures`、`Arrivals`，再投影 424 的跑道、终端点、程序和等待航线。证据：2026-08-19 对 2608R1 `ZUAL` 参考 BGL 的 SDK BglExplorer 读取显示 `FAC_TYPE_AIRPORT_DELETE` 的三项删除标记；同一份隔离 XML 仅新增该标记后，Package Tool 生成相同节表、文件增量 12 字节，并确认生成该设施记录及机场替换标记。此规则是默认通用数据的目标覆盖契约，不使用参考内容补写任何航行记录。回归：`test_bgl_xml_is_deterministic`、`test_airport_procedure_deletion_is_inserted_before_source_children`。
 
 ### 导航台区域键
