@@ -2363,7 +2363,8 @@
   `ZSOF-6A.pdf`（`VOR/DME RWY15`，`D15`）。三者均不直接匹配 `R15`，数据库主进近腿为空，
   所有 `primary_leg_role_overlap` 均为空；不得将标题、IAF/IF 或同跑道关系拼接为 `R15` 主段。
 - 结论为 `unresolved_direct_database_evidence_inconclusive`，`projection_allowed=false`。本卡
-  获得精确可重放拒绝证据，来源缺口闭合计数由 `32/40` 增至 `33/40`，剩余可审计 IAP 卡由 8 降为 7；
+  获得精确可重放的“证据不足”结论，不是精确拒绝或允许投影；来源缺口闭合计数仍为 `32/40`，
+  剩余 IAP 主进近卡仍为 8；
   模型、正式 adapter、候选、Community、部署状态和参考 `0/29` 均不变，字节收敛未推进。
 - 下一项唯一工作：按稳定键审计 `ZYDD:R01` 或 `ZYDD:R01-Y` 之前，先核对既有 r208 对同标签族
   的审计覆盖；若其已覆盖二者，则选择下一张没有精确单卡报告的未决 IAP 卡。不得重复已覆盖的
