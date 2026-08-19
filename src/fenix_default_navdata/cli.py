@@ -19,6 +19,10 @@ from .airway_endpoint_audit import (
     audit_unresolved_airway_endpoints,
     write_unresolved_airway_endpoint_audit,
 )
+from .airport_source_inventory import (
+    build_airport_source_inventory,
+    write_airport_source_inventory,
+)
 from .bgl import find_compiler
 from .airway_connection_shape_probe import run_airway_connection_shape_probe
 from .airway_coordinate_precision_probe import (
@@ -248,6 +252,24 @@ def build_parser() -> argparse.ArgumentParser:
     )
     endpoint_audit.add_argument("--raw", help="2608 原始 CSV/PDF 目录")
     endpoint_audit.add_argument("--output", required=True, help="本地诊断 JSON 输出路径")
+    airport_inventory = sub.add_parser(
+        "airport-source-inventory",
+        help="只读盘点 NavModel 中可用于机场 BGL 的来源对象与拒绝边界",
+    )
+    airport_inventory.add_argument(
+        "--model",
+        required=True,
+        help="可复用 NavModel 快照（JSON 或 JSON.GZ）",
+    )
+    airport_inventory.add_argument(
+        "--candidate-xml",
+        help="可选的当前候选机场 XML；仅统计自身 XML 标签，不读取参考 BGL",
+    )
+    airport_inventory.add_argument(
+        "--output",
+        required=True,
+        help="本地机场来源对象库存 JSON 输出路径",
+    )
     airway_diff = sub.add_parser(
         "airway-diff-audit",
         help="只读分类航路字段差异并生成脱敏的 424 航路序号关联摘要",
@@ -971,6 +993,16 @@ def main(argv: list[str] | None = None) -> int:
         output = Path(args.output).expanduser().resolve()
         report["output"] = str(output)
         write_unresolved_airway_endpoint_audit(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "airport-source-inventory":
+        report = build_airport_source_inventory(
+            load_model(Path(args.model)),
+            candidate_xml=_path(args.candidate_xml),
+        )
+        output = Path(args.output).expanduser().resolve()
+        report["output"] = str(output)
+        write_airport_source_inventory(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "airway-diff-audit":

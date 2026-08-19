@@ -89,6 +89,10 @@ python -m fenix_default_navdata.cli source-gap-audit `
 python -m fenix_default_navdata.cli airway-endpoint-audit `
   --raw "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
   --output diagnostics\airway-endpoint-audit.json
+python -m fenix_default_navdata.cli airport-source-inventory `
+  --model output\intermediate-2608-r155-airway-identities.json.gz `
+  --candidate-xml output\candidate-2608-default-r175-route-shape-verified\_work\china-navdata.xml `
+  --output diagnostics\airport-source-inventory.json
 python -m fenix_default_navdata.cli airway-diff-audit `
   --model output\nav-model-2608.json.gz `
   --semantic-diff diagnostics\navdatareader\semantic-diff.json `
@@ -233,6 +237,7 @@ python -m fenix_default_navdata.cli build `
 - `source-gap-audit` 只接受完整、只读且已脱敏、并已证明 BGL 登记数完整的 `semantic-diff` 报告；它只输出 424 来源分类计数，不导出或保存参考逻辑身份。航路字段差异会额外汇总同源 424 航段的连接状态、端点完整性和已携带元数据，不输出参考值或原始身份。它还会核验 `ROUTE_HOLDING.csv` 是否只回链既有点；无区域键或复用位置标签的记录不得当作新 enroute 航点。
 - `terminal-coordinate-audit` 使用同一类完整脱敏差分，只读核验参考缺失航点是否可由 424 终端坐标页独立证明；输出只含来源类别计数。全局航点只有在 `terminal_source_promotable` 非零时，才可进入通用跨机场提升规则；机场作用域的 `airport_terminal_coordinate_source_present` 仅表示同机场坐标页存在来源，不构成新增或补写依据。传入 `--check-retention` 后，审计会再区分现有规则是否保留此类来源点；`airport_terminal_coordinate_not_retained` 仍只是一项调查信号，必须另行证明通用保留与投影规则，不能按审计结果列表补点。
 - `general-doc-keypoint-audit` 仅使用带 SHA-256 校验的 ENR 4.4 OCR 缓存与同源 FIR 几何，分类参考缺失全局航点是否能由关键点页独立证明；输出只含类别计数。`general_doc_source_promotable` 非零时，必须先把来源规则、最小 fixture 和候选报告接入构建，不能按审计列表补点。
+- `airport-source-inventory` 只读取可复用 `NavModel` 和可选的候选 XML；它按机场、跑道、终端航点、ILS、离场/进场/进近/复飞段、等待航线、导航台和通信来源记录来源文件分组、机场归属、SDK 作用域、可表达性与拒绝原因。它不读取参考 BGL 记录；空域扇区频率不等于机场 `Com/Tower` 数据，不得混用。
 - Package Tool 构建和 Community 覆盖前都要求 `FlightSimulator2024.exe` 已完全退出。
 - 覆盖前自动备份四个相关包；测试候选、不完整候选、未完成字节比对或实机验证的候选都会拒绝部署。
 - 只有 `status=release`、参考覆盖包逐文件字节一致，并已登记 ZBCF、ZUNZ、ZUUU 与退出稳定性实机验证的候选才可覆盖 Community。

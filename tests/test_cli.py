@@ -215,6 +215,44 @@ def test_airway_endpoint_audit_writes_requested_report(monkeypatch) -> None:
     assert received["output"] == Path("diagnostics/endpoints.json").resolve()
 
 
+def test_airport_source_inventory_reads_model_and_writes_report(monkeypatch) -> None:
+    received: dict[str, object] = {}
+    model = NavModel(Path("raw"))
+
+    monkeypatch.setattr(cli, "load_model", lambda path: received.update(
+        model_path=path
+    ) or model)
+    monkeypatch.setattr(
+        cli,
+        "build_airport_source_inventory",
+        lambda received_model, **kwargs: received.update(
+            model=received_model,
+            **kwargs,
+        ) or {"diagnostic": "airport-source-inventory-v1"},
+    )
+    monkeypatch.setattr(
+        cli,
+        "write_airport_source_inventory",
+        lambda path, report: received.update(output=path, report=report),
+    )
+
+    result = cli.main([
+        "airport-source-inventory",
+        "--model", "output/model.json.gz",
+        "--candidate-xml", "output/china-navdata.xml",
+        "--output", "diagnostics/airport-inventory.json",
+    ])
+
+    assert result == 0
+    assert received["model_path"] == Path("output/model.json.gz")
+    assert received["model"] is model
+    assert received["candidate_xml"] == Path("output/china-navdata.xml")
+    assert received["output"] == Path(
+        "diagnostics/airport-inventory.json"
+    ).resolve()
+    assert received["report"]["output"] == str(received["output"])
+
+
 def test_export_model_command_passes_source_and_output(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
