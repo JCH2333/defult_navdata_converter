@@ -434,3 +434,68 @@
 - 下一轮计划已调整为“来源侧机场对象库存 -> 单变量 SDK 探针 -> 仅对稳定读取器表做语义收敛”。这是为了先区分 424 尚未投影的对象、SDK 编译布局和外部读取器不确定性，避免把参考节表或不稳定诊断误当作内容来源。库存和探针应成为未来 424 周期及其他目标格式 adapter 可直接复用的证据层输入。
 - r176 新增 `airport-source-inventory`，使用冻结的 r155 `NavModel` 和 r175 自身 `china-navdata.xml` 输出 `diagnostics/r176-airport-source-inventory.json`。它只读模型和候选 XML，声明 `reference_records_read=false`。盘点到机场 `275`、跑道方向 `640`、终端航点 `12549`、ILS `430`、离场 `3530`、进场 `3949`、进近过渡 `1505`、进近 `721`、复飞 `691`、等待航线 `1297`；`13` 个空/未知程序枚举保持拒绝，`10` 个 IAP `no_unique_primary` 保持拒绝，`18` 个 `serviced_airport` 不属于来源机场集合的导航台不得投影为机场子对象。候选 XML 仅含来源已投影对象，不含 `Com`/`Tower`。2608 的 `CONTROLLED_RADIO.csv` 经表头与 `CONTROLLED.csv` 关联核验为 `APP_SECTOR` 空域扇区频率，不是机场通信数据，禁止作为 `Com`/`Tower` 来源。下一轮应从来源完整且没有既有否决结论的对象选择最小 SDK 探针，或先建立新的 424 来源契约；不得为追逐节表而伪造对象。
 - r177 使用 r175 的 `ZU_airports.xml` 中来源完整的 `ZUAL` 跑道与 `Ils ident=IKS` 建立严格单变量 SDK 探针。两组均删除同一机场的航点、离场、进场、进近和等待航线，保留跑道；仅第二组通过诊断选项 `--drop-runway-child-tag Ils` 删除跑道内 ILS。Package Tool 均成功：保留 ILS 的 `zu_airports.bgl` 为 `687` 字节、节表 `0x3/0x13/0x32/0x35`；删除 ILS 后为 `459` 字节、节表 `0x3/0x35`。结论：来源完整 ILS 是 `0x13` 与 `0x32` 的充分触发条件，但不触发参考机场 BGL 中仍缺失的 `0x17/0x33`；当前适配器已投影 `430` 条来源 ILS，故本实验不改正式投影，也不能从节表计数推导应补写的对象。诊断目录：`diagnostics/r177-zual-runway-with-ils-20260819` 与 `diagnostics/r177-zual-runway-without-ils-20260819`。
+
+## 2026-08-19 权威状态、进度与执行计划（r177 后续维护入口）
+
+本节优先于此前所有默认通用数据状态摘要；历史章节仅保留为可复核实验记录。每次继续本仓库前，先检查本节、根目录 `AGENTS.md`、`git status --short --branch`、最后有效候选的 `conversion-report.json` 与最新诊断报告。发现状态不一致时，以实际 Git、候选报告和本轮测试结果为准，并在本节同步修正。
+
+### 当前真实状态
+
+- 仓库：`https://github.com/JCH2333/defult_navdata_converter`，`main` 已与 `origin/main` 同步；当前已推送 HEAD 为 `4006348 feat: probe runway child layout effects`。此前 `53b0af4 feat: audit airport source inventory` 与 `cd476a1 docs: refresh default navdata convergence plan` 已包含在该历史中。
+- 冻结内容比较基线：`output/candidate-2608-default-r162-airway-coordinate-precision`。最新有效候选：`output/candidate-2608-default-r175-route-shape-verified`。r175 为隔离测试候选，`local_contract_verified=true`、`byte_equal_reference=false`、`deployable=false`；不得部署 Community、不得创建正式 Release。
+- 参考范围包含主覆盖包 `15` 个文件与机场补丁包 `14` 个文件。r175 的参考范围文件集合完整，但 SHA-256 相等仍为 `0/29`。字节级验收没有任何已确认的完成文件，不能把局部 SDK、读取器或单元测试结果表述为二进制收敛。
+- 全量自动化测试基线为 `390 passed`。这只表示代码回归通过；SDK 构建、读取器诊断、参考哈希、用户实机和正式发布必须独立报告。
+- 424 可序列化 `NavModel` 已覆盖机场 `275`、跑道方向 `640`、导航台 `438`、全局航点 `2741`、航路段 `4446`、终端航点 `12549`、程序段 `10409`、ILS `430`、等待航线 `1297`。模型是跨格式输入边界，不代表默认 BGL 内容已收敛。
+- IAP 共 `780` 个程序分组，仍有 `10` 个 `no_unique_primary`：`ZBAD/R29R`、`ZJSY/I08-X`、`ZSNJ/I25`、`ZSOF/R15`、`ZSOF/R33`、`ZSWY/I03`、`ZUAL/I15`、`ZYDD/R01`、`ZYDD/R01-Y`、`ZYTL/R10`。未形成唯一、可回溯的 424/PDF 证据链前必须保持拒绝。
+- r176 来源库存还识别出 `13` 条 `kind=""` 的未分类程序段：ZGBS 的 `RNP-0`、ZHCC 的 `CC3-09/CC5-17/CC5-32`、ZPDQ/ZUKD/ZUSH 的 `EO-*`。它们当前不被正式投影分类覆盖；`EO-*` 不能仅凭名称猜测为发动机失效离场并写入目标。下一步首先做只读来源审计和显式拒绝报告，不得静默丢失或提前映射。
+- 航路 SDK XML 形状已由 r174 确认为 `Previous* -> Next*`，线性、汇聚和分叉均可编译并被读取器完整登记；r175 的读取器仍对航路归一化产生三种指纹，因此航路读取器语义差分尚不能作为收敛强指标。VOR、NDB、航点表稳定，航路表只能进行结构和来源审计。
+- r176 已证明 `CONTROLLED_RADIO.csv`/`CONTROLLED.csv` 是 `APP_SECTOR` 空域扇区频率，不能投影为机场 `Com`/`Tower`。r177 已证明来源完整 ILS 是机场 BGL `0x13`/`0x32` 的充分 SDK 触发条件；正式适配器已有全部 `430` 条来源 ILS，禁止按参考节表伪造对象。
+
+### 进度口径
+
+不得使用单一百分比掩盖未闭合的格式、来源和字节契约。整体工程只能粗略估为 `40%` 至 `50%`：基础管线已建成，内容与二进制收敛仍是主体工作。字节级目标必须单列为 `0/29`，直至实际 SHA-256 统计改变。
+
+| 阶段 | 当前状态 | 阶段出口条件 |
+| --- | --- | --- |
+| 输入锁定、424 解析与 `NavModel` | 基础链路完成 | AIRAC、清单、SHA-256、来源引用和模型快照可从干净输入重建 |
+| 默认 BGL/Package Tool 构建 | 基础链路完成 | ASCII 暂存、进程等待、包结构、元数据与确定性构建检查通过 |
+| 本地验证与脱敏审计 | r162/r175 基线完成 | `validate`、布局审计、来源审计和稳定表差分均可重复 |
+| 未分类程序来源审计 | 未开始 | 13 条均有直接来源分类依据，或有显式拒绝类别、原因和计数 |
+| 航路内容收敛 | 进行中 | 先通过读取器可重复性门禁，再以稳定表指标验证改善 |
+| 机场目标表达收敛 | 进行中 | 来源完整对象经单变量 SDK 探针验证；无依据对象保持拒绝 |
+| 来源缺口闭合 | 进行中 | 跳过航段、空区域端点和未表达对象均有可复用规则或可审计拒绝 |
+| IAP 未决闭合 | 进行中 | 每组均有来源链、正反例、审计计数和 BGL 回归，或明确拒绝 |
+| BGL、索引和元数据字节收敛 | 未达标 | 参考范围 `29/29` 文件 SHA-256 全部一致 |
+| 部署与实机验收 | 未开始 | 字节一致、可恢复备份和用户实机清单全部通过 |
+
+### 接下来按顺序执行
+
+1. **建立未分类程序审计器。** 新增只读 `unclassified-procedure-audit`，只消费 `NavModel`、直接 424 CSV/PDF 和可验证的源文件哈希。报告每条的机场、标签族、跑道、数据库编码页、腿类型、现有图页类型、可证明分类与拒绝原因；明确 `reference_records_read=false`。先写最小 fixture 与 CLI 测试，不修改 `source.py` 或 BGL 投影。
+2. **按标签族建立来源规则或永久拒绝。** 将 `RNP-0`、`CC*-*`、`EO-*` 分开处理。只有字段或直接标题唯一证明其是可表达的离场、进场或进近类别时，才增加模型 `kind` 规则；无法无损表达的程序进入显式 `RejectedProcedure`/审计计数，保留来源位置和原因。每条规则必须有正例、至少一个拒绝例、模型快照回归和 BGL 回归。
+3. **继续来源驱动的机场 SDK 探针。** 每次只选择一个来源完整、尚无否决结论的机场对象。最小探针必须保存输入 XML、唯一变量、Package Tool 轨迹、BGL 头部/节表、读取器登记、文件哈希和结论。SDK 节表仅作诊断，不得成为添加对象的内容来源；禁止重复已否决的 `Ndb`、`onlyAddIfReplace`、根节点终端点重复和空域通信映射方向。
+4. **航路只在可重复诊断条件下收敛。** 对同一 BGL 至少独立读取两次，运行 `semantic-reproducibility-audit`。只有归一化行多集指纹稳定的表，才可用严格相等、逻辑键和字段差异判断新候选改善；航路表不稳定时只处理 XML 合法性、来源完整性、坐标精度、边界框、fragment/sequence、同名分组和最低高度的最小探针。
+5. **闭合来源缺口。** 对 `12` 条跳过航段、`5` 个未决指定点、`18` 个服务机场未落入来源机场集合的导航台及其他不可表达对象建立来源卡片。允许证据仅为当期 424 直接表、可审计 PDF、受限可复跑 OCR、FIR/ACC 几何和邻接规则；严禁 Fenix、参考 BGL/SQLite、参考坐标、参考节表或参考逻辑键回填。
+6. **逐组解决 IAP 未决。** 继续按十组清单建立“直接来源 -> 唯一规则 -> 正例/拒绝例 -> 审计 -> BGL 投影”闭环。OCR 只能在已有数据库主进近和已匹配 PDF 的三份可复跑缓存共识下参与消歧，不能创建主进近、航段、图页匹配或坐标航点。
+7. **分文件推进二进制收敛与确定性。** 先验证同一干净输入两次构建彼此字节一致，再逐类比较 `00_enroute.bgl`、区域机场 BGL、机场补丁 BGL、`bglIndex.bout`、`layout.json`、`manifest.json` 和 ContentInfo。每个候选固定 SDK、ASCII 暂存根、输入 XML 排序、包名、元数据和构建时序，并保存输入 manifest、模型/profile/工具版本、文件树和逐文件哈希。
+8. **最终验收与部署。** 仅当 `29/29` 后，从干净输入重建、验证报告和哈希可重复；确认 `FlightSimulator2024.exe` 已退出，创建完整时间戳备份并完成恢复演练；随后由用户验证 `ZBCF`、`ZUNZ`、`ZUUU` 的机场输入、跑道、SID、STAR、IAP、航路/航点、退出飞行和退出模拟器。全部通过前始终是测试版。
+
+### 可复用 424 转换管线
+
+固定阶段为：
+
+`lock-inputs -> ingest-424 -> evidence-audit -> normalize-model -> model-audit -> project-target -> build-target -> validate-target -> diff-and-audit -> stage-backup-deploy`
+
+- `lock-inputs` 固化 AIRAC、CSV/PDF、官方目标模板、SDK/读取器/编译器版本、文件树和 SHA-256。
+- `ingest-424`/`evidence-audit` 只产生可回溯来源。OCR 必须记录缓存格式、页面哈希、渲染参数、模型和命令；它是可复跑的受限证据，不是一次性人工补录渠道。
+- `normalize-model`/`model-audit` 维护通用 `NavModel`、原始精度、来源引用、拒绝项、规则版本、身份唯一性、引用完整性和计数。目标 schema、字符串限制、空值、排序、元数据和运行时契约不得写入 `source.py`。
+- `project-target` 为默认 BGL、Fenix、TFDI、PMDG、FSL/FSLabs、iFly 等分别建立独立 profile/adapter。每个 profile 先登记官方基线、真实加载路径、格式/schema、字段单位、NULL/default、物理顺序、元数据、降级策略、最小 fixture、验证命令和实机清单；adapter 只消费模型快照，不重新解析 424。
+- `build-target`/`validate-target`/`diff-and-audit` 只写隔离候选目录，分别输出自动化测试、结构构建、读取器诊断、来源审计、语义差分、布局审计、文件树和 SHA-256。GUI、CLI、自动更新和部署必须共用 profile、候选报告和 `deployable` 门禁，任何入口不能绕过。
+- `stage-backup-deploy` 是唯一可写游戏文件的阶段，必须受字节一致、干净重建、游戏关闭、时间戳备份、恢复演练和实机清单共同约束。
+
+### 每轮 Codex 更新规则
+
+1. 实验前记录递增 `rNNN`、唯一假设、唯一变量、输入/工具 SHA-256、禁止读取的数据、预期成功/失败指标。
+2. 先增加最小测试或最小 SDK 探针，再决定是否修改正式 adapter；失败实验只保留诊断，不污染候选或来源规则。
+3. 实验后记录候选/诊断目录、提交号、测试、SDK 构建、读取器完整性与可重复性、参考 `29` 文件哈希、稳定表语义差分、来源审计、保留或否决结论。
+4. 代码或仓库文档修改后运行相应测试、`git diff --check`、审查暂存区，只提交单一可解释变更并推送。数据库、备份、日志、诊断产物、SDK 中间输出和外部测试包不得进入 Git。
+5. 所有状态报告必须分别说明自动化测试、SDK 构建、本地读取器诊断、参考哈希、用户实机验证和正式发布，任何一项都不能替代另一个阶段。
