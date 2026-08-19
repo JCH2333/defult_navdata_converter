@@ -2565,3 +2565,35 @@ Package Tool 构建、验证和部署门禁已具备。它不能与来源闭合�
   转向对现有 424 结构化来源中尚未进入 `NavModel` 的对象类别进行来源完整性库存审计。该库存审计
   只能比较“原始来源已解析字段”和“当前模型是否消费”，不得读取参考导航 payload 或据 BGL 节表
   反推对象。
+
+## 2026-08-19 r256 424 来源到 NavModel 完整性库存
+
+- 实验编号：`r256-source-model-completeness-audit`。新增可复用只读命令
+  `source-model-completeness-audit --raw-root <424-root> --model <snapshot> --output <report>`，
+  实现位于 `source_model_completeness_audit.py`。审计使用声明式来源字段组对照已冻结 `NavModel`；
+  只读取 424 CSV 表头/行数和模型快照，不读取参考导航 payload、Fenix、候选、SDK 输出或 OCR 缓存，
+  也不授权模型或适配器变更。
+- 实测报告为 `diagnostics\r256-source-model-completeness-20260819.json`，SHA-256 为
+  `43a487df01479550602b1488ac4e8861df97bca09e5faf54c41f613c779e3afc`。8 个声明来源组均具备
+  当前 2608 CSV 完整表头：机场 275、跑道 640、导航台 438、指定点 2741、航路腿 4446 已分别进入
+  `Airport`/`Runway`/`Navaid`/`Waypoint`/`AirwayLeg`；FIR 几何仅保留为区域恢复审计证据。
+  空表的合法表头必须视为字段存在，r256 的最初实跑曾误把该情况报为缺字段，已通过独立表头校验修复
+  并加入回归。
+- `APPSECTOR_RUNWAYDIRECTION` 与四类 `*_RADIO` 的扇区通信保持
+  `rejected_by_source_scope_and_cardinality`：它们经空域和跑道方向关联机场，同一记录可关联多个
+  跑道方向，不能投影为机场 `Com`/`Tower`。这是拒绝结论，不是后续候选。
+- 唯一来源完整但尚未有目标表达契约的对象是
+  `RWY_DIRECTION.VAL_THR_DISPLACE`：原始数据有 33 条正位移记录，语义仅与 SDK
+  `OffsetThreshold` 直接对应。其状态为 `source_complete_target_contract_unverified`，只能进入隔离的
+  最小正反 fixture 和单变量 Package Tool 探针；不得直接写入 `NavModel`、正式 adapter、候选包或
+  Community。来源完整性审计本身不构成任何内容投影授权。
+- 冻结模型仍为
+  `output\intermediate-2608-r187-navaid-label-replay.json.gz`，SHA-256
+  `7cec24bd4a57545d39aab037abe4125c763ad12f364bd5f8f0073b0e050fdb4b`；r188/r189 自重放仍为
+  `29/29`，参考字节验收仍为 `0/29`，8 张 IAP 卡仍为 `projection_allowed=false`，来源卡覆盖仍为
+  `32/40`，`deployable=false`。本轮未修改模型、候选、Community、部署或实机状态。
+- 新增回归覆盖来源边界、非零阈值位移候选、扇区通信拒绝、空 CSV 表头和 CLI 调用路径；阶段性测试为
+  `23 passed in 1.08s`，完整回归为 `460 passed in 4.10s`，`git diff --check` 通过。
+- 下一项唯一工作：为 `RWY_DIRECTION.VAL_THR_DISPLACE` 编写最小正反 SDK fixture，并在纯 ASCII
+  隔离项目中只改变 `OffsetThreshold`，确认两端映射、BGL 格式、标准 JSON 重读、受影响文件角色和
+  自重放影响。未出现明确 SDK 表达或参考 `x/29` 实际增长时，结论必须为拒绝，不得接入正式 adapter。

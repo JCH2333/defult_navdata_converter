@@ -36,6 +36,10 @@ from .airport_source_inventory import (
     build_airport_source_inventory,
     write_airport_source_inventory,
 )
+from .source_model_completeness_audit import (
+    audit_source_model_completeness,
+    write_source_model_completeness_audit,
+)
 from .airport_bgl_cardinality_audit import (
     audit_airport_bgl_cardinality,
     write_airport_bgl_cardinality_audit,
@@ -422,6 +426,25 @@ def build_parser() -> argparse.ArgumentParser:
         "--output",
         required=True,
         help="本地机场来源对象库存 JSON 输出路径",
+    )
+    source_model_completeness = sub.add_parser(
+        "source-model-completeness-audit",
+        help="只读盘点已解析 424 字段组与 NavModel 消费边界",
+    )
+    source_model_completeness.add_argument(
+        "--raw-root",
+        required=True,
+        help="2608 原始 CSV/PDF 目录；只读取声明的 CSV 字段组",
+    )
+    source_model_completeness.add_argument(
+        "--model",
+        required=True,
+        help="可复用 NavModel 快照（JSON 或 JSON.GZ）",
+    )
+    source_model_completeness.add_argument(
+        "--output",
+        required=True,
+        help="本地来源完整性库存 JSON 输出路径",
     )
     unclassified_procedure_audit = sub.add_parser(
         "unclassified-procedure-audit",
@@ -1408,6 +1431,16 @@ def main(argv: list[str] | None = None) -> int:
         output = Path(args.output).expanduser().resolve()
         report["output"] = str(output)
         write_airport_source_inventory(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "source-model-completeness-audit":
+        report = audit_source_model_completeness(
+            Path(args.raw_root),
+            load_model(Path(args.model)),
+        )
+        output = Path(args.output).expanduser().resolve()
+        report["output"] = str(output)
+        write_source_model_completeness_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "unclassified-procedure-audit":
