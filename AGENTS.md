@@ -1602,3 +1602,11 @@
 - 本卡跑道 `30` 与 terminal-database-coding 页列出的 `30` 一致，但跑道一致性不是程序类别证明，不能替代缺失的标签锚点或允许按标题顺序归类。处置保持 `rejected_missing_direct_label_anchor`、`source_proven_kind=null`、`target_mapping_allowed=false`。
 - 模型、投影、候选、Community 和部署不变；自重放 `29/29`、参考一致 `0/29`、`deployable=false`，字节收敛未推进。
 - 下一项唯一任务：从稳定排序的下一张未分类程序卡 `ZHCC:CC3-09:12R:4` 开始独立审计。其来源文件和标签族均不同，必须先重新核对 PDF/模型哈希和直接标签锚点，不能把 ZGBS RNP 结论泛化为规则。
+
+## 2026-08-19 r228 ZHCC CC3-09 程序卡直接来源审计
+
+- 实验编号：`r228-zhcc-cc3-09-12r-unclassified-procedure-card-audit`。唯一变量是切换到不同机场、不同来源文件和 `cc_numeric` 标签族的精确卡 `ZHCC:CC3-09:12R:4`；仍只执行 `unclassified-procedure-card-audit`，不修改代码、模型、候选、Community 或部署。
+- 真实报告为 `diagnostics\r228-zhcc-cc3-09-12r-unclassified-procedure-card-audit-20260819.json`。来源 `ZHCC-4Z12.pdf` 第 1 页的 SHA-256 为 `d69025ea3321a275918d57571daba12c315d4f7aca747b90bb918693770be8b2`，与模型一致；程序腿为 `IF CC304`、`TF CC406`、`IF CC608`。同页 terminal-database-coding 图页列出跑道 `12R/30L/30R`，并有 13 条类别标题事实。
+- `CC3-09` 在直接文本中命中 `0`，没有同文本行标签-类别链接。即使若干类别标题和部分腿标识共同出现，也不能将标识重合、跑道一致、图面顺序或等待航线位置转换为标签类别证据。
+- 处置为 `rejected_missing_direct_label_anchor`、`source_proven_kind=null`、`target_mapping_allowed=false`。这证明 r224 的拒绝门禁在不同机场/标签族上仍成立，但不构成修改任何程序投影的正向规则；模型、候选、Community 和部署不变，自重放 `29/29`、参考一致 `0/29`、`deployable=false`，字节收敛未推进。
+- 下一项唯一任务：按稳定排序审计 `ZHCC:CC5-17:30L:5`。该卡与 r228 共用来源页但标签、跑道和腿不同，必须按精确卡独立审计，不能从 `CC3-09` 的标签缺失外推其直接文本结果。
