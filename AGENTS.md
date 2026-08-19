@@ -1350,3 +1350,12 @@
 - 代码或仓库文档变更后必须运行 `pytest -q`、`git diff --check`，精确审查暂存区，提交一个可解释主题，并尝试普通 `git push`；诊断、缓存、候选、日志、数据库、备份、SDK 中间产物和外部测试包不得提交。
 - 当前实际 Git：工作树干净，`main` 比 `origin/main` 领先 `27` 个提交，远端为 `JCH2333/defult_navdata_converter`。网络恢复后仅普通 `git push` 与 `git ls-remote --heads origin main`，禁止强推、重写历史或丢弃本地提交。
 - r214 的唯一下一项工作是机场 BGL 节表基数审计；在完成前不得修改 `NavModel`、正式 BGL 投影、候选、Community 或部署逻辑。
+
+## 2026-08-19 r214 机场 BGL 节表基数审计结果
+
+- 实验编号：`r214-airport-bgl-cardinality-audit`。唯一变量是新增只读诊断 `airport-bgl-cardinality-audit`；它读取 r187 `NavModel` 的区域来源计数、候选/参考最终机场 BGL 的固定头和节表，不读取 BGL payload、参考导航记录、参考坐标或 Fenix，也不修改模型、XML、候选、Community 或部署逻辑。
+- 新模块 `airport_bgl_cardinality_audit.py` 按最终参考包顶层根目录过滤候选支持包和 `_work`，按 `ZB` 至 `ZY` 区域 BGL 输出节类型、单节记录数和大小、候选/参考存在性差异，以及该区域的机场、跑道方向、终端点、ILS、程序段和等待航线来源计数。报告固定声明 `read_only=true`、`reference_records_exported=false`、`reference_payload_read=false`、`section_type_semantics_inferred=false`；节类型只能作为基数差异，不得被命名为任何对象类型。
+- 真实命令使用 r187、r188 和 `Default navdata 2608R1`，输出为 `diagnostics\r214-airport-bgl-cardinality-audit-20260819.json`。范围为候选/参考各 `20` 个机场 BGL，公共文件 `20` 个；参考 `20/20` 含 `0x17`、候选 `20/20` 缺失 `0x17`；参考 `18/20` 含 `0x33`、候选 `20/20` 缺失 `0x33`；候选 `20/20` 独有 `0x35`，参考 `0/20` 含 `0x35`。例如 ZB 的来源计数为机场 `37`、跑道方向 `88`、终端点 `1402`、ILS `58`、程序段 `1254`、等待航线 `166`，但这些计数不证明任何节的语义归属。
+- 自动化新增最小伪 BGL/模型 fixture，覆盖参考有 `0x17/0x33`、候选缺失、候选支持包排除、模型区域来源计数和禁止 payload/语义推断的报告门禁。全量回归为 `429 passed`。r188/r189 自重放仍为 `29/29`，参考一致仍为 `0/29`，`deployable=false`；字节收敛未推进。
+- 已确认经验：当节表差异与来源对象计数同时存在时，二者只能构成下一步 SDK 探针的量化输入，不能证明映射关系。后续探针必须从单个、来源完整且未否决的 SDK 对象出发，验证其是否同时解释节类型、作用域和记录数量；无法满足三者时不得接入 adapter。
+- 下一项唯一任务：基于 r214 看板选择一个尚未否决、具备同周期直接来源的机场 SDK 子对象，先设计单变量隔离探针，要求结果能同时报告对象作用域、节表变化和记录基数。不得重试已否决的跑道表面、阈值位移、机场关联 VOR/NDB、空域通信、根终端点重复或等待航线隔离；在探针结论前不得修改正式投影。

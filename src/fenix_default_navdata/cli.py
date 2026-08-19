@@ -23,6 +23,10 @@ from .airport_source_inventory import (
     build_airport_source_inventory,
     write_airport_source_inventory,
 )
+from .airport_bgl_cardinality_audit import (
+    audit_airport_bgl_cardinality,
+    write_airport_bgl_cardinality_audit,
+)
 from .default_gap_cards import (
     audit_default_gap_cards,
     write_default_gap_cards,
@@ -268,6 +272,25 @@ def build_parser() -> argparse.ArgumentParser:
         help="可选的同输入重复候选，用于逐文件重放确定性比较",
     )
     convergence.add_argument("--output", required=True, help="本地收敛看板 JSON 输出路径")
+    airport_bgl_cardinality = sub.add_parser(
+        "airport-bgl-cardinality-audit",
+        help="只读比较机场 BGL 节表基数与 NavModel 区域来源计数，不读取参考记录",
+    )
+    airport_bgl_cardinality.add_argument(
+        "--model",
+        required=True,
+        help="可复用 NavModel 快照（JSON 或 JSON.GZ）",
+    )
+    airport_bgl_cardinality.add_argument("--candidate", required=True, help="候选包根目录")
+    airport_bgl_cardinality.add_argument(
+        "--reference",
+        help="Default navdata 2608R1 参考包根目录；省略时自动检测",
+    )
+    airport_bgl_cardinality.add_argument(
+        "--output",
+        required=True,
+        help="本地机场 BGL 节表基数审计 JSON 输出路径",
+    )
     model_replay = sub.add_parser(
         "model-replay-audit",
         help="只读比较两个 NavModel 快照，并以精确路径和哈希执行白名单门禁",
@@ -1122,6 +1145,22 @@ def main(argv: list[str] | None = None) -> int:
         )
         report["output"] = str(output)
         write_file_convergence_audit(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "airport-bgl-cardinality-audit":
+        reference = _path(args.reference) or detect_paths().reference_root
+        if not reference:
+            raise SystemExit("无法自动检测 Default navdata 2608R1 参考目录，请显式传入 --reference")
+        model_path = Path(args.model).expanduser().resolve()
+        output = Path(args.output).expanduser().resolve()
+        report = audit_airport_bgl_cardinality(
+            load_model(model_path),
+            Path(args.candidate),
+            reference,
+            model_path=model_path,
+        )
+        report["output"] = str(output)
+        write_airport_bgl_cardinality_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "model-replay-audit":
