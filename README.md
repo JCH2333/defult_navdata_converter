@@ -109,6 +109,12 @@ python -m fenix_default_navdata.cli airway-endpoint-card-audit `
   --model output\intermediate-2608-r187-navaid-label-replay.json.gz `
   --ident P225 `
   --output diagnostics\airway-endpoint-card-P225.json
+python -m fenix_default_navdata.cli non-designated-airway-endpoint-card-audit `
+  --raw "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
+  --model output\intermediate-2608-r187-navaid-label-replay.json.gz `
+  --ident "****" `
+  --endpoint-type "地名点" `
+  --output diagnostics\non-designated-airway-endpoint-card.json
 python -m fenix_default_navdata.cli airport-source-inventory `
   --model output\intermediate-2608-r155-airway-identities.json.gz `
   --candidate-xml output\candidate-2608-default-r175-route-shape-verified\_work\china-navdata.xml `
@@ -262,6 +268,7 @@ python -m fenix_default_navdata.cli build `
 - `airport-bgl-cardinality-audit` 只读取 r187 等 `NavModel` 的区域来源计数，以及候选和参考最终机场 BGL 的固定头和节表。它按区域文件记录节类型、基数、尺寸和存在性差异，明确输出 `reference_payload_read=false` 与 `section_type_semantics_inferred=false`；报告不能导出参考记录、坐标或 payload，也不能把 `0x17`、`0x33` 等节类型反向解释为应投影的对象。
 - `enroute-bgl-cardinality-audit` 以同样边界读取单个最终 `00_enroute.bgl` 的头和节表，并并列 VOR/NDB、全局航点、航路段、区域未决段和拒绝记录的模型计数。它只量化候选与参考的节表差异，不能将节类型、参考计数或哈希反向解释为应补写的内容。
 - `airway-endpoint-card-audit` 以 `DESIGNATED_POINT.csv` 的 UUID 精确关联 `RTE_SEG.csv`，并列指定点自身 FIR/服务机场、关联航段端点 FIR、ACC 名称、可直接映射的 FIR/ACC 和模型侧已来源化的邻接地区。它只输出一个端点的可复核拒绝或来源不足结论，不读取参考/Fenix，不改模型或候选。
+- `non-designated-airway-endpoint-card-audit` 面向地名点等不能进入指定点身份目录的航路端点。它校验单一内部 UUID/坐标、检查该 UUID 不在 `DESIGNATED_POINT`、VOR、NDB 命名身份目录中，并记录单侧邻接；禁止跨类型伪造指定点或以邻接补写地区。
 - `scripts/airport_subset_probe.py` 的隔离构建会在本次诊断目录写入 `probe-report.json`，记录完整输入选择、每个探针 BGL 的文件大小、头部版本、QMID、节表类型/计数/尺寸和读取器状态。它只用于验证 SDK 输入对象如何影响编译布局，不读取参考 BGL 的内容。
 - 该探针的 `--set-airport-attribute name=value` 仅为隔离编译实验设置 XML 属性，绝不写入 `NavModel` 或正式候选。
 - `--append-airport-child "TAG;NAME=VALUE;..."` 可在每个被选机场末尾追加属性型 SDK 子对象，用于可复现的单变量布局实验；它同样永远不写入 `NavModel` 或正式候选。

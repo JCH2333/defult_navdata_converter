@@ -2,6 +2,7 @@ from pathlib import Path
 
 from fenix_default_navdata.airway_endpoint_card_audit import (
     audit_airway_endpoint_card,
+    audit_non_designated_airway_endpoint_card,
 )
 from fenix_default_navdata.model import AirwayLeg, NavModel, SourceRef, Waypoint
 
@@ -234,3 +235,54 @@ def test_card_audit_requires_exactly_one_designated_point_identity(
         assert "唯一身份数为 2" in str(error)
     else:  # pragma: no cover - assertion keeps the failure message direct
         raise AssertionError("重复指定点身份必须拒绝")
+
+
+def test_non_designated_card_rejects_internal_uuid_without_named_identity(
+    tmp_path: Path,
+) -> None:
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    _write_csv(
+        raw / "RTE_SEG.csv",
+        "\n".join((
+            "RTE_SEG_ID,VAL_SORT,CODE_POINT_START,CODE_TYPE_START,CODE_FIR_START,GEO_LAT_START_ACCURACY,GEO_LONG_START_ACCURACY,POINT_START_ID,CODE_POINT_END,CODE_TYPE_END,CODE_FIR_END,GEO_LAT_END_ACCURACY,GEO_LONG_END_ACCURACY,POINT_END_ID,TXT_DESIG,Airspace_Remark",
+            "m771,1,****,地名点,,N143400,E1115530,internal-id,DONDA,DESIGNATED_POINT,,N144212,E1120118,donda-id,M771,三亚ACC",
+        )),
+    )
+    _write_csv(
+        raw / "DESIGNATED_POINT.csv",
+        "SIGNIFICANT_POINT_ID,CODE_ID\n"
+        "donda-id,DONDA\n",
+    )
+    _write_csv(raw / "VOR.csv", "VOR_ID,CODE_ID\n")
+    _write_csv(raw / "NDB.csv", "NDB_ID,CODE_ID\n")
+    source = SourceRef("RTE_SEG.csv", 2)
+    model = NavModel(
+        raw,
+        airway_legs=[AirwayLeg(
+            "M771", 1, "****", "DONDA", source,
+            start_type="地名点", end_type="DESIGNATED_POINT",
+            start_latitude=14.566667, start_longitude=111.925,
+            end_latitude=14.703333, end_longitude=112.021667,
+            end_country="ZJ", source_airspace_remark="三亚ACC",
+        )],
+    )
+
+    report = audit_non_designated_airway_endpoint_card(
+        raw,
+        model,
+        ident="****",
+        endpoint_type="地名点",
+    )
+
+    assert report["endpoint"]["internal_point_id"] == "internal-id"
+    assert report["identity_catalog_uuid_occurrences"] == {
+        "DESIGNATED_POINT.csv": 0,
+        "VOR.csv": 0,
+        "NDB.csv": 0,
+    }
+    assert report["model_source_evidence"]["neighbor_regions"] == ["ZJ"]
+    assert report["disposition"] == (
+        "rejected_non_designated_endpoint_identity_unavailable"
+    )
+    assert report["projection_allowed"] is False

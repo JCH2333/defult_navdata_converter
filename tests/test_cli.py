@@ -295,6 +295,46 @@ def test_airway_endpoint_card_audit_writes_requested_report(monkeypatch) -> None
     assert received["output"] == Path("diagnostics/p225.json").resolve()
 
 
+def test_non_designated_airway_endpoint_card_audit_writes_requested_report(
+    monkeypatch,
+) -> None:
+    received: dict[str, object] = {}
+
+    monkeypatch.setattr(cli, "load_model", lambda path: received.update(
+        model_path=path
+    ) or NavModel(Path("model-root")))
+    monkeypatch.setattr(
+        cli,
+        "audit_non_designated_airway_endpoint_card",
+        lambda raw, model, **kwargs: received.update(
+            raw=raw,
+            model=model,
+            **kwargs,
+        ) or {"diagnostic": "non-designated-airway-endpoint-card-source-audit-v1"},
+    )
+    monkeypatch.setattr(
+        cli,
+        "write_airway_endpoint_card_audit",
+        lambda path, report: received.update(output=path, report=report),
+    )
+
+    result = cli.main([
+        "non-designated-airway-endpoint-card-audit",
+        "--raw", "raw",
+        "--model", "output/model.json.gz",
+        "--ident", "****",
+        "--endpoint-type", "地名点",
+        "--output", "diagnostics/m771.json",
+    ])
+
+    assert result == 0
+    assert received["raw"] == Path("raw")
+    assert received["model_path"] == Path("output/model.json.gz")
+    assert received["ident"] == "****"
+    assert received["endpoint_type"] == "地名点"
+    assert received["output"] == Path("diagnostics/m771.json").resolve()
+
+
 def test_file_convergence_audit_writes_requested_report(monkeypatch) -> None:
     received: dict[str, object] = {}
 

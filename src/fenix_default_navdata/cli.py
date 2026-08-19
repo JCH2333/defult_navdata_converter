@@ -21,6 +21,7 @@ from .airway_endpoint_audit import (
 )
 from .airway_endpoint_card_audit import (
     audit_airway_endpoint_card,
+    audit_non_designated_airway_endpoint_card,
     write_airway_endpoint_card_audit,
 )
 from .airport_source_inventory import (
@@ -352,6 +353,19 @@ def build_parser() -> argparse.ArgumentParser:
     endpoint_card.add_argument("--model", required=True)
     endpoint_card.add_argument("--ident", required=True)
     endpoint_card.add_argument("--output", required=True, help="本地诊断 JSON 输出路径")
+    non_designated_endpoint_card = sub.add_parser(
+        "non-designated-airway-endpoint-card-audit",
+        help="只读复核地名点等非指定点航路端点，禁止跨类型补写身份",
+    )
+    non_designated_endpoint_card.add_argument("--raw", help="2608 原始 CSV/PDF 目录")
+    non_designated_endpoint_card.add_argument("--model", required=True)
+    non_designated_endpoint_card.add_argument("--ident", required=True)
+    non_designated_endpoint_card.add_argument("--endpoint-type", required=True)
+    non_designated_endpoint_card.add_argument(
+        "--output",
+        required=True,
+        help="本地诊断 JSON 输出路径",
+    )
     airport_inventory = sub.add_parser(
         "airport-source-inventory",
         help="只读盘点 NavModel 中可用于机场 BGL 的来源对象与拒绝边界",
@@ -1257,6 +1271,21 @@ def main(argv: list[str] | None = None) -> int:
             raw,
             load_model(Path(args.model)),
             ident=args.ident,
+        )
+        report["output"] = str(output)
+        write_airway_endpoint_card_audit(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "non-designated-airway-endpoint-card-audit":
+        raw = _path(args.raw) or detect_paths().raw_root
+        if not raw:
+            raise SystemExit("无法自动检测 424 原始目录，请显式传入 --raw")
+        output = Path(args.output).expanduser().resolve()
+        report = audit_non_designated_airway_endpoint_card(
+            raw,
+            load_model(Path(args.model)),
+            ident=args.ident,
+            endpoint_type=args.endpoint_type,
         )
         report["output"] = str(output)
         write_airway_endpoint_card_audit(output, report)

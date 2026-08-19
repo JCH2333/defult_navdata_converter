@@ -88,6 +88,167 @@ def _raw_related_segments(
     )
 
 
+def _non_designated_endpoint_occurrences(
+    raw_root: Path,
+    ident: str,
+    endpoint_type: str,
+) -> list[dict[str, object]]:
+    matches: list[dict[str, object]] = []
+    for row_number, row in enumerate(_rows(raw_root / "RTE_SEG.csv"), start=2):
+        for side, prefix in (("start", "START"), ("end", "END")):
+            if (
+                (row.get(f"CODE_POINT_{prefix}") or "").strip().upper()
+                != ident
+                or (row.get(f"CODE_TYPE_{prefix}") or "").strip()
+                != endpoint_type
+            ):
+                continue
+            point_id = (row.get(f"POINT_{prefix}_ID") or "").strip()
+            matches.append({
+                "source_row": row_number,
+                "airway": (row.get("TXT_DESIG") or "").strip().upper(),
+                "sequence": int(float(row.get("VAL_SORT") or 0)),
+                "side": side,
+                "internal_point_id": point_id,
+                "latitude": row.get(f"GEO_LAT_{prefix}_ACCURACY") or "",
+                "longitude": row.get(f"GEO_LONG_{prefix}_ACCURACY") or "",
+                "endpoint_fir": row.get(f"CODE_FIR_{prefix}") or "",
+                "acc_names": sorted(
+                    _airway_acc_names(row.get("Airspace_Remark") or "")
+                ),
+            })
+    return sorted(
+        matches,
+        key=lambda item: (
+            str(item["airway"]),
+            int(item["sequence"]),
+            str(item["side"]),
+        ),
+    )
+
+
+def _catalog_uuid_occurrences(raw_root: Path, point_id: str) -> dict[str, int]:
+    """Count exact UUID appearances in admissible named-navigation catalogs."""
+
+    catalogs = ("DESIGNATED_POINT.csv", "VOR.csv", "NDB.csv")
+    return {
+        filename: sum(
+            point_id in {
+                str(value or "").strip()
+                for value in row.values()
+            }
+            for row in _rows(raw_root / filename)
+        )
+        for filename in catalogs
+        if (raw_root / filename).is_file()
+    }
+
+
+def audit_non_designated_airway_endpoint_card(
+    raw_root: Path,
+    model: NavModel,
+    *,
+    ident: str,
+    endpoint_type: str,
+) -> dict[str, object]:
+    """Reject a non-designated route endpoint without inventing an identity."""
+
+    normalized_ident = ident.strip().upper()
+    normalized_type = endpoint_type.strip()
+    if not normalized_ident or not normalized_type:
+        raise AirwayEndpointCardAuditError("端点标识和类型不能为空")
+    if normalized_type == "DESIGNATED_POINT":
+        raise AirwayEndpointCardAuditError("指定点必须使用 designated endpoint 审计")
+    raw_root = raw_root.expanduser().resolve()
+    occurrences = _non_designated_endpoint_occurrences(
+        raw_root,
+        normalized_ident,
+        normalized_type,
+    )
+    if not occurrences:
+        raise AirwayEndpointCardAuditError(
+            f"RTE_SEG.csv 中没有 {normalized_type}/{normalized_ident} 的精确端点"
+        )
+    point_ids = {str(item["internal_point_id"]) for item in occurrences}
+    coordinates = {
+        (str(item["latitude"]), str(item["longitude"]))
+        for item in occurrences
+    }
+    if len(point_ids) != 1 or "" in point_ids or len(coordinates) != 1:
+        raise AirwayEndpointCardAuditError(
+            "非指定点端点的内部 UUID 或坐标不唯一，不能形成可复核单卡"
+        )
+    endpoint_audit = audit_unresolved_airway_endpoints(model)
+    model_matches = [
+        item
+        for item in endpoint_audit["items"]
+        if item["endpoint"]["type"] == normalized_type
+        and item["endpoint"]["ident"] == normalized_ident
+    ]
+    if len(model_matches) != 1:
+        raise AirwayEndpointCardAuditError(
+            f"NavModel 中 {normalized_type}/{normalized_ident} 的未决身份数为 "
+            f"{len(model_matches)}"
+        )
+    model_item = model_matches[0]
+    point_id = next(iter(point_ids))
+    catalog_occurrences = _catalog_uuid_occurrences(raw_root, point_id)
+    if any(catalog_occurrences.values()):
+        raise AirwayEndpointCardAuditError(
+            "非指定点内部 UUID 意外出现在命名导航身份目录，必须先人工复核"
+        )
+    direct_firs = sorted({
+        str(item["endpoint_fir"]).strip()
+        for item in occurrences
+        if str(item["endpoint_fir"]).strip()
+    })
+    return {
+        "diagnostic": "non-designated-airway-endpoint-card-source-audit-v1",
+        "read_only": True,
+        "model_changed": False,
+        "projection_changed": False,
+        "reference_records_read": False,
+        "fenix_records_read": False,
+        "endpoint": {
+            "ident": normalized_ident,
+            "source_type": normalized_type,
+            "internal_point_id": point_id,
+            "coordinates": {
+                "latitude": next(iter(coordinates))[0],
+                "longitude": next(iter(coordinates))[1],
+            },
+        },
+        "source_files": {
+            "RTE_SEG.csv": _file_sha256(raw_root / "RTE_SEG.csv"),
+            **{
+                filename: _file_sha256(raw_root / filename)
+                for filename in catalog_occurrences
+            },
+        },
+        "raw_occurrences": occurrences,
+        "identity_catalog_uuid_occurrences": catalog_occurrences,
+        "direct_evidence": {
+            "endpoint_firs": direct_firs,
+            "acc_names": sorted({
+                name
+                for item in occurrences
+                for name in item["acc_names"]
+            }),
+        },
+        "model_source_evidence": {
+            "category": model_item["category"],
+            "neighbor_regions": model_item["neighbor_regions"],
+            "related_legs": model_item["related_legs"],
+        },
+        "disposition": "rejected_non_designated_endpoint_identity_unavailable",
+        "projection_allowed": False,
+        "reason": (
+            "端点类型不是 DESIGNATED_POINT，内部 UUID 不存在于允许的命名导航"
+            "身份目录；不能把地名点伪装为指定点，也不能仅凭单侧邻接发明区域键"
+        ),
+    }
+
+
 def audit_airway_endpoint_card(
     raw_root: Path,
     model: NavModel,

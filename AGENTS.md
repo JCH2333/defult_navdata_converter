@@ -1496,3 +1496,12 @@
 - 至此，来源缺口中的五个 `DESIGNATED_POINT` 区域身份 `P121/P127/P188/P225/P239` 均已通过 UUID 精确卡审计并保持拒绝。它们覆盖了所有 `DESIGNATED_POINT` 类型的 11 张航路端点卡和 5 张全局航点卡；没有任何卡获得新的唯一地区。M771 的 `****` 是唯一剩余航路端点卡，但它不是指定点，不能强行套用 UUID 审计。
 - 本轮不增加投影规则，完整回归、提交前检查待本轮完成。模型、BGL、候选、Community 和部署状态均未变，参考一致仍 `0/29`、`deployable=false`，字节收敛未推进。
 - 下一项唯一任务：为 M771 的非指定点 `****` 建立可复用的只读端点身份审计，验证其无法回链 `DESIGNATED_POINT.csv` 且不能仅凭单侧 `ZJ` 邻接恢复；该任务不得将 `****` 伪装为指定点或修改模型。
+
+## 2026-08-19 r223 M771 非指定点身份审计
+
+- 实验编号：`r223-m771-non-designated-endpoint-card-source-audit`。唯一假设是：M771 的 `****` 虽有 `RTE_SEG` 内部 UUID，是否能从允许的命名导航身份目录得到可投影的指定点、VOR 或 NDB 身份。变量是新增 `non-designated-airway-endpoint-card-audit`；它只处理非 `DESIGNATED_POINT` 类型，强制单一内部 UUID、单一坐标和单一模型未决身份，禁止跨类型调用指定点审计。
+- 真实报告为 `diagnostics\r223-m771-non-designated-endpoint-card-source-audit-20260819.json`。M771 第 `4421` 行的 `****` 类型为“地名点”、内部 UUID `1dcf91d7-66b2-4b88-b1af-287f4615fef8`、坐标 `N143400/E1115530`、端点 FIR 为空；该 UUID 在 `DESIGNATED_POINT.csv`、`VOR.csv`、`NDB.csv` 中出现次数均为 `0`。它仅与 `DONDA/ZJ` 单侧相邻，备注为“三亚 ACC”。
+- 处置为 `rejected_non_designated_endpoint_identity_unavailable`、`projection_allowed=false`。路由内部 UUID 不是可投影的命名导航身份；不得把“地名点”伪装成 `DESIGNATED_POINT`、跨表借用同坐标实体，或凭单侧 `ZJ` 邻接补写地区。
+- 自动化新增非指定点 UUID 目录缺失拒绝和 CLI 回归；定向回归 `21 passed`，完整回归、提交前检查待本轮完成。至此 12 张航路端点卡和 5 张由其派生的全局航点地区卡均已获得直接来源闭合结论：五个指定点均因多地区/不完整或冲突 ACC 拒绝，M771 因非指定点身份不可用拒绝。没有新增可投影记录。
+- 模型、BGL、候选、Community 和部署状态均未变；r188/r189 自重放仍 `29/29`，参考一致仍 `0/29`、`deployable=false`，字节收敛未推进。
+- 下一项唯一任务：停止重复航路端点地区审计，转到稳定排序首张未分类程序卡 `ZGBS:RNP-0:12:0`。先建立只读的同周期 PDF/终端数据库编码程序类别审计，验证是否存在明确类别字段或可重放直接标题；不能唯一确认时保持 `rejected_for_target_mapping`，不得修改程序投影。
