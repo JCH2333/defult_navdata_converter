@@ -9,6 +9,7 @@ from typing import Any, Iterable, Mapping
 
 from .iap_coverage import iap_section_kind, procedure_kind
 from .model import NavModel, SourceRef
+from .pdf_charts import approach_procedure_name_candidates
 
 
 class IapPrimarySourceAuditError(RuntimeError):
@@ -192,6 +193,48 @@ def _same_page_related_section_summary(
     }
 
 
+def _instrument_chart_title_candidates(
+    model: NavModel,
+    airport: str,
+    label: str,
+    runway: str,
+) -> list[dict[str, object]]:
+    """Report title-supported chart candidates without assigning a primary.
+
+    A chart title may contain the same database label while the corresponding
+    database coding page still has no primary section.  This is diagnostic
+    evidence only: it must never turn a title or an IAF/IF overlap into legs.
+    """
+
+    result: list[dict[str, object]] = []
+    for chart in model.procedure_charts:
+        if (
+            chart.airport != airport
+            or chart.chart_type != "instrument-approach-index"
+            or runway not in chart.runways
+        ):
+            continue
+        title_candidates = approach_procedure_name_candidates(
+            chart.chart_name,
+            chart.runways,
+            chart.airport,
+        )
+        result.append({
+            "filename": chart.filename,
+            "chart_name": chart.chart_name,
+            "source": _source_payload(chart.source),
+            "title_label_candidates": list(title_candidates),
+            "direct_label_match": label in title_candidates,
+        })
+    return sorted(
+        result,
+        key=lambda item: (
+            not bool(item["direct_label_match"]),
+            str(item["filename"]),
+        ),
+    )
+
+
 def _cache_section_summary(
     charts: Iterable[Mapping[str, object]],
     airport: str,
@@ -332,6 +375,12 @@ def audit_iap_primary_sources(
             label,
             runway,
         )
+        instrument_chart_candidates = _instrument_chart_title_candidates(
+            model,
+            airport,
+            label,
+            runway,
+        )
         if not evidence_pages:
             disposition = "not_evaluated_no_matching_direct_database_chart"
         elif (
@@ -370,6 +419,7 @@ def audit_iap_primary_sources(
             "evidence_pages": evidence_pages,
             "same_page_iap_labels": same_page_labels,
             "related_same_page_sections": related_same_page_sections,
+            "instrument_chart_title_candidates": instrument_chart_candidates,
             "projection_allowed": False,
         })
     return {

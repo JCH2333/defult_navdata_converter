@@ -1129,3 +1129,10 @@
 - 新处置为 `rejected_related_same_page_sections_without_primary`，只影响来源审计和缺口卡，不改变 `NavModel`、IAP 投影、BGL、候选或 Community。正反回归：`test_audit_rejects_related_same_page_base_and_variant_without_primary`、`test_audit_keeps_related_same_page_labels_unresolved_when_primary_exists`、`test_gap_cards_bind_related_same_page_primary_rejection`。
 - 实际命令使用 r201 已记录的 9 个 r43 精确缓存重跑 `iap-primary-source-audit`，报告为 `diagnostics\r208-zydd-related-label-primary-source-audit-20260819.json`，并生成绑定卡片 `diagnostics\r208-default-gap-cards-20260819.json`。`ZYDD-0C-2.pdf`（SHA-256 `0f21ec38cd9cc0187f8722ad9b69ef1511cdf45b32c5d25867759da00fe4981e`）中 `R01` 有 `6` 条过渡、`R01-Y` 有 `3` 条复飞，当前页主进近为 `0`。但 r187 在另一页 `ZYDD-0C-4.pdf` 中含 `R01-Z` 主进近；它属于同一严格标签族，因此模型族主段计数为 `1`，r208 假设不成立。
 - 结论是 `ZYDD:R01` 与 `ZYDD:R01-Y` 继续为 `unresolved_direct_database_evidence_inconclusive`，不得借用跨页、不同变体 `R01-Z` 的主段。审计总计仍为“明确拒绝 `2`、继续来源不足 `8`”，参考一致仍为 `0/29`、`deployable=false`。本轮只验证并固化了“任何关联标签族已有主段时不得误判为全族无主段”的防护边界，没有推进候选或字节收敛。
+
+## 2026-08-19 r209 ZSOF/R15 图标题候选与缺失主段边界
+
+- 实验编号：`r209-zsof-r15-chart-title-source-audit`。唯一假设是：当数据库标签对应的精确页没有主进近时，同机场同跑道的进近图标题是否能给出与该标签相同的直接身份；即使有标题命中，也不得由标题、IAF/IF 角色或坐标反向创造主进近。
+- `iap-primary-source-audit` 新增只读字段 `instrument_chart_title_candidates`。它仅枚举同机场、同跑道 `instrument-approach-index` 图页、标题直接解析出的候选标签、来源页和是否精确命中数据库标签；不读取参考成品或 Fenix，不修改模型和投影。回归：`test_audit_reports_title_match_without_creating_missing_primary` 明确覆盖“标题可命中但无主段时仍不得放行”。
+- 实际 r187 中 `ZSOF:R15` 只有 `4` 段进近过渡、无主进近和复飞；其精确数据库页 `ZSOF-4M.pdf`（SHA-256 `0f7bd7cb344f0738d51a6b537629ecf2ae53027112f0c1cdfd5f3ac7d8feb1fc`）有 `13` 条进近过渡、无主进近和复飞。图页候选为 `ZSOF-5A.pdf` 的 `I15/I15-Z`、`ZSOF-5B.pdf` 的 `I15/I15-Y`、`ZSOF-6A.pdf` 的 `D15`，精确 `R15` 标题命中数为 `0`。
+- 报告为 `diagnostics\r209-zsof-r15-chart-title-source-audit-20260819.json`，绑定卡片为 `diagnostics\r209-default-gap-cards-20260819.json`。结论：`ZSOF:R15` 保持 `unresolved_direct_database_evidence_inconclusive`；不得根据相同跑道、候选 IAF/IF、RNAV ILS、ILS 或 VOR 图标题拼出 `R15` 主进近。模型、候选和 Community 均未改变；参考一致仍为 `0/29`、`deployable=false`。

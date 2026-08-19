@@ -11,6 +11,7 @@ from fenix_default_navdata.iap_primary_source_audit import (
 from fenix_default_navdata.model import (
     ChartTerminalLeg,
     NavModel,
+    ProcedureChart,
     ProcedureSegment,
     RejectedProcedure,
     SourceRef,
@@ -406,6 +407,55 @@ def test_audit_does_not_reject_when_direct_database_evidence_has_primary(
     item = report["items"][0]
     assert item["disposition"] == "unresolved_direct_database_evidence_inconclusive"
     assert item["direct_database_sections"]["approach"] == 1
+    assert item["projection_allowed"] is False
+
+
+def test_audit_reports_title_match_without_creating_missing_primary(
+    tmp_path: Path,
+) -> None:
+    model, source = _model(tmp_path / "raw")
+    chart_source = SourceRef(
+        "Terminal/ZTEST/ZTEST-5A.pdf",
+        page=1,
+        sha256="chart-hash",
+    )
+    model.procedure_charts.append(
+        ProcedureChart(
+            "ZTEST",
+            "ZTEST-5A.pdf",
+            1,
+            "instrument-approach-index",
+            "RNP ILS/DME z RWY29R",
+            "fixture",
+            (),
+            ("29R",),
+            (),
+            (),
+            (),
+            chart_source,
+        ),
+    )
+
+    report = audit_iap_primary_sources(
+        model,
+        [_cache(tmp_path / "evidence.json", source)],
+    )
+
+    item = report["items"][0]
+    assert item["disposition"] == "rejected_transition_and_missed_without_primary"
+    assert item["model_sections"]["approach"] == 0
+    assert item["instrument_chart_title_candidates"] == [{
+        "filename": "ZTEST-5A.pdf",
+        "chart_name": "RNP ILS/DME z RWY29R",
+        "source": {
+            "file": chart_source.file,
+            "page": chart_source.page,
+            "row": chart_source.row,
+            "sha256": chart_source.sha256,
+        },
+        "title_label_candidates": ["I29R", "R29R", "I29RZ", "I29R-Z", "R29R-Z"],
+        "direct_label_match": True,
+    }]
     assert item["projection_allowed"] is False
 
 
