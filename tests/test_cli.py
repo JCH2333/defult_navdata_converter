@@ -148,6 +148,41 @@ def test_airway_connection_shape_probe_passes_sdk_and_reader_options(monkeypatch
     }
 
 
+def test_airway_route_child_order_probe_passes_sdk_and_reader_options(
+    monkeypatch,
+) -> None:
+    received: dict[str, object] = {}
+    compiler = CompilerInfo(Path("fspackagetool.exe"), "PackageTool", "test")
+
+    def run(output: Path, **kwargs) -> dict[str, object]:
+        received["output"] = output
+        received.update(kwargs)
+        return {"status": "passed", "airway_rows": []}
+
+    monkeypatch.setattr(cli, "find_compiler", lambda explicit: compiler)
+    monkeypatch.setattr(cli, "run_airway_route_child_order_probe", run)
+
+    result = cli.main([
+        "airway-route-child-order-probe",
+        "--output", "diagnostics/probe",
+        "--bglcomp", "sdk.exe",
+        "--reader", "reader.exe",
+        "--cache-root", "cache",
+        "--build-timeout", "600",
+        "--reader-timeout", "90",
+    ])
+
+    assert result == 0
+    assert received == {
+        "output": Path("diagnostics/probe"),
+        "compiler": compiler,
+        "reader": Path("reader.exe"),
+        "cache_root": Path("cache"),
+        "build_timeout_seconds": 600,
+        "reader_timeout_seconds": 90,
+    }
+
+
 def test_export_model_command_passes_source_and_output(monkeypatch) -> None:
     captured: dict[str, object] = {}
 

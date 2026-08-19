@@ -1898,7 +1898,12 @@ def _append_enroute(
                 (direction, attrs)
             )
         for route_name, route_type in sorted(grouped_routes):
-            children = grouped_routes[(route_name, route_type)]
+            # bglcomp.xsd requires all Previous children before Next children.
+            # Source sequence order is preserved within each direction.
+            children = sorted(
+                grouped_routes[(route_name, route_type)],
+                key=lambda item: 0 if item[0] == "Previous" else 1,
+            )
             route = ET.SubElement(point_element, "Route", _attrs(
                 name=route_name,
                 routeType=route_type,

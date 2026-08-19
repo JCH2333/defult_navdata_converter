@@ -264,7 +264,7 @@
 - r162 中间模型规模：机场 275、跑道方向 640、导航台 438、全局航点 2741、航路段 4446、终端航点 12549、程序段 10409、ILS 430、等待航线 1297。基础来源解析与可序列化 `NavModel` 已具备，不能把“模型已生成”表述为“字节一致已完成”。
 - r162 航路语义基线：候选 4434 行、参考 4614 行、严格相等 1383 行（31.19%）、字段差异 2045 行、候选独有逻辑键 1006、参考独有逻辑键 1186。脱敏 `airway-diff-audit` 已确认 2045 条字段差异全部能唯一关联到已有 424 `(airway, sequence)`；其中 2015 条仅几何、30 条为几何加高度。因此不能把问题归因于源航路名或序号缺失。
 - IAP 当前有 780 个程序分组，仍有 10 个 `no_unique_primary` 未决分组：`ZBAD/R29R`、`ZJSY/I08-X`、`ZSNJ/I25`、`ZSOF/R15`、`ZSOF/R33`、`ZSWY/I03`、`ZUAL/I15`、`ZYDD/R01`、`ZYDD/R01-Y`、`ZYTL/R10`。它们必须保持拒绝，直至形成唯一、可回溯的 424/PDF 证据规则。
-- 当前工作区包含未提交的航路 `Route` 子节点探针及其临时投影修改。r168 已由合成 SDK 探针证明：`Previous` 先于 `Next` 会被 `bglcomp.xsd` 拒绝。r169 虽将同一 `Route` 排序为 `Next` 后 `Previous`，但主导航包仍在 `00_enroute.xml` 第 26030 等行被 SDK 以“`Previous` 为意外元素，期望 `Next`”拒绝；因此 r169 的 `local_contract_verified=false`，不是可比较候选，也不计入字节一致进度。
+- 当前工作区包含未提交的航路 `Route` 子节点探针及其临时投影修改。`bglcomp.xsd` 已明确 `ctRoute` 为 `Previous*` 后 `Next*`，两者均允许多个；r169 将同一 `Route` 排序为 `Next` 后 `Previous`，因此主导航包在 `00_enroute.xml` 第 26030 等行被 SDK 以“`Previous` 为意外元素，期望 `Next`”拒绝。r169 的 `local_contract_verified=false`，只是失败诊断，不是可比较候选，也不计入字节一致进度。
 
 ### 2. 进度口径
 
@@ -303,7 +303,7 @@
 1. 冻结 r162，不修改其输入、产物或报告；r168/r169 只作为诊断证据。
 2. 从 `C:\MSFS 2024 SDK\Tools\bin\bglcomp.xsd` 提取 `Route`、`Next`、`Previous` 的顺序和出现次数约束，写成最小、可测试的契约。
 3. 扩展 `airway-route-child-order-probe`，每次仅改变一个变量并保留 XML、构建轨迹、BGL 头和读取器结果：
-   - 一个 `Next` 后一个 `Previous`；
+   - 一个 `Previous` 后一个 `Next`；
    - 多个 `Next`；
    - 多个 `Previous`；
    - 多个 `Route` 元素，每个仅表达一对连接；
@@ -340,3 +340,11 @@
 每轮开始前读取根目录与仓库 `AGENTS.md`、检查 Git 状态和最后可用候选。实验前记录：r 编号、唯一假设、唯一变量、输入快照、禁止读取的数据、预期指标。实验后记录：候选或诊断目录、提交号、测试结果、SDK 构建结果、读取器登记完整性、`29` 文件哈希统计、严格相等/字段差异、来源审计、保留或否决结论。
 
 代码或仓库文档变更后必须运行对应测试、`git diff --check`、审查暂存区、创建单一可解释提交并推送 GitHub。根目录 `AGENTS.md` 不属于仓库，但其同一项目规则必须同步更新。
+
+### 6. 2026-08-19 航路 Route 子节点契约更正日志
+
+- 证据：`C:\MSFS 2024 SDK\Tools\bin\bglcomp.xsd` 的 `ctRoute`。它定义为 `Previous` 的 `minOccurs=0/maxOccurs=unbounded`，随后是 `Next` 的 `minOccurs=0/maxOccurs=unbounded`。因此合法顺序是 `Previous* -> Next*`，而不是反向；分叉和汇聚不受单个子节点数量限制。
+- r169 失败根因：临时实现把同一 `Route` 排成 `Next -> Previous`，在候选 `00_enroute.xml` 第 26030 等行触发 Package Tool 的“`Previous` 为意外元素，期望 `Next`”。该候选 `local_contract_verified=false`，不得用于语义差分、部署或任何进度改善结论。
+- 正式投影已改为稳定的 `Previous* -> Next*` 排序；`airway-route-child-order-probe` 改为三种 XSD 合法场景：线性、两个 `Previous` 的汇聚、两个 `Next` 的分叉。回归：`test_enroute_projection_writes_previous_before_next_in_shared_route`。
+- r171：探针已生成 XML、项目和 `probe-report.json`，但检测到 `FlightSimulator2024.exe` 仍在运行而在编译门禁退出。报告的 `status=failed`、`failure_stage=compile` 是外部状态阻断，不是 XML 合法性或目标投影失败。探针现在保证在编译或读取器失败时仍写入结构化报告；对应自动化测试：`test_run_probe_writes_compile_failure_report`。
+- 待执行：模拟器关闭后，使用 r171 的同一三种场景重新运行新的 r 编号，要求 Package Tool 成功、读取器完整登记一个 BGL，并检查三种场景的片段号、序号和几何。该验证通过后才可把阶段 A 标记为完成并构建新的完整候选。

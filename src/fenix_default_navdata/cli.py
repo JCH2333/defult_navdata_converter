@@ -21,6 +21,7 @@ from .airway_coordinate_precision_probe import (
     run_airway_coordinate_precision_probe,
     write_source_airway_coordinate_precision_audit,
 )
+from .airway_route_child_order_probe import run_airway_route_child_order_probe
 from .bgl_format import audit_bgl_layouts, write_bgl_layout_audit
 from .convert import convert, export_intermediate_model
 from .deployment import deploy, restore
@@ -737,6 +738,26 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_READER_TIMEOUT_SECONDS,
         help=f"读取器超时秒数（默认 {DEFAULT_READER_TIMEOUT_SECONDS}）",
     )
+    route_child_order_probe = sub.add_parser(
+        "airway-route-child-order-probe",
+        help="验证同一 Route 的 Next/Previous 子节点顺序是否影响 SDK 航路记录",
+    )
+    route_child_order_probe.add_argument("--output", required=True, help="新的探针诊断目录")
+    route_child_order_probe.add_argument("--bglcomp", help="MSFS 2024 SDK Package Tool 路径")
+    route_child_order_probe.add_argument("--reader", help="本机 Navdatareader.exe 路径")
+    route_child_order_probe.add_argument("--cache-root", help="纯 ASCII 的读取器临时目录")
+    route_child_order_probe.add_argument(
+        "--build-timeout",
+        type=int,
+        default=3600,
+        help="SDK 构建超时秒数（默认 3600）",
+    )
+    route_child_order_probe.add_argument(
+        "--reader-timeout",
+        type=int,
+        default=DEFAULT_READER_TIMEOUT_SECONDS,
+        help="读取器超时秒数",
+    )
     coordinate_precision_audit = sub.add_parser(
         "airway-coordinate-precision-audit",
         help="只读审计 424 DMS 航路坐标在 SDK float32 前是否被 6 位格式化改变",
@@ -1196,6 +1217,18 @@ def main(argv: list[str] | None = None) -> int:
         report = run_airway_coordinate_precision_probe(
             Path(args.output),
             compiler=find_compiler(_path(args.bglcomp)),
+            reader=_path(args.reader),
+            cache_root=_path(args.cache_root),
+            build_timeout_seconds=args.build_timeout,
+            reader_timeout_seconds=args.reader_timeout,
+        )
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "airway-route-child-order-probe":
+        compiler = find_compiler(_path(args.bglcomp))
+        report = run_airway_route_child_order_probe(
+            Path(args.output),
+            compiler=compiler,
             reader=_path(args.reader),
             cache_root=_path(args.cache_root),
             build_timeout_seconds=args.build_timeout,

@@ -129,6 +129,35 @@ def test_enroute_projection_does_not_reduce_links_from_raw_424_code_dir(
         assert [child.tag for child in end_route] == ["Previous"]
 
 
+def test_enroute_projection_writes_previous_before_next_in_shared_route(
+    tmp_path: Path,
+):
+    model = NavModel(Path("source"))
+    source = SourceRef("RTE_SEG.csv", 2)
+    model.airway_legs.extend((
+        AirwayLeg(
+            "ORDR", 1, "START", "MIDDLE", source,
+            start_latitude=35.0, start_longitude=105.0,
+            end_latitude=35.1, end_longitude=105.1,
+            start_country="ZB", end_country="ZB",
+        ),
+        AirwayLeg(
+            "ORDR", 2, "MIDDLE", "END", source,
+            start_latitude=35.1, start_longitude=105.1,
+            end_latitude=35.2, end_longitude=105.2,
+            start_country="ZB", end_country="ZB",
+        ),
+    ))
+
+    output = tmp_path / "route-child-order.xml"
+    write_bglcomp_xml(model, DEFAULT_CYCLE, output, scope="enroute")
+
+    root = ET.parse(output).getroot()
+    route = root.find("./Waypoint[@waypointIdent='MIDDLE']/Route[@name='ORDR']")
+    assert route is not None
+    assert [child.tag for child in route] == ["Previous", "Next"]
+
+
 def test_enroute_projection_keeps_same_name_route_types_separate(tmp_path: Path):
     model = NavModel(Path("source"))
     source = SourceRef("RTE_SEG.csv", 2)
