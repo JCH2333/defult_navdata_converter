@@ -225,6 +225,13 @@ SID/STAR 名称碰撞。该网格由 XML 中的 `AiracCycle` 触发。无 `Airac
 导航实体。探针规格不写入 `NavModel` 或正式候选；SDK Package Tool 构建必须串行，
 不能并发运行。回归：`test_root_object_specs_support_one_level_sdk_children`。
 
+同日以相同的空 `ZUAL` 机场 XML 分别调用本机 SDK 1.5.7
+`C:\MSFS 2024 SDK\Tools\bin\fspackagetool.exe` 与 SDK 1.5.3
+`F:\games\MSF tools\MSFS2024_SDK_Core_Installer_1.5.3\SDK\Tools\bin\fspackagetool.exe`：
+两者均生成 363 字节、`0x3/0x35`、QMID `0x92319` 的 BGL，SHA-256 相同。因此这两套
+已安装 Package Tool 不能解释参考机场 BGL 与当前候选不同的顶层 QMID 指纹；后续诊断
+应继续检查源支持的对象投影和参考包的历史构建契约，不得将 SDK 版本切换当作内容修复。
+
 机场覆盖必须先写入 `DeleteAirport`，且仅删除 `Approaches`、`Departures`、`Arrivals`，再投影 424 的跑道、终端点、程序和等待航线。证据：2026-08-19 对 2608R1 `ZUAL` 参考 BGL 的 SDK BglExplorer 读取显示 `FAC_TYPE_AIRPORT_DELETE` 的三项删除标记；同一份隔离 XML 仅新增该标记后，Package Tool 生成相同节表、文件增量 12 字节，并确认生成该设施记录及机场替换标记。此规则是默认通用数据的目标覆盖契约，不使用参考内容补写任何航行记录。回归：`test_bgl_xml_is_deterministic`、`test_airport_procedure_deletion_is_inserted_before_source_children`。
 
 ### 导航台区域键
