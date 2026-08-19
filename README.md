@@ -206,6 +206,7 @@ python -m fenix_default_navdata.cli build `
 - `semantic-diff` 不返回参考 SQLite 的坐标、频率、磁差、高程、名称或航路端点字段值，不能作为候选内容的反向来源。调用时必须显式提供候选和参考各自的预期 BGL 数；`bgl_file` 登记数不精确相等即拒绝生成报告。
 - `bgl-layout-audit` 以参考包的顶层包名确定比较范围，只读取候选和参考最终包内 BGL 的文件路径、文件大小、SHA-256 相等性、头部版本、QMID 和节表类型/计数/尺寸；候选根目录下的 SDK `_work` 中间产物和不在参考范围内的官方依赖副本始终排除，数量会记录在 `scope`。它不读取或导出任何参考导航记录，输出仅用于定位 SDK 编译布局与内容覆盖差异。
 - `scripts/airport_subset_probe.py` 的隔离构建报告会自动记录每个探针 BGL 的文件大小、头部版本、QMID 和节表类型/计数/尺寸。它只用于验证 SDK 输入对象如何影响编译布局，不读取参考 BGL 的内容。
+- 该探针的 `--set-airport-attribute name=value` 仅为隔离编译实验设置 XML 属性，绝不写入 `NavModel` 或正式候选。
 - `source-gap-audit` 只接受完整、只读且已脱敏、并已证明 BGL 登记数完整的 `semantic-diff` 报告；它只输出 424 来源分类计数，不导出或保存参考逻辑身份。它还会核验 `ROUTE_HOLDING.csv` 是否只回链既有点；无区域键或复用位置标签的记录不得当作新 enroute 航点。
 - `terminal-coordinate-audit` 使用同一类完整脱敏差分，只读核验参考缺失航点是否可由 424 终端坐标页独立证明；输出只含来源类别计数。全局航点只有在 `terminal_source_promotable` 非零时，才可进入通用跨机场提升规则；机场作用域的 `airport_terminal_coordinate_source_present` 仅表示同机场坐标页存在来源，不构成新增或补写依据。传入 `--check-retention` 后，审计会再区分现有规则是否保留此类来源点；`airport_terminal_coordinate_not_retained` 仍只是一项调查信号，必须另行证明通用保留与投影规则，不能按审计结果列表补点。
 - `general-doc-keypoint-audit` 仅使用带 SHA-256 校验的 ENR 4.4 OCR 缓存与同源 FIR 几何，分类参考缺失全局航点是否能由关键点页独立证明；输出只含类别计数。`general_doc_source_promotable` 非零时，必须先把来源规则、最小 fixture 和候选报告接入构建，不能按审计列表补点。

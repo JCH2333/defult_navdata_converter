@@ -124,6 +124,28 @@ def normalize_holding_file_groups(
 def parse_holding_attributes(values: list[str]) -> dict[str, str]:
     """Parse explicit diagnostic-only attribute assignments."""
 
+    return parse_attribute_assignments(
+        values,
+        option="--set-holding-attribute",
+    )
+
+
+def parse_airport_attributes(values: list[str]) -> dict[str, str]:
+    """Parse explicit diagnostic-only Airport attribute assignments."""
+
+    return parse_attribute_assignments(
+        values,
+        option="--set-airport-attribute",
+    )
+
+
+def parse_attribute_assignments(
+    values: list[str],
+    *,
+    option: str,
+) -> dict[str, str]:
+    """Parse deterministic diagnostic-only XML attribute assignments."""
+
     attributes: dict[str, str] = {}
     for raw in values:
         key, separator, value = raw.partition("=")
@@ -131,11 +153,11 @@ def parse_holding_attributes(values: list[str]) -> dict[str, str]:
         value = value.strip()
         if not separator or not key or not value:
             raise ValueError(
-                "--set-holding-attribute 必须使用 name=value 形式"
+                f"{option} 必须使用 name=value 形式"
             )
         if key in attributes:
             raise ValueError(
-                f"--set-holding-attribute 重复设置属性: {key}"
+                f"{option} 重复设置属性: {key}"
             )
         attributes[key] = value
     return attributes
@@ -322,6 +344,12 @@ def _parser() -> argparse.ArgumentParser:
         default=[],
         help="仅诊断用：为每条保留等待航线设置 name=value 属性。",
     )
+    parser.add_argument(
+        "--set-airport-attribute",
+        action="append",
+        default=[],
+        help="仅诊断用：为每个保留机场设置 name=value 属性。",
+    )
     parser.add_argument("--move-waypoints-to-root", action="store_true")
     parser.add_argument("--keep-root-waypoints", action="store_true")
     parser.add_argument(
@@ -392,6 +420,9 @@ def main() -> int:
         assigned_holding_attributes = parse_holding_attributes(
             args.set_holding_attribute
         )
+        assigned_airport_attributes = parse_airport_attributes(
+            args.set_airport_attribute
+        )
         dropped_airport_waypoints = parse_airport_waypoint_selectors(
             args.drop_airport_waypoint
         )
@@ -408,6 +439,8 @@ def main() -> int:
         raise SystemExit("--drop-root-waypoint 不能包含重复的航点标识")
     selected_holding_idents: tuple[str, ...] = ()
     for airport in selected:
+        for attribute, value in assigned_airport_attributes.items():
+            airport.set(attribute, value)
         for child in list(airport):
             if child.tag in dropped_tags:
                 airport.remove(child)
@@ -567,6 +600,7 @@ def main() -> int:
             "omit_isolated_holding_waypoints": args.omit_isolated_holding_waypoints,
             "dropped_holding_attributes": args.drop_holding_attribute,
             "assigned_holding_attributes": assigned_holding_attributes,
+            "assigned_airport_attributes": assigned_airport_attributes,
             "root_waypoints": (
                 "kept" if args.keep_root_waypoints
                 else "removed"

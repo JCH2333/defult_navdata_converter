@@ -8,6 +8,7 @@ from scripts.airport_subset_probe import (
     inspect_bgl_layouts,
     isolate_holding_group,
     normalize_holding_file_groups,
+    parse_airport_attributes,
     parse_airport_waypoint_selectors,
     parse_holding_attributes,
     select_airports,
@@ -131,6 +132,18 @@ def test_holding_attribute_assignments_require_unique_name_value_pairs():
 
     with pytest.raises(ValueError, match="重复"):
         parse_holding_attributes(["holdSpeed=210", "holdSpeed=250"])
+
+
+def test_airport_attribute_assignments_are_diagnostic_and_deterministic():
+    assert parse_airport_attributes(
+        ["country=China", "city=Ali"]
+    ) == {
+        "country": "China",
+        "city": "Ali",
+    }
+
+    with pytest.raises(ValueError, match="--set-airport-attribute"):
+        parse_airport_attributes(["country=China", "country=China"])
 
 
 def test_isolated_holding_group_keeps_only_its_waypoint_and_holding_pattern():
