@@ -1650,3 +1650,11 @@
 - `EO-15` 直接命中 `0`，无同文本行标签-类别链接。其他离场标签、`RW15C`、`KD614`、RF 腿、跑道 `15` 和进近过渡标题均不能替代标签锚点，也不得用它们把此段分类为离场或进近过渡。
 - 处置为 `rejected_missing_direct_label_anchor`、`source_proven_kind=null`、`target_mapping_allowed=false`。模型、投影、候选、Community 和部署不变；自重放 `29/29`、参考一致 `0/29`、`deployable=false`，字节收敛未推进。
 - 下一项唯一任务：按稳定排序审计同页不同卡 `ZUKD:EO-33:33:10`。必须单独验证其标签在直接文本中的出现和类别链接，不能从 EO-15 的缺失结论替代该卡审计。
+
+## 2026-08-19 r234 ZUKD EO-33 程序卡直接来源审计
+
+- 实验编号：`r234-zukd-eo-33-33-unclassified-procedure-card-audit`。唯一变量是将 r233 的精确卡键替换为同页不同跑道卡 `ZUKD:EO-33:33:10`；继续只读 `ZUKD-4J.pdf` 第 1 页，不修改代码、模型、候选、Community 或部署。
+- 真实报告为 `diagnostics\r234-zukd-eo-33-33-unclassified-procedure-card-audit-20260819.json`。来源 SHA-256 `a0334bccdd794d60aa2da38ddd654531f536bb95f2b12fa552463b1f2af05eb4` 与模型一致；程序腿为 `IF RW33C`、`TF KD702`、`RF KD701`、`RF KD700`、`TF KD654`。页面有 5 条类别标题事实，编码页列出跑道 `15/33`。
+- `EO-33` 直接命中 `0`，无同文本行标签-类别链接。页面的类别标题只显式涉及其他 `RWY15` 标签；`RW33C`、RF 腿和跑道 `33` 不能将该段归类，也不能将未出现的 `RWY33` 标题视为来源事实。
+- 处置为 `rejected_missing_direct_label_anchor`、`source_proven_kind=null`、`target_mapping_allowed=false`。模型、投影、候选、Community 和部署不变；自重放 `29/29`、参考一致 `0/29`、`deployable=false`，字节收敛未推进。
+- 下一项唯一任务：按稳定排序审计 `ZUSH:EO-10:10:11`。该卡切换至不同机场和 PDF，不得从 ZUKD 同页缺失结果推断。
