@@ -1923,3 +1923,12 @@
 ### 5. 提交和维护协议
 
 代码或仓库文档变化后必须执行 `pytest -q`、`git diff --check`、精确审查暂存区、单主题提交和普通 `git push` 尝试。诊断、候选、缓存、数据库、备份、日志、SDK 中间产物和外部测试包不得提交。网络未恢复时保留本地提交并记录推送失败，不得强推、改写历史或为了同步删除本地提交。
+
+## 2026-08-19 r242 ZUAL I15 精确 IAP 主段来源审计
+
+- 实验编号：`r242-zual-i15-exact-iap-primary-source-audit`。本轮只读取 r187 冻结 `NavModel` 与 `pdf-evidence-cache-2608r1-r43` 中按 `ZUAL` 筛出的 26 份 JSON 缓存；缓存条目均由审计器复核到原始 PDF 路径、页码和 SHA-256。禁止读取参考成品、Fenix、OCR、候选 BGL/SQLite，禁止修改模型、投影、候选、Community 或部署。
+- 真实报告为 `diagnostics\r242-zual-i15-exact-iap-primary-source-audit-20260819.json`。精确数据库页 `Terminal\ZUAL\ZUAL-4Z03.pdf` 第 1 页，SHA-256 `42683c79936929f3c0a54bab7bf143a71c0d095b9ea59ed52680b4c3e9329440`，有 18 条 `I15` 进近过渡腿（含 `AK966/IF`、`AK618/TF`、`AK778/AK776 RF` 等），没有主进近和复飞。冻结模型同样没有主进近；模型中的 1 组复飞来自相关但非该精确数据库页，不能混入本卡。
+- 缓存验证的标题兼容图有两张：`ZUAL-5A.pdf`（SHA-256 `b5a6d4233c3d2fc3cb0f94bee1868ec54a5c20b0ba65930abdf91cdfe9034a16`）标题候选为 `I15/R15/I15-Z/R15-Z`，直接角色为 `AK776/IF`、`AK955/AK966/AK988 IAF`；`ZUAL-5B.pdf`（SHA-256 `4b1b3d9cf8a8360d2c394b575c8ed6c74330429c1c31430620529103129eaf1a`）标题候选为 `I15/I15-Y`，无直接角色。`ZUAL-6A.pdf` 仅为 `D15`，`ZUAL-9A/9B.pdf` 仅为 `R15` 变体。由于数据库主进近为空，全部 `primary_leg_role_overlap` 为空，任何图题或角色都不能唯一归属缺失主段。
+- 处置为 `unresolved_direct_database_evidence_inconclusive`、`projection_allowed=false`。不得把 `ZUAL-5A` 的 IAF/IF、`ZUAL-5B` 的空角色、同跑道、`R15` 图、相关页复飞或任一过渡腿拼接为 `I15` 主进近。模型、BGL、候选、Community 和部署均未改变；自重放仍 `29/29`、参考一致仍 `0/29`、`deployable=false`，字节收敛未推进。
+- 此前的 r200、r208、r209、r212 以及 r238 至 r242 已对全部 10 张 IAP 主段卡给出直接数据库页或专项精确来源审计；其中 `ZBAD:R29R`、`ZYTL:R10` 为明确拒绝，其余 8 张仍没有可投影的唯一主段规则。不得为了填满阶段 A 而重做同类审计或扩大 OCR。
+- 下一项唯一任务：启动 r243 只读“SDK 表达能力库存盘点”。以 r187、r188/r189、r214/r216 审计和既有隔离探针为输入，按 `00_enroute.bgl`、区域机场 BGL、机场补丁 BGL 的未对齐文件角色，列出“已证实可表达”“已否决”“尚未以单变量验证”的来源完整对象类别。该库存不得读取参考 payload 或生成内容规则；它只选择下一项真实、未重复的单变量 SDK 探针。
