@@ -156,6 +156,10 @@ python -m fenix_default_navdata.cli iap-ocr-audit `
   --pdf-cache "$env:LOCALAPPDATA\default_navdata_converter\pdf-evidence-cache-2608r1-r38" `
   --cache-root "$env:LOCALAPPDATA\default_navdata_converter\iap-ocr-cache-2608r1\markdown-3x" `
   --output diagnostics\iap-ocr-evidence-audit.json
+python -m fenix_default_navdata.cli ocr-runtime-probe `
+  --pdf "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608\Terminal\ZSNJ\ZSNJ-4P.pdf" `
+  --runtime-profile-file "$env:LOCALAPPDATA\default_navdata_converter\ocr-server\runtime-profile.json" `
+  --output diagnostics\ocr-runtime-probe.json
 python -m fenix_default_navdata.gui
 ```
 
@@ -174,6 +178,8 @@ python -m fenix_default_navdata.gui
 当本地 `ocr-skill` 在其默认 300 秒引擎等待内提前失败时，可显式传入 `--engine-timeout`，并将外层 `--timeout` 设得更长。该参数只覆盖单页等待，不改变模型、提示模式或图像预处理；IAP 缓存报告会记录本次执行设置。
 
 `iap-ocr-audit` 逐项验证 IAP OCR 缓存的源相对路径、SHA-256、页数与页面 JSON，再报告 OCR 文本中能与主进近源腿精确匹配的标识，以及同一文本项、同一行或垂直相邻的明确角色标签。即使某一候选图页有至少两个标识的唯一命中或出现角色标签，报告仍会保持 `projection_allowed=false`；OCR 证据不能单独解除 IAP 拒绝。
+
+`ocr-runtime-probe` 使用已验证的 `runtime-profile.json` 对同一 PDF 至少运行两次 `ocr-skill extract`。报告保存 PDF、OCR 程序和运行时画像的 SHA-256，以及每次原始输出、错误输出和不含 OCR 文本的语义摘要哈希；`content` 包装 nonce 与耗时不参与语义一致性判断。只有全部运行成功且语义摘要相等时报告 `repeatable=true`，它仍只是一项 OCR 运行时门禁，不会修改模型、程序投影或候选。
 
 `iap-ocr-recheck` 比较两份完整、独立重跑的 IAP OCR 缓存，仅报告角色证据的交集和差异；`--require-agreement` 会同时要求所有候选页记录且匹配完整识别设置：命令、后端、模式、图像预处理、渲染比例与非空 `runtime_profile`。即使两份缓存完全一致，它也不会选择图页或解除 IAP 拒绝。`iap-ocr-consensus` 将这一门禁扩展为至少三份缓存，逐份校验候选页、识别设置、角色-航点对和相邻关系；其输出同样不可投影。
 

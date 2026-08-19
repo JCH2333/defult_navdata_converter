@@ -83,6 +83,49 @@ def test_iap_ocr_cache_reads_verified_runtime_profile_file(
     assert received["runtime_profile"] == profile
 
 
+def test_ocr_runtime_probe_writes_read_only_report(tmp_path: Path, monkeypatch) -> None:
+    received: dict[str, object] = {}
+
+    def probe(pdf: Path, runtime_profile_file: Path, **kwargs) -> dict[str, object]:
+        received.update(
+            pdf=pdf,
+            runtime_profile_file=runtime_profile_file,
+            **kwargs,
+        )
+        return {"summary": {"repeatable": True}}
+
+    def write(path: Path, report: dict[str, object]) -> None:
+        received["output"] = path
+        received["report"] = report
+
+    monkeypatch.setattr(cli, "run_ocr_runtime_probe", probe)
+    monkeypatch.setattr(cli, "write_ocr_runtime_probe", write)
+
+    result = cli.main([
+        "ocr-runtime-probe",
+        "--pdf", "chart.pdf",
+        "--runtime-profile-file", "runtime-profile.json",
+        "--ocr-command", "ocr-skill.exe",
+        "--runs", "3",
+        "--timeout-seconds", "120",
+        "--output", str(tmp_path / "probe.json"),
+    ])
+
+    assert result == 0
+    assert received == {
+        "pdf": Path("chart.pdf"),
+        "runtime_profile_file": Path("runtime-profile.json"),
+        "ocr_command": "ocr-skill.exe",
+        "runs": 3,
+        "timeout_seconds": 120,
+        "output": (tmp_path / "probe.json").resolve(),
+        "report": {
+            "summary": {"repeatable": True},
+            "output": str((tmp_path / "probe.json").resolve()),
+        },
+    }
+
+
 def test_route_fragment_probe_passes_sdk_and_reader_options(monkeypatch) -> None:
     received: dict[str, object] = {}
     compiler = CompilerInfo(Path("fspackagetool.exe"), "PackageTool", "test")

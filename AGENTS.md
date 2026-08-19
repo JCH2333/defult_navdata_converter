@@ -1033,3 +1033,13 @@
 - 每次代码或仓库文档变更后必须运行 `pytest -q`、`git diff --check`，审查精确暂存区，提交一个可解释变更，并尝试普通 `git push`。缓存、诊断、候选、日志、数据库、备份和外部测试包不得提交。
 - 每个已确认经验必须记录适用 AIRAC/目标、证据来源、触发条件、解决或拒绝方式、自动化测试和对可复用模型/适配器边界的影响。实验假设必须标注为待验证，不能升级为规则。
 - 本节下一项执行任务固定为：恢复既有本地 OCR 服务的运行时，并完成一页未决 IAP 的双次一致性取证；这一步不修改 `NavModel`、BGL 投影、候选或 Community。
+
+## 2026-08-19 r205 OCR 运行时恢复与双次语义一致性门禁
+
+- 实验编号：`r205-ocr-runtime-zsnj-i25-repeatability`。唯一目标是恢复现有、本机可复跑的 OCR 基础设施，并验证单一未决 IAP 来源页的推理输出可重复；不检索参考成品或 Fenix，不修改 `NavModel`、IAP 覆盖决策、BGL、候选或 Community。
+- 已定位并通过 `scripts\start_local_ocr_server.ps1` 启动既有 `F:\AI项目\ocr\llama.cpp\llama-server.exe`。运行时固定为 llama `b10331`、模型 `deepseek-ocr-2-q8_0.gguf`、视觉投影 `mmproj-deepseek-ocr-2-q8_0.gguf`、`seed=2608`、`temperature=0`、`127.0.0.1:8090`；启动器生成并验证完整 `runtime-profile.json`。`ocr-skill doctor --json` 已确认 `OCR_BACKEND=llamacpp` 且 `/health` 正常。
+- 新增只读 CLI：`ocr-runtime-probe --pdf <PDF> --runtime-profile-file <runtime-profile.json> --output <JSON>`。它固定 `OCR_BACKEND=llamacpp`，至少两次调用 `ocr-skill extract`，记录 PDF、OCR 程序和运行时画像 SHA-256，以及原始 stdout/stderr 与无文本语义摘要哈希；固定声明 `read_only=true`、`ocr_text_written=false`、`model_mutated=false`、`projection_changed=false`。报告永不保存 OCR Markdown 或包装 `content` 文本。
+- Windows 上 `ocr-skill` 的管道 JSON 使用本机 `cp936` 编码，而不是 UTF-8；探针因此采用 UTF-8 优先、本机首选编码回退。随机 `content` nonce 和 `elapsed_ms` 会改变原始 stdout SHA-256，不能误判为识别不一致；语义比较只包含协议状态、后端、错误状态、文档分页字段和 Markdown SHA-256。自动化测试：`test_ocr_runtime_probe_compares_markdown_not_wrapped_content`、`test_ocr_runtime_probe_accepts_local_console_json_encoding`、`test_ocr_runtime_probe_writes_read_only_report`。
+- 实际输入为 `Terminal/ZSNJ/ZSNJ-4P.pdf`，PDF SHA-256 为 `9dbc1378476911e587d4b8d5c1053e2e9ba46ded6d197acc1cdc9235db0c78ce`。报告 `diagnostics\r205-ocr-runtime-zsnj-i25-20260819\probe.json` 的两次运行均 `exit_code=0`、`backend=llamacpp`、`ok=true`，语义 SHA-256 均为 `ffbb28f40de0b500aaa2de0693897481d2aaa51dcc2433a5f5c78edde59eb708`，`repeatable=true`；两份原始 stdout 哈希不同，符合 nonce/耗时差异预期。
+- 本轮全量 `pytest -q` 为 `422 passed`。它只恢复了 OCR 运行时和可复跑的门禁，不解除 `ZSNJ:I25` 的 `no_unique_primary`，不创建 OCR 缓存共识，不允许投影或构建新候选；参考字节状态仍为 `0/29`、`deployable=false`。
+- 下一轮只可选择一张来源卡，优先检查该卡是否属于已有主进近的 `ambiguous_chart`/`no_matching_chart`，再按受限 OCR 缓存、至少三份独立一致缓存、角色审计、唯一规则、正反 fixture、模型门禁和双构建收敛推进。对 `no_unique_primary` 组，OCR 不得创造数据库中不存在的主进近。

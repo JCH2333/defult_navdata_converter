@@ -69,6 +69,7 @@ from .model_replay_audit import (
 )
 from .ocr_cache import build_ocr_cache
 from .ocr_runtime import resolve_runtime_profile
+from .ocr_runtime_probe import run_ocr_runtime_probe, write_ocr_runtime_probe
 from .official_index import build_official_navaid_index
 from .package_reader import DEFAULT_READER_TIMEOUT_SECONDS, read_package
 from .paths import detect_paths
@@ -942,6 +943,38 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help="本地只读审计 JSON 输出路径",
     )
+    ocr_runtime_probe = sub.add_parser(
+        "ocr-runtime-probe",
+        help="重复调用本机 OCR 并比较不含文本的语义摘要",
+    )
+    ocr_runtime_probe.add_argument("--pdf", required=True, help="待识别 PDF")
+    ocr_runtime_probe.add_argument(
+        "--runtime-profile-file",
+        required=True,
+        help="由 start_local_ocr_server.ps1 写入的运行时描述",
+    )
+    ocr_runtime_probe.add_argument(
+        "--output",
+        required=True,
+        help="本地只读审计 JSON 输出路径",
+    )
+    ocr_runtime_probe.add_argument(
+        "--ocr-command",
+        default="ocr-skill",
+        help="OCR 命令或可执行文件路径",
+    )
+    ocr_runtime_probe.add_argument(
+        "--runs",
+        type=int,
+        default=2,
+        help="重复次数，至少为 2",
+    )
+    ocr_runtime_probe.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=300,
+        help="每次 OCR 的超时秒数",
+    )
     validate = sub.add_parser("validate", help="验证候选")
     validate.add_argument("--candidate", required=True)
     validate.add_argument("--reference")
@@ -1512,6 +1545,19 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
+    if args.command == "ocr-runtime-probe":
+        output = Path(args.output).expanduser().resolve()
+        report = run_ocr_runtime_probe(
+            Path(args.pdf),
+            Path(args.runtime_profile_file),
+            ocr_command=args.ocr_command,
+            runs=args.runs,
+            timeout_seconds=args.timeout_seconds,
+        )
+        report["output"] = str(output)
+        write_ocr_runtime_probe(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0 if report["summary"]["repeatable"] else 1
     if args.command == "validate":
         report = validate_candidate(Path(args.candidate), _path(args.reference))
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
