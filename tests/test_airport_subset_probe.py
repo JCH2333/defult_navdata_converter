@@ -8,6 +8,7 @@ from scripts.airport_subset_probe import (
     add_airport_procedure_deletion,
     append_airport_children,
     append_root_children,
+    drop_runway_children,
     drop_selected_waypoints,
     inspect_bgl_layouts,
     isolate_holding_group,
@@ -190,6 +191,20 @@ def test_root_children_reuse_diagnostic_specs_without_reparenting():
         ("Ndb", {"frequency": "385", "ident": "PRB"}),
     ]
     assert children[0].get("frequency") == "385"
+
+
+def test_drop_runway_children_keeps_the_runway_and_other_child_objects():
+    airport = ET.fromstring(
+        '<Airport ident="ZUAL"><Runway number="15"><Ils ident="IKS"/>'
+        '<Threshold length="0F"/></Runway></Airport>'
+    )
+
+    drop_runway_children(airport, tags={"Ils"})
+
+    runway = airport.find("Runway")
+    assert runway is not None
+    assert runway.attrib["number"] == "15"
+    assert [child.tag for child in runway] == ["Threshold"]
 
 
 def test_root_object_specs_support_one_level_sdk_children():

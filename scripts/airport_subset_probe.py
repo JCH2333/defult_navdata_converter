@@ -234,6 +234,19 @@ def append_root_children(
         root.append(deepcopy(child))
 
 
+def drop_runway_children(
+    airport: ET.Element,
+    *,
+    tags: set[str],
+) -> None:
+    """Remove selected nested runway objects for a controlled SDK probe."""
+
+    for runway in airport.findall("Runway"):
+        for child in list(runway):
+            if child.tag in tags:
+                runway.remove(child)
+
+
 def parse_attribute_assignments(
     values: list[str],
     *,
@@ -407,6 +420,12 @@ def _parser() -> argparse.ArgumentParser:
         default=r"scenery\pmdg-china-navdata",
     )
     parser.add_argument("--drop-tag", action="append", default=[])
+    parser.add_argument(
+        "--drop-runway-child-tag",
+        action="append",
+        default=[],
+        help="仅诊断用：从每条保留跑道移除指定的直接子节点，例如 Ils。",
+    )
     parser.add_argument("--waypoint-start", type=int)
     parser.add_argument("--waypoint-end", type=int)
     parser.add_argument("--holding-start", type=int)
@@ -554,6 +573,9 @@ def main() -> int:
             root.remove(airport)
 
     dropped_tags = {tag.strip() for tag in args.drop_tag if tag.strip()}
+    dropped_runway_child_tags = {
+        tag.strip() for tag in args.drop_runway_child_tag if tag.strip()
+    }
     requested_holding_idents = tuple(
         ident.strip().upper()
         for values in args.holding_ident
@@ -601,6 +623,7 @@ def main() -> int:
         for child in list(airport):
             if child.tag in dropped_tags:
                 airport.remove(child)
+        drop_runway_children(airport, tags=dropped_runway_child_tags)
         if args.waypoint_start is not None or args.waypoint_end is not None:
             points = list(airport.findall("Waypoint"))
             start = args.waypoint_start or 0
@@ -747,6 +770,7 @@ def main() -> int:
             ),
             "airport_idents": [airport.attrib["ident"] for airport in selected],
             "dropped_tags": sorted(dropped_tags),
+            "dropped_runway_child_tags": sorted(dropped_runway_child_tags),
             "waypoint_range": [args.waypoint_start, args.waypoint_end],
             "holding_range": [args.holding_start, args.holding_end],
             "holding_idents": list(selected_holding_idents),
