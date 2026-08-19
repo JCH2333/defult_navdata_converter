@@ -1043,3 +1043,11 @@
 - 实际输入为 `Terminal/ZSNJ/ZSNJ-4P.pdf`，PDF SHA-256 为 `9dbc1378476911e587d4b8d5c1053e2e9ba46ded6d197acc1cdc9235db0c78ce`。报告 `diagnostics\r205-ocr-runtime-zsnj-i25-20260819\probe.json` 的两次运行均 `exit_code=0`、`backend=llamacpp`、`ok=true`，语义 SHA-256 均为 `ffbb28f40de0b500aaa2de0693897481d2aaa51dcc2433a5f5c78edde59eb708`，`repeatable=true`；两份原始 stdout 哈希不同，符合 nonce/耗时差异预期。
 - 本轮全量 `pytest -q` 为 `422 passed`。它只恢复了 OCR 运行时和可复跑的门禁，不解除 `ZSNJ:I25` 的 `no_unique_primary`，不创建 OCR 缓存共识，不允许投影或构建新候选；参考字节状态仍为 `0/29`、`deployable=false`。
 - 下一轮只可选择一张来源卡，优先检查该卡是否属于已有主进近的 `ambiguous_chart`/`no_matching_chart`，再按受限 OCR 缓存、至少三份独立一致缓存、角色审计、唯一规则、正反 fixture、模型门禁和双构建收敛推进。对 `no_unique_primary` 组，OCR 不得创造数据库中不存在的主进近。
+
+## 2026-08-19 r206 IAP OCR 队列与 ZSNJ/I25 候选图页边界
+
+- 实验编号：`r206-iap-ocr-eligibility-plan`。只读调用 `iap-ocr-cache --dry-run`，使用 r205 已验证运行时描述、`llamacpp-direct`、`ocr` 模式、3 倍 `autocontrast-grayscale`、`max_tokens=4096`；不运行 OCR、不创建缓存、不修改模型、投影、候选或 Community。
+- 输出 `diagnostics\r206-iap-ocr-eligibility-plan-20260819\iap-ocr-cache-dry-run.json` 显示：在未加载既有 OCR 角色共识的来源模型中，可由 OCR 收集原始图页证据的任务仅有两份 PDF：`Terminal/ZWKN/ZWKN-5B.pdf` 与 `Terminal/ZWKN/ZWKN-9D.pdf`，均属于同一组 `ZWKN/R30-Y` 的 `ambiguous_chart`；没有新的 `no_matching_chart` 任务。
+- `ZWKN/R30-Y` 已在 r65 由三份独立、受限 `llamacpp-direct` 缓存严格共识放行并投影。因此本轮不重复生成同一证据，不把“可执行 OCR”误作“需要新增内容”。这项审计只证明当前 OCR 队列没有遗漏新的可消歧来源卡。
+- 对未决 `ZSNJ/I25`，只读结构化 `Terminal/ZSNJ/Charts.csv` 与受审计图页元数据确认同一跑道 25 存在两张 ILS 候选图：`ZSNJ-5G.pdf`（`RNAV ILS/DME z RWY25`，SHA-256 `5014e49ad1e51fdd59de14fb22341510f6862759feb7b160f1eca76946a9853c`）和 `ZSNJ-5H.pdf`（`ILS/DME y RWY25`，SHA-256 `78a5fdeaffab06ae6077bd1dd442d7f96abd7a7eb3724be40b9e108b016dd72b`）。数据库编码页 `ZSNJ-4P.pdf` 只给出复飞，模型没有主进近段。
+- 候选图页存在不等于可映射。当前 424 结构化索引没有把 `I25` 唯一关联到 `5G` 或 `5H`，且没有模型主段可与图页角色相交；因此 `ZSNJ:I25` 必须继续保持 `no_unique_primary`。OCR 即使识别出图上固定点，也不得创造主进近或替代图页归属规则。下一步只有在当前 424 直接来源能够唯一证明数据库标签、主进近段与其中一张图的对应关系时，才可新增狭义规则和正反 fixture。
