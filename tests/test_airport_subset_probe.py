@@ -5,11 +5,13 @@ import pytest
 
 from scripts.airport_subset_probe import (
     add_airport_procedure_deletion,
+    append_airport_children,
     drop_selected_waypoints,
     inspect_bgl_layouts,
     isolate_holding_group,
     normalize_holding_file_groups,
     parse_airport_attributes,
+    parse_airport_child_specs,
     parse_airport_waypoint_selectors,
     parse_holding_attributes,
     select_airports,
@@ -145,6 +147,27 @@ def test_airport_attribute_assignments_are_diagnostic_and_deterministic():
 
     with pytest.raises(ValueError, match="--set-airport-attribute"):
         parse_airport_attributes(["country=China", "country=China"])
+
+
+def test_airport_child_specs_are_attribute_only_and_append_in_order():
+    children = parse_airport_child_specs([
+        "Com;frequency=118.0;type=GROUND;name=Probe",
+        "Tower;lat=32.1;lon=80.053056;alt=14022F",
+    ])
+    airport = ET.fromstring('<Airport ident="ZUAL"><Runway number="15" /></Airport>')
+
+    append_airport_children(airport, children)
+
+    assert [
+        (child.tag, child.attrib)
+        for child in list(airport)
+    ] == [
+        ("Runway", {"number": "15"}),
+        ("Com", {"frequency": "118.0", "type": "GROUND", "name": "Probe"}),
+        ("Tower", {"lat": "32.1", "lon": "80.053056", "alt": "14022F"}),
+    ]
+    with pytest.raises(ValueError, match="--append-airport-child"):
+        parse_airport_child_specs(["Com;frequency=118.0;frequency=121.0"])
 
 
 def test_airport_procedure_deletion_is_inserted_before_source_children():

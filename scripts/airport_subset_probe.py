@@ -139,6 +139,40 @@ def parse_airport_attributes(values: list[str]) -> dict[str, str]:
     )
 
 
+def parse_airport_child_specs(values: list[str]) -> tuple[ET.Element, ...]:
+    """Parse diagnostic-only SDK child elements without touching source models.
+
+    Each spec is a compact ``Tag;name=value`` sequence.  The probe intentionally
+    accepts attributes only: it is for locating BGL section-layout effects before
+    a source-backed child-object adapter is designed.
+    """
+
+    children: list[ET.Element] = []
+    for raw in values:
+        parts = [part.strip() for part in raw.split(";")]
+        tag = parts[0] if parts else ""
+        if not tag or not tag.isidentifier():
+            raise ValueError(
+                "--append-airport-child 必须以 XML 元素名开头，例如 Com;frequency=118.0"
+            )
+        attributes = parse_attribute_assignments(
+            [part for part in parts[1:] if part],
+            option="--append-airport-child",
+        )
+        children.append(ET.Element(tag, attributes))
+    return tuple(children)
+
+
+def append_airport_children(
+    airport: ET.Element,
+    children: tuple[ET.Element, ...],
+) -> None:
+    """Append independent diagnostic children in the caller's stable order."""
+
+    for child in children:
+        airport.append(deepcopy(child))
+
+
 def parse_attribute_assignments(
     values: list[str],
     *,
@@ -365,6 +399,16 @@ def _parser() -> argparse.ArgumentParser:
         help="仅诊断用：为每个保留机场设置 name=value 属性。",
     )
     parser.add_argument(
+        "--append-airport-child",
+        action="append",
+        default=[],
+        metavar="TAG;NAME=VALUE",
+        help=(
+            "仅诊断用：在每个保留机场末尾附加属性型 SDK 子对象；"
+            "例如 Com;frequency=118.0;type=GROUND"
+        ),
+    )
+    parser.add_argument(
         "--delete-airport-procedures",
         action="store_true",
         help="仅诊断用：在每个保留机场首部写入程序覆盖删除标记。",
@@ -442,6 +486,9 @@ def main() -> int:
         assigned_airport_attributes = parse_airport_attributes(
             args.set_airport_attribute
         )
+        appended_airport_children = parse_airport_child_specs(
+            args.append_airport_child
+        )
         dropped_airport_waypoints = parse_airport_waypoint_selectors(
             args.drop_airport_waypoint
         )
@@ -460,6 +507,7 @@ def main() -> int:
     for airport in selected:
         for attribute, value in assigned_airport_attributes.items():
             airport.set(attribute, value)
+        append_airport_children(airport, appended_airport_children)
         if args.delete_airport_procedures:
             add_airport_procedure_deletion(airport)
         for child in list(airport):
@@ -622,6 +670,10 @@ def main() -> int:
             "dropped_holding_attributes": args.drop_holding_attribute,
             "assigned_holding_attributes": assigned_holding_attributes,
             "assigned_airport_attributes": assigned_airport_attributes,
+            "appended_airport_children": [
+                {"tag": child.tag, "attributes": dict(child.attrib)}
+                for child in appended_airport_children
+            ],
             "delete_airport_procedures": args.delete_airport_procedures,
             "root_waypoints": (
                 "kept" if args.keep_root_waypoints
