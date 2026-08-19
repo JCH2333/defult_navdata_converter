@@ -1,3 +1,5 @@
+import hashlib
+from dataclasses import replace
 from pathlib import Path
 
 from fenix_default_navdata.model import (
@@ -10,6 +12,7 @@ from fenix_default_navdata.model import (
 from fenix_default_navdata.unclassified_procedure_audit import (
     audit_unclassified_procedures,
 )
+from fenix_default_navdata import unclassified_procedure_card_audit
 
 
 def _model(root: Path) -> NavModel:
@@ -86,3 +89,73 @@ def test_audit_marks_missing_direct_chart_evidence(tmp_path: Path) -> None:
     assert report["summary"]["source_chart_status_counts"] == {
         "missing_matching_terminal_database_chart": 3,
     }
+
+
+def _card_model(root: Path) -> NavModel:
+    pdf = root / "Terminal" / "ZTEST" / "ZTEST-4Z01.pdf"
+    pdf.parent.mkdir(parents=True)
+    pdf.write_bytes(b"fixture-pdf")
+    model = _model(root)
+    source = SourceRef(
+        "Terminal/ZTEST/ZTEST-4Z01.pdf",
+        row=1,
+        page=1,
+        sha256=hashlib.sha256(pdf.read_bytes()).hexdigest(),
+    )
+    model.procedure_segments = [
+        ProcedureSegment(
+            "ZTEST",
+            "RNP-0",
+            "",
+            "15",
+            "",
+            (),
+            source,
+        )
+    ]
+    model.procedure_charts[0] = replace(model.procedure_charts[0], source=source)
+    return model
+
+
+def test_card_audit_rejects_nearby_heading_without_direct_label_anchor(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        unclassified_procedure_card_audit,
+        "_read_source_page_text",
+        lambda path, page: "RWY15 进近及复飞\nCF FIX1\n",
+    )
+
+    report = unclassified_procedure_card_audit.audit_unclassified_procedure_card(
+        _card_model(tmp_path / "raw"),
+        "ZTEST:RNP-0:15:0",
+    )
+
+    assert report["read_only"] is True
+    assert report["direct_text"]["label_match_count"] == 0
+    assert report["direct_text"]["category_heading_matches"][0]["kinds"] == ["进近", "复飞"]
+    assert report["source_proven_kind"] is None
+    assert report["target_mapping_allowed"] is False
+    assert report["disposition"] == "rejected_missing_direct_label_anchor"
+
+
+def test_card_audit_accepts_unique_same_line_direct_label_kind_link(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        unclassified_procedure_card_audit,
+        "_read_source_page_text",
+        lambda path, page: "RNP-0 进近\n",
+    )
+
+    report = unclassified_procedure_card_audit.audit_unclassified_procedure_card(
+        _card_model(tmp_path / "raw"),
+        "ZTEST:RNP-0:15:0",
+    )
+
+    assert report["direct_text"]["label_match_count"] == 1
+    assert report["source_proven_kind"] == "进近"
+    assert report["target_mapping_allowed"] is True
+    assert report["disposition"] == "direct_label_kind_link_confirmed"

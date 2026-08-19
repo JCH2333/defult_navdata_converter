@@ -48,6 +48,10 @@ from .unclassified_procedure_audit import (
     audit_unclassified_procedures,
     write_unclassified_procedure_audit,
 )
+from .unclassified_procedure_card_audit import (
+    audit_unclassified_procedure_card,
+    write_unclassified_procedure_card_audit,
+)
 from .bgl import find_compiler
 from .airway_connection_shape_probe import run_airway_connection_shape_probe
 from .airway_coordinate_precision_probe import (
@@ -397,6 +401,25 @@ def build_parser() -> argparse.ArgumentParser:
         "--output",
         required=True,
         help="本地未分类程序审计 JSON 输出路径",
+    )
+    unclassified_procedure_card_audit = sub.add_parser(
+        "unclassified-procedure-card-audit",
+        help="只读审计一张精确未分类程序卡的直接 PDF 类别证据",
+    )
+    unclassified_procedure_card_audit.add_argument(
+        "--model",
+        required=True,
+        help="可复用 NavModel 快照（JSON 或 JSON.GZ）",
+    )
+    unclassified_procedure_card_audit.add_argument(
+        "--card",
+        required=True,
+        help="缺口卡精确键，例如 ZGBS:RNP-0:12:0",
+    )
+    unclassified_procedure_card_audit.add_argument(
+        "--output",
+        required=True,
+        help="本地未分类程序卡审计 JSON 输出路径",
     )
     default_gap_cards = sub.add_parser(
         "default-gap-cards-audit",
@@ -1306,6 +1329,16 @@ def main(argv: list[str] | None = None) -> int:
         output = Path(args.output).expanduser().resolve()
         report["output"] = str(output)
         write_unclassified_procedure_audit(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "unclassified-procedure-card-audit":
+        report = audit_unclassified_procedure_card(
+            load_model(Path(args.model)),
+            args.card,
+        )
+        output = Path(args.output).expanduser().resolve()
+        report["output"] = str(output)
+        write_unclassified_procedure_card_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "default-gap-cards-audit":

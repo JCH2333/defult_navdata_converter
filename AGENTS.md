@@ -1570,3 +1570,12 @@
 - 每次代码或仓库文档改动：运行 `pytest -q`、`git diff --check`，精确审查暂存区，提交一个可解释主题，并尝试普通 `git push`。候选、诊断、缓存、数据库、备份、日志、SDK 中间产物和外部测试包不得提交。
 - 推送失败时只记录失败原因；当前应提示检查代理 `http://127.0.0.1:7897`。网络恢复后按 `git push` 和 `git ls-remote --heads origin main` 核对，不得强推。
 - 当前下一项唯一任务为阶段 A 的 `ZGBS:RNP-0:12:0` 只读未分类程序卡审计。在它完成、测试、提交和状态同步前，不启动下一张卡，不修改 `NavModel`、正式投影、候选、Community 或部署逻辑。
+
+## 2026-08-19 r224 ZGBS RNP-0 未分类程序卡直接来源审计
+
+- 实验编号：`r224-zgbs-rnp-0-12-unclassified-procedure-card-audit`。唯一假设是：`ZGBS:RNP-0:12:0` 能否由同一来源页中标签与程序类别标题的直接、唯一文本关联确认 `kind`。唯一变量是新增只读 CLI `unclassified-procedure-card-audit`；它按缺口卡精确键选择模型段，不读取参考 BGL/SQLite、Fenix 或 OCR，不修改模型、XML、候选、Community 或部署。
+- 新审计验证 `SourceRef` PDF SHA-256，读取指定页的直接文本，输出精确程序段/腿、terminal-database-coding 图页、标签直接命中、类别标题事实和同文本行的标签-类别链接。只有标签恰好命中一次、链接恰好一条且类别唯一时，才报告 `source_proven_kind` 和 `target_mapping_allowed=true`。相邻标题、页面顺序、标签形态和 OCR 均不能成为关联规则。
+- 真实输出为 `diagnostics\r224-zgbs-rnp-0-12-unclassified-procedure-card-audit-20260819.json`。来源 `Terminal\ZGBS\ZGBS-0C-2.pdf` 第 1 页的实际 SHA-256 为 `16a443504222d3732bac6b9ea1023c56c6a6b6727f6b8bf91ac93b643f2e52b0`，与冻结模型一致；`RNP-0` 直接命中 `0` 次。页面确有 8 条程序类别标题事实，包括 `RWY12 进近及复飞` 和多个 `RWY12/RWY30 进近过渡`，但它们不含该数据库标签，不能按腿在标题之后、下一标题之前的顺序推断类别。
+- 处置为 `rejected_missing_direct_label_anchor`、`source_proven_kind=null`、`target_mapping_allowed=false`。模型、投影、候选、Community 和部署状态均未改变；r188/r189 自重放继续为 `29/29`，参考一致继续为 `0/29`，`deployable=false`，字节收敛未推进。
+- 新增最小正反 fixture：无标签直接锚点但存在相邻“进近及复飞”标题时必须拒绝；仅为未来来源规则验证的正例要求 `RNP-0` 与单一类别在同一文本行。CLI 参数和输出写入路径亦有独立回归。完整回归为 `440 passed`。
+- 下一项唯一任务：按稳定排序处理 `ZGBS:RNP-0:15:1`。复用 r224 审计器，仅替换精确卡键；无新的唯一标签-类别直接关联时保持拒绝，不得修改模型或投影。
