@@ -2043,3 +2043,11 @@
 7. `stage-backup-deploy`：GUI、CLI、自动更新都调用同一门禁和同一部署器；未达到 `deployable=true` 时只能构建隔离候选，不能写入游戏目录。
 
 未来切换至新 AIRAC 时，先复制该周期的输入登记和模型重放清单，再运行全量来源/模型/目标验证；未来增加 Fenix、TFDI、FSL/FSLabs、PMDG、iFly 等 adapter 时，必须先在本文件建立该目标的小节并完成官方基线、真实加载路径、格式/数据库契约、降级策略、fixture、运行时验证、备份恢复和实机清单，随后才可实现代码。
+## 2026-08-19 r244 航路序列化投影矩阵审计
+
+- 实验编号：`r244-airway-projection-matrix-audit`。新增只读 CLI `airway-projection-matrix-audit`，只允许读取 r187 冻结 `NavModel` 和 r188 候选 `_work\china-navdata.xml`；禁止读取参考 BGL payload、参考数据库、Fenix、OCR 或任何官方导航记录。审计逐条构造适配器实际使用的 `Route`、`Previous`、`Next` 预期连接，记录航路名、序号、端点地区/标识、最低高度、XML 位置和匹配形状。
+- 新增最小回归覆盖直接投影、来源端点地区缺失、唯一目标身份解析和 XML 高度属性不匹配；定向回归 `8 passed`。诊断器还检查候选 XML 连接是否没有来源归属，避免仅验证源侧而遗漏候选多写对象。
+- 真实报告：`diagnostics\r244-airway-projection-matrix-audit-20260819.json`。r187 的 `4446` 条航路腿分类守恒：`4394` 条 `projected`，`40` 条 `projected_after_target_identity_resolution`，`12` 条 `rejected_by_source`。后 40 条只是在 424 缺端点地区时，经现有官方模板身份契约唯一确定目标地区；报告不读取或导出该模板的导航内容。剩余 12 条为 6 个缺起点地区与 6 个缺终点地区，继续保守拒绝。
+- 候选 XML 有 `8868` 条 Route 连接，等于 `4434` 条已投影航路腿的双向连接；`candidate_connections_without_source_owner=0`，不存在 `missing_from_xml` 或 `ambiguous_output_match`。因此 r216 的 `00_enroute.bgl` 节表和体积差异不能归因于 r187 到 XML 的航路遗漏、方向、端点、地区、最低高度或子节点位置；本轮不修改模型、正式 adapter、候选、Community 或部署，参考一致仍为 `0/29`，字节收敛未推进。
+- 可复用结论：目标 adapter 可以在冻结模型之外执行经官方模板身份契约支持的目标地区解析，但审计必须显式区分“424 直接投影”“目标身份解析后投影”“来源拒绝”，并同时验证候选侧没有无来源归属连接。不得将这种目标身份解析误报为新的 424 内容，也不得用参考差异补写端点地区。
+- 下一项唯一任务：r245 建立只读“SDK BGL 格式表达能力矩阵”。以 r244 已证明的完整航路 XML、r216 的受限头/节表统计和现有单变量探针为输入，按 `00_enroute.bgl`、区域机场 BGL、机场补丁 BGL 分类“由当前 SDK 输入可控制”“已通过单变量否决”“尚未有来源完整且作用域明确的表达”。它不得读取参考 payload、修改内容模型或重复机场子对象探针；只有矩阵找到新的来源完整且未被否决的单变量 XML 表达，才可启动 r246 编译探针。

@@ -24,6 +24,10 @@ from .airway_endpoint_card_audit import (
     audit_non_designated_airway_endpoint_card,
     write_airway_endpoint_card_audit,
 )
+from .airway_projection_matrix_audit import (
+    audit_airway_projection_matrix,
+    write_airway_projection_matrix_audit,
+)
 from .airport_source_inventory import (
     build_airport_source_inventory,
     write_airport_source_inventory,
@@ -494,6 +498,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="最多输出多少条哈希化关联样本（默认 100）",
     )
     airway_diff.add_argument("--output", help="可选的本地航路差异审计 JSON 输出路径")
+    airway_projection_matrix = sub.add_parser(
+        "airway-projection-matrix-audit",
+        help="只读关联 NavModel 航路腿与候选 XML 的 Route/Previous/Next 序列化",
+    )
+    airway_projection_matrix.add_argument("--model", required=True)
+    airway_projection_matrix.add_argument("--candidate-xml", required=True)
+    airway_projection_matrix.add_argument("--output", required=True)
     terminal_coordinate = sub.add_parser(
         "terminal-coordinate-audit",
         help="只读分类参考缺失航点在 424 终端坐标页中的来源覆盖",
@@ -1383,6 +1394,16 @@ def main(argv: list[str] | None = None) -> int:
             output = Path(args.output).expanduser().resolve()
             report["output"] = str(output)
             write_airway_diff_audit(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "airway-projection-matrix-audit":
+        report = audit_airway_projection_matrix(
+            load_model(Path(args.model)),
+            Path(args.candidate_xml),
+        )
+        output = Path(args.output).expanduser().resolve()
+        report["output"] = str(output)
+        write_airway_projection_matrix_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "terminal-coordinate-audit":
