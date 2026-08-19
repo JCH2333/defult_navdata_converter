@@ -217,10 +217,11 @@ SID/STAR 名称碰撞。该网格由 XML 中的 `AiracCycle` 触发。无 `Airac
 2026-08-19 的 r143-r150 继续使用隔离 `ZUAL` 项目，新增
 `--append-root-object 'Vor;...|Dme;...'` 以表达一层 SDK 子对象。空机场的节表只有
 `0x3/0x35`；根 `Vor/Dme` 增加 `0x13`，根 `Ndb` 增加 `0x17/0x33`，根 `Waypoint`
-增加 `0x22/0x34`。两条落在同一 QMID 的设施使相应空间节保持 `count=1,size=16`；
-把第二条移动到另一 QMID 后，VOR 的 `0x13`、NDB 的 `0x17` 与航点的 `0x22` 都变为
-`count=2,size=32`，而 `0x33`、`0x34` 仍为单一全局条目。因此 BGL 节表的这些计数
-是空间分桶条目数，不是源设施或航点记录总数。参考机场 BGL
+增加 `0x22/0x34`。两个不同 QMID 的空机场使 `0x3` 由 `count=1,size=16` 变为
+`count=2,size=32`；把第二条设施或航点移动到另一 QMID 后，VOR 的 `0x13`、NDB 的
+`0x17` 与航点的 `0x22` 也都变为 `count=2,size=32`，而 `0x33`、`0x34`、`0x35`
+仍为单一全局条目。因此 `0x3/0x13/0x17/0x22` 的节表计数都是空间分桶条目数，不是
+机场、源设施或航点记录总数。参考机场 BGL
 的 `0x13/0x17/0x22=3604` 不能作为“要补齐的 424 行数”，也不能单独证明缺少某类
 导航实体。探针规格不写入 `NavModel` 或正式候选；SDK Package Tool 构建必须串行，
 不能并发运行。回归：`test_root_object_specs_support_one_level_sdk_children`。
@@ -242,8 +243,9 @@ SID/STAR 名称碰撞。该网格由 XML 中的 `AiracCycle` 触发。无 `Airac
 2026-08-19 对当前允许的 `navigraph-nav-base` 与 `navigraph-nav-jepp` 官方索引进行
 只读检查：虽包含 `airport` 表定义，但实际中国机场行数为 0，无法提供“官方已有机场”
 的身份集合。因此官方无 NAIP 基线不能支持按机场选择 `onlyAddIfReplace` 的混合策略；
-从参考成品读取该集合会越过内容来源边界。默认适配器必须继续使用能加载新增机场的
-常规投影，并把 `onlyAddIfReplace` 限定为不可部署的 SDK 布局诊断。
+从参考成品读取该集合会越过内容来源边界。加之 `0x3` 是空间分桶，参考和候选的
+`0x3` 计数接近也不能反推两者使用相同机场集合。默认适配器必须继续使用能加载新增
+机场的常规投影，并把 `onlyAddIfReplace` 限定为不可部署的 SDK 布局诊断。
 
 机场覆盖必须先写入 `DeleteAirport`，且仅删除 `Approaches`、`Departures`、`Arrivals`，再投影 424 的跑道、终端点、程序和等待航线。证据：2026-08-19 对 2608R1 `ZUAL` 参考 BGL 的 SDK BglExplorer 读取显示 `FAC_TYPE_AIRPORT_DELETE` 的三项删除标记；同一份隔离 XML 仅新增该标记后，Package Tool 生成相同节表、文件增量 12 字节，并确认生成该设施记录及机场替换标记。此规则是默认通用数据的目标覆盖契约，不使用参考内容补写任何航行记录。回归：`test_bgl_xml_is_deterministic`、`test_airport_procedure_deletion_is_inserted_before_source_children`。
 
