@@ -1594,3 +1594,11 @@
 - 真实报告为 `diagnostics\r226-zgbs-rnp-0-15-source-page-2-unclassified-procedure-card-audit-20260819.json`。源 PDF SHA-256 `40d1ec47b7641d2a1680918d005a6392aca983206ffd8873bb552090d7cc5955` 与模型一致；程序腿为 `CF BS509`、`DF BS508`、`TF BS506`。页面存在 2 条类别标题事实，但 `RNP-0` 直接命中为 `0`，无同文本行的标签-类别链接。
 - 处置继续为 `rejected_missing_direct_label_anchor`、`source_proven_kind=null`、`target_mapping_allowed=false`。不同 PDF 页的独立审计未提供新来源规则；模型、投影、候选、Community 和部署不变，自重放 `29/29`、参考一致 `0/29`、`deployable=false`，字节收敛未推进。
 - 下一项唯一任务：按稳定排序审计 `ZGBS:RNP-0:30:3`。该卡与 r226 使用同一来源页，但跑道和模型段不同，仍必须按精确卡单独审计；除非该段自身得到唯一直接标签-类别关联，不得复用 r226 的页面顺序或标题推断。
+
+## 2026-08-19 r227 ZGBS RNP-0 跑道 30 程序卡直接来源审计
+
+- 实验编号：`r227-zgbs-rnp-0-30-unclassified-procedure-card-audit`。唯一变量是将 r226 卡键替换为 `ZGBS:RNP-0:30:3`；继续只读 `ZGBS-0C-3.pdf` 第 1 页，不修改代码、模型、候选、Community 或部署。
+- 真实报告为 `diagnostics\r227-zgbs-rnp-0-30-unclassified-procedure-card-audit-20260819.json`。PDF SHA-256 `40d1ec47b7641d2a1680918d005a6392aca983206ffd8873bb552090d7cc5955` 与模型一致；程序腿为 `CF BS509`、`DF BS508`、`TF BS506`。该页类别标题事实为 2 条，`RNP-0` 直接命中 `0`，没有直接标签-类别链接。
+- 本卡跑道 `30` 与 terminal-database-coding 页列出的 `30` 一致，但跑道一致性不是程序类别证明，不能替代缺失的标签锚点或允许按标题顺序归类。处置保持 `rejected_missing_direct_label_anchor`、`source_proven_kind=null`、`target_mapping_allowed=false`。
+- 模型、投影、候选、Community 和部署不变；自重放 `29/29`、参考一致 `0/29`、`deployable=false`，字节收敛未推进。
+- 下一项唯一任务：从稳定排序的下一张未分类程序卡 `ZHCC:CC3-09:12R:4` 开始独立审计。其来源文件和标签族均不同，必须先重新核对 PDF/模型哈希和直接标签锚点，不能把 ZGBS RNP 结论泛化为规则。
