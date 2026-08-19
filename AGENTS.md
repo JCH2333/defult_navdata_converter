@@ -506,3 +506,9 @@
 - 新增 `unclassified-procedure-audit` CLI、来源审计模块和最小 fixture。报告逐条保留机场、标签、标签族、跑道、航段类型/固定点、原始 PDF SHA-256、直接图页类型及目标拒绝原因；固定声明 `read_only=true`、`reference_records_read=false`、`fenix_records_read=false`。
 - 实际报告：`diagnostics/r178-unclassified-procedure-audit.json`。`13` 条均唯一回链到 `terminal_database_coding` 图页；标签族为 `rnp_numeric=4`（ZGBS `RNP-0`）、`cc_numeric=3`（ZHCC `CC3-09`/`CC5-17`/`CC5-32`）、`eo_numeric=6`（ZPDQ/ZUKD/ZUSH 的 `EO-*`）。全部 `target_mapping_allowed=0`、`source_proven_kind=null`、`disposition=rejected_for_target_mapping`。
 - 结论：`EO-*` 的名称、`RNP-0` 的字面形式以及 `CC*-*` 的前缀都不是离场、进场或进近的直接类型证据，不能写入 BGL 或改变 `ProcedureSegment.kind`。下一轮只允许对每个标签族继续读取同一 424 PDF 的直接标题/编码字段，或以其显式拒绝状态进入未来目标 profile 的降级策略；不得以“减少未分类数”为目标伪造映射。
+
+### 2026-08-19 r179 未分类程序直接标题取证暂停日志
+
+- 使用 r178 所列 PDF SHA-256 在已验证的 `pdf-evidence-cache-2608r1-r43` 中复核，缓存可重放各页的 terminal-database-coding 航段和固定点，但这些 13 条的已解析图页标题均只为“数据库编码”，没有可用的离场、进场或进近类型标题字段。因此缓存不能单独提升任何 `source_proven_kind`。
+- 按可复跑 OCR 约束对 `Terminal/ZPDQ/ZPDQ-4J.pdf` 使用本机 `ocr-skill extract --backend llamacpp` 重新尝试。运行于 2026-08-19，结果为 `engine_unavailable`、`WinError 10061`，即 `llama-server` 未监听。本轮未使用 mock、未手工转录、未改写模型或候选。
+- 结论：这不是程序内容缺失的许可，也不是可用的映射依据。等待可复跑 OCR 运行时恢复并通过缓存/来源门禁前，`RNP-0`、`CC*-*`、`EO-*` 继续全部拒绝；机场 SDK 下一轮不得重复已否决的等待航线隔离布局实验。
