@@ -1587,3 +1587,10 @@
 - 该模型段的跑道字段为 `15`，而同页 terminal-database-coding 图页仅列 `12/30`。这不是类别映射证据，也不能用于否定、修正或按相邻数据库记录推断该段；只记录为来源页与模型字段的审计事实。
 - 处置继续为 `rejected_missing_direct_label_anchor`、`source_proven_kind=null`、`target_mapping_allowed=false`。模型、投影、候选、Community 和部署状态不变；自重放保持 `29/29`、参考一致保持 `0/29`、`deployable=false`，字节收敛未推进。
 - 下一项唯一任务：按稳定排序审计 `ZGBS:RNP-0:15:2`。该卡指向不同的 `ZGBS-0C-3.pdf`，可复用 r224 审计器，但必须作为独立来源卡处理，不得把本页拒绝结论跨页套用。
+
+## 2026-08-19 r226 ZGBS RNP-0 跑道 15 跨页程序卡直接来源审计
+
+- 实验编号：`r226-zgbs-rnp-0-15-source-page-2-unclassified-procedure-card-audit`。唯一变量是将 r225 卡键替换为 `ZGBS:RNP-0:15:2`；该卡改为读取不同来源页 `ZGBS-0C-3.pdf` 第 1 页，继续不修改代码、模型、候选、Community 或部署。
+- 真实报告为 `diagnostics\r226-zgbs-rnp-0-15-source-page-2-unclassified-procedure-card-audit-20260819.json`。源 PDF SHA-256 `40d1ec47b7641d2a1680918d005a6392aca983206ffd8873bb552090d7cc5955` 与模型一致；程序腿为 `CF BS509`、`DF BS508`、`TF BS506`。页面存在 2 条类别标题事实，但 `RNP-0` 直接命中为 `0`，无同文本行的标签-类别链接。
+- 处置继续为 `rejected_missing_direct_label_anchor`、`source_proven_kind=null`、`target_mapping_allowed=false`。不同 PDF 页的独立审计未提供新来源规则；模型、投影、候选、Community 和部署不变，自重放 `29/29`、参考一致 `0/29`、`deployable=false`，字节收敛未推进。
+- 下一项唯一任务：按稳定排序审计 `ZGBS:RNP-0:30:3`。该卡与 r226 使用同一来源页，但跑道和模型段不同，仍必须按精确卡单独审计；除非该段自身得到唯一直接标签-类别关联，不得复用 r226 的页面顺序或标题推断。
