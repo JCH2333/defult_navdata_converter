@@ -759,5 +759,47 @@
 - r188 `output/candidate-2608-default-r188-doviv-replay` 与 r189 `output/candidate-2608-default-r189-doviv-replay-repeat` 均从同一 r187 模型、同一官方双包和同一已验证官方设施索引独立调用 Package Tool 构建。两份候选均为 `status=candidate`、`local_contract_verified=true`、`valid=true`、`deployable=false`，各含 `21` 个 BGL。
 - `diagnostics/r190-r188-r189-file-convergence-audit.json` 使用标准 JSON 库复核，结果为候选重复范围 `29/29` SHA-256 一致，参考范围仍为 `0/29`。这再次证明本地构建确定性，不证明参考一致、游戏加载或可部署。
 - 与 r181 的只读影响范围审计 `diagnostics/r190-r188-vs-r181-file-convergence-audit.json` 显示 `25/29` 相同；四个变化文件精确为主覆盖包的 `00_enroute.bgl`、`bglindex.bout`、`layout.json` 和 `manifest.json`。十个区域机场 BGL、十个机场补丁 BGL、两个 ContentHistory 和补丁包元数据均未变化，符合 DOVIV 仅恢复航路区域的单变量假设。
+
+## 2026-08-19 权威状态、进度与后续计划（r192 后续维护入口）
+
+本节优先于本文件中此前的默认通用数据状态、百分比和后续计划；历史章节保留为可复核实验记录。每次继续工作前必须依次核对本节、根目录 `AGENTS.md`、`git status --short --branch`、最后有效候选的 `conversion-report.json`、最新 `rNNN` 诊断及本轮测试。若文档与实际产物冲突，以实际 Git、候选报告、标准 JSON 重读和测试结果为准，并在本节同步修正。
+
+### 1. 当前真实状态与量化进度
+
+- 仓库为 `fenix_to_default_navdata`，公开远端为 `JCH2333/defult_navdata_converter`。本地 `main` 的 HEAD 是本节对应的文档提交，当前相对 `origin/main` 领先 `6` 个提交，工作树干净。此前普通推送因 `http://127.0.0.1:7897` 不可达而失败；网络恢复后只允许普通 `git push`，随后以 `git ls-remote --heads origin main` 复核，不得强推或重写历史。
+- 当前有效输入快照为 `output/intermediate-2608-r187-navaid-label-replay.json.gz`，SHA-256 为 `7cec24bd4a57545d39aab037abe4125c763ad12f364bd5f8f0073b0e050fdb4b`。模型规模：机场 `275`、跑道方向 `640`、导航台 `438`、航点 `2741`、航路 `4446`、程序段 `10409`、拒绝记录 `435`、拒绝程序 `10`。
+- r188/r189 从同一冻结模型、同一官方双包和同一官方设施索引独立构建。两份候选均为 `status=candidate`、`valid=true`、`local_contract_verified=true`、`deployable=false`，各含 `21` 个 BGL；候选重复构建文件树为 `29/29` SHA-256 一致，参考成品范围仍为 `0/29` 一致。
+- r188 相对 r181 仅改变主覆盖包 `00_enroute.bgl` 及其派生 `bglindex.bout`、`layout.json`、`manifest.json`，其余 `25/29` 文件不变，符合 DOVIV 航路区域恢复的单变量假设。
+- 工程能力进度仍估计约 `45%`：424 输入、可复用 `NavModel`、证据审计、BGL/Package Tool 构建、CLI/GUI、候选验证与文件收敛审计均已存在；剩余工作集中在来源缺口、目标 SDK 表达契约和参考二进制收敛。字节级验收进度必须单独报告为 `0/29`，部署、实机验证和正式 Release 均为 `0%`。
+- 未覆盖 Community，未创建本轮备份，未进行用户实机测试，未创建 Release。即使游戏当前未运行，也不得因本地契约通过而部署。
+
+### 2. r191/r192 已完成诊断与结论
+
+- `diagnostics/r191-airway-endpoint-source-audit.json` 审计了 `10` 个未决航路端点和 `21` 条关联航段：`7` 个为多地区邻接的边界点，`2` 个没有可用的 `DESIGNATED_POINT.csv` 精确身份，`1` 个 `LELIM` 虽有单一 `ZG` 邻接但 `M503` 的上海/广州 ACC 证据与恢复门禁冲突。`DXG` 不在可解析的 VOR/NDB 直接表中，不能凭邻接发明地区。结论是本轮没有新的来源恢复规则；这些对象继续显式拒绝，不得为追求差异数量而放宽 FIR、ACC 或身份约束。
+- `diagnostics/r192-airport-source-inventory.json` 确认候选已投影来源完整的 `275` 个机场、`640` 个跑道方向、`12549` 个终端航点、`430` 个 ILS 和 `1297` 个等待航线。`346` 个具有 `SERVICED_AIRPORT` 的导航台只具备航路层投影资格，不能伪造为机场 NDB；`CONTROLLED_RADIO.csv` 是空域扇区频率，不能映射为机场 `Com`/`Tower`。
+- 参考机场 BGL 仍具有候选缺失的 `0x17`、`0x33` 等节且体积明显更大。这只说明目标 SDK 表达尚未取证；禁止根据参考节表、参考记录或参考坐标反向伪造对象。
+- 已否决方向继续有效：机场关联 NDB 伪投影、`onlyAddIfReplace`、根节点终端航点重复、空域通信映射、等待航线隔离、`CODE_DIR` 简单反转、无来源 `routeType` 猜测。任何重提都必须先给出新的直接 424 来源或真实 SDK/运行时证据，并建立最小正反例。
+
+### 3. 下一轮强制工作流
+
+每个 `rNNN` 必须只验证一个假设、只改变一个变量。开始前创建实验记录，写清：目标问题、允许读取的内容来源、明确禁止读取的数据、冻结模型/官方模板/工具 SHA-256、预期受影响的文件角色、成功条件和否决条件。结束后必须保留候选或诊断路径、测试命令、Package Tool 轨迹、标准 JSON 重读结果、文件树哈希、来源审计和保留或否决结论；随后更新本节和根目录 `AGENTS.md`。
+
+1. **先完成 r193 的来源完整 SDK 单变量探针。** 读取 `scripts/airport_subset_probe.py` 与其测试，从 r192 清单中选择一个已经存在于 424 输入、来源和字段完整、且未被否决的机场对象。探针只能改变一个 XML 对象或属性，不得把诊断对象写回正式适配器。每个探针必须同时保存 XML、输入哈希、编译命令和工具版本、Package Tool 轨迹、BGL 头/节表、读取器完整登记和文件 SHA-256。只有可解释来源、作用域和目标 BGL 变化的结论才可进入适配器。
+2. **逐项关闭已知 424 内容缺口。** 对 `10` 个拒绝 IAP 组、`13` 个未分类程序段、`12` 条未投影航路段和 `5` 个未投影航路点建立来源卡。顺序固定为“数据库已有主段或结构化 424 记录 -> PDF 直接文本 -> 受审计且可复跑的 OCR 共识 -> 唯一保守规则 -> 正例/拒绝例 -> 来源审计 -> BGL 投影 -> 独立 validate”。OCR 只能提供可审计证据，不能生成主进近、航段、图页对应、坐标或任何人工一次性答案。
+3. **将已证实的探针结论最小化投影到适配器。** 每条规则必须有最小 fixture、正例和反例测试、来源字段与降级理由、预期影响 BGL 文件角色。变更后先导出新的冻结模型，再执行 `model-replay-audit`；除精确允许清单外出现差异即否决该轮，不构建候选。
+4. **执行候选双构建和逐文件收敛。** 仅在模型门禁通过后，从同一冻结模型独立构建两次，要求有效文件树全等、`validate` 通过、报告可被标准 JSON 库重读。再运行只读 `file-convergence-audit`，按 `00_enroute.bgl`、区域机场 BGL、机场补丁 BGL、索引/布局、清单/ContentHistory 分组报告 `29` 个文件的参考一致数。只有影响范围符合假设且参考一致数增加，才算字节收敛进展。
+5. **完成字节验收后才进入部署门禁。** 达到参考 `29/29` 后，必须从干净输入重建两次，并核对输入清单、模型、报告和包树 SHA-256；随后确认 `FlightSimulator2024.exe` 已退出，为两个 Community 覆盖包及其 `layout.json`、`manifest.json`、ContentHistory 建立带时间戳备份并执行恢复演练。仅在这些门禁完成后，才可覆盖 Community 并交由用户实机验证 `ZBCF`、`ZUNZ`、`ZUUU` 的机场输入、跑道、SID、STAR、IAP、航路/航点、退出飞行和退出模拟器。全部通过前只能标记为测试版。
+
+### 4. 可复用转换管线与跨格式边界
+
+固定跨 AIRAC、跨目标格式的内容管线为：
+
+`lock-inputs -> ingest-424 -> evidence-audit -> normalize-model -> model-audit -> project-target -> build-target -> validate-target -> diff-and-audit -> stage-backup-deploy`
+
+- `NavModel` 和版本化冻结快照是唯一的内容边界。`ingest-424` 只读取当期 424 CSV/PDF 和受审计 OCR 证据，保留 `SourceRef`、原始精度、拒绝原因和规则版本；不得读取 Fenix、参考成品导航记录或目标二进制作为内容输入。
+- 每个新目标必须新建独立 `profile`、`adapter`、`validator`、`deployer`。profile 记录官方基线、真实加载路径、schema/文件契约、排序、单位、NULL/default、长度上限、元数据、降级策略、最小 fixture、运行时模拟器和实机清单。不得把目标专有字段和规则回写进 `source.py`。
+- OCR 是可重放的证据提供器，不是转换结果。缓存必须绑定 PDF SHA-256、页码、裁剪/预处理、模型与命令版本、运行时图像、解析器版本和多次一致性；不满足门禁只能产出审计或拒绝记录，不能进入模型投影。
+- CLI、GUI、GitHub 自动更新、构建、验证和部署必须调用同一 profile、候选清单、报告 schema 与 `deployable` 门禁。GUI 只呈现状态和调用受控 CLI，不能绕过模型审计或直接覆盖 Community；自动更新只分发已提交、已验证的工具代码，不能携带本地数据库、OCR 缓存、诊断或候选包。
+- 每个 AIRAC 至少保留输入 manifest、证据 manifest、模型快照与重放审计、profile、构建/验证/差分报告、拒绝策略和可恢复部署记录。未来转换 TFDI、FSL/FSLabs、PMDG、iFly 或其他格式时，只消费冻结 `NavModel` 并新增目标适配器，不重新解析 424，也不把某一机模的中间产物作为通用来源。
 - 两份候选的独立 `validate` 均确认官方设施索引、官方区域恢复、导航台选择、包契约和本地候选契约通过；飞行验证清单仍全部未验证。构建后再次确认 `FlightSimulator2024.exe` 未运行；未覆盖 Community，未创建备份，未部署，未创建 Release。
 - 本轮 DOVIV 规则已完成“来源模型重放 -> 双构建 -> 本地验证 -> 影响范围审计”闭环。后续不得仅为重复此规则再构建候选；下一轮应从剩余 `12` 条航路段/`5` 个航点区域的明确来源卡，或一个来源完整的 SDK 表达缺口中选择单一假设，并继续要求影响文件角色与结果严格一致。
