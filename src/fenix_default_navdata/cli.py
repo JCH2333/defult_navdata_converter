@@ -28,6 +28,10 @@ from .airway_projection_matrix_audit import (
     audit_airway_projection_matrix,
     write_airway_projection_matrix_audit,
 )
+from .sdk_bgl_expression_matrix import (
+    audit_sdk_bgl_expression_matrix,
+    write_sdk_bgl_expression_matrix,
+)
 from .airport_source_inventory import (
     build_airport_source_inventory,
     write_airport_source_inventory,
@@ -505,6 +509,13 @@ def build_parser() -> argparse.ArgumentParser:
     airway_projection_matrix.add_argument("--model", required=True)
     airway_projection_matrix.add_argument("--candidate-xml", required=True)
     airway_projection_matrix.add_argument("--output", required=True)
+    sdk_matrix = sub.add_parser("sdk-bgl-expression-matrix-audit")
+    sdk_matrix.add_argument("--inventory", required=True)
+    sdk_matrix.add_argument("--projection-matrix", required=True)
+    sdk_matrix.add_argument("--enroute-cardinality", required=True)
+    sdk_matrix.add_argument("--connection-probe", required=True)
+    sdk_matrix.add_argument("--child-order-probe", required=True)
+    sdk_matrix.add_argument("--output", required=True)
     terminal_coordinate = sub.add_parser(
         "terminal-coordinate-audit",
         help="只读分类参考缺失航点在 424 终端坐标页中的来源覆盖",
@@ -1404,6 +1415,17 @@ def main(argv: list[str] | None = None) -> int:
         output = Path(args.output).expanduser().resolve()
         report["output"] = str(output)
         write_airway_projection_matrix_audit(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "sdk-bgl-expression-matrix-audit":
+        report = audit_sdk_bgl_expression_matrix(
+            Path(args.inventory), Path(args.projection_matrix),
+            Path(args.enroute_cardinality), Path(args.connection_probe),
+            Path(args.child_order_probe),
+        )
+        output = Path(args.output).expanduser().resolve()
+        report["output"] = str(output)
+        write_sdk_bgl_expression_matrix(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "terminal-coordinate-audit":
