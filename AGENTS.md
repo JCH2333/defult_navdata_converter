@@ -1634,3 +1634,11 @@
 - `EO-16` 直接命中 `0`，无同文本行标签-类别链接。离场标题、`DER16`、RF 腿或跑道 `16` 都不能将该数据库标签归类为离场；它们不满足直接来源关联门禁。
 - 处置为 `rejected_missing_direct_label_anchor`、`source_proven_kind=null`、`target_mapping_allowed=false`。模型、投影、候选、Community 和部署不变；自重放 `29/29`、参考一致 `0/29`、`deployable=false`，字节收敛未推进。
 - 下一项唯一任务：按稳定排序审计 `ZPDQ:EO-34:34:8`。该卡来源页和跑道均不同，必须按精确卡重新审计，禁止由 EO-16 或 RF 腿形态推断类别。
+
+## 2026-08-19 r232 ZPDQ EO-34 跨页程序卡直接来源审计
+
+- 实验编号：`r232-zpdq-eo-34-34-unclassified-procedure-card-audit`。唯一变量是将 r231 的精确卡切换为 `ZPDQ:EO-34:34:8`，只读 `ZPDQ-4L.pdf` 第 1 页，不修改代码、模型、候选、Community 或部署。
+- 真实报告为 `diagnostics\r232-zpdq-eo-34-34-unclassified-procedure-card-audit-20260819.json`。来源 SHA-256 `7cad7386be31f0d7e4d35674eed2323a2f93c51e20480c15e9568f3ce7262233` 与模型一致；程序段包含 `IF DQ610`、多个 `TF/RF`、`HM DQ560` 等 11 条腿。页面有 4 条类别标题事实，编码页列出跑道 `16/34`。
+- `EO-34` 直接命中 `0`，无同文本行标签-类别链接。RF/HM 腿形态、`DQ560`、`RWY34` 离场标题和跑道匹配都不是程序类别映射证据，不能解除未分类拒绝。
+- 处置继续为 `rejected_missing_direct_label_anchor`、`source_proven_kind=null`、`target_mapping_allowed=false`。模型、投影、候选、Community 和部署不变；自重放 `29/29`、参考一致 `0/29`、`deployable=false`，字节收敛未推进。
+- 下一项唯一任务：按稳定排序审计 `ZUKD:EO-15:15:9`。该卡切换机场和来源页，必须重新核对 PDF 哈希与直接文本，不能将 EO-34 的 RF/HM 观察外推。
