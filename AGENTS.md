@@ -1279,3 +1279,11 @@
 - 对只读审计、SDK 探针、模型规则和候选构建分别提交，避免把诊断结论、内容变更和部署逻辑混入一个提交。数据库、备份、日志、诊断、候选、SDK 中间产物和外部测试包继续保持忽略。
 - 每次代码或仓库文档变更后必须运行 `pytest -q`、`git diff --check`，检查精确暂存区，创建单一主题本地提交，并尝试普通 `git push`。网络失败时保留本地提交并记录失败原因；代理恢复后再普通推送，不得强推。
 - r213 的下一项唯一任务固定为：修正无线电多表合并和跨表无线电身份，生成非零、只读的真实作用域审计；在该审计完成前，不启动模型变更、候选构建、部署或其他 SDK 探针。
+
+## 2026-08-19 r213 进近扇区频率来源作用域审计
+
+- 实验编号：`r213-app-sector-radio-scope-audit`。唯一假设是：当 424 的空域无线电可经 `APPSECTOR_RUNWAYDIRECTION` 和 `AD_HP` 关联到机场时，审计必须保留这一关系以供未来目标格式复用，同时依据其真实作用域明确拒绝默认 BGL 的 `Com`/`Tower` 投影。
+- 实现将 `AIRSPACE_RADIO.csv`、`CONTROLLED_RADIO.csv`、`RESTRICTED_RADIO.csv`、`SPECIAL_AIRSPACE_RADIO.csv` 统一读取；每行携带 `source_file`，无线电身份严格为 `source_file + RADIO_ID`，避免不同表内同名 ID 被错误合并。报告样例同时记录空域、机场、跑道方向、频率、扇区和来源表。自动化回归 `test_inventory_rejects_airport_linked_approach_sector_radios` 覆盖实际使用的 `CONTROLLED_RADIO.csv` 以及跨表同名 `RADIO_ID` 的隔离。
+- 真实命令使用 r187 冻结模型和 r188 的候选 XML 生成 `diagnostics\r213-app-sector-radio-scope-audit-20260819.json`。当期 `AIRSPACE_RADIO.csv`、`RESTRICTED_RADIO.csv`、`SPECIAL_AIRSPACE_RADIO.csv` 均只有表头；`CONTROLLED_RADIO.csv` 有 `1461` 条。审计得到 `854` 条扇区-机场跑道方向关联、`316` 个跨表隔离后的无线电记录、`24` 个机场、`264` 个关联多个跑道方向的无线电记录、`0` 个关联多个机场的无线电记录。
+- 结论：这些记录的频率类型和扇区均属于进近空域语义；即使可间接关联一个机场，它们也不是机场台站设施，且大量记录服务多个跑道方向。因此处置为 `rejected_by_scope_and_cardinality`，仅作为通用证据层库存保留，不能投影为默认 BGL `Com`/`Tower`。本轮未修改 `NavModel`、BGL adapter、候选或 Community；参考字节一致仍为 `0/29`、`deployable=false`，字节收敛未推进。
+- 下一项唯一任务：从 `12` 条航路端点区域、`5` 个全局航点区域、`8` 张来源不足 IAP 卡或 `13` 条未分类程序中选择一张存在新同周期直接来源可能性的卡，先做只读来源审计；不得因 r213 的结构化库存启动机场通信投影或候选构建。

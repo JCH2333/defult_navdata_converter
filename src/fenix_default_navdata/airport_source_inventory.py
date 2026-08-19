@@ -102,6 +102,139 @@ def _runway_offset_threshold_candidates(
     }
 
 
+def _app_sector_radio_candidates(root: Path) -> dict[str, object]:
+    """Audit airport-linked approach-sector radios without treating them as airport Com/Tower.
+
+    ``APPSECTOR_RUNWAYDIRECTION`` links an airspace sector to airport runway
+    directions, not to an airport radio facility.  A sector radio may repeat
+    across several runway directions, so retain this source relationship for
+    future adapters while explicitly blocking default-BGL Com/Tower projection.
+    """
+
+    source_files = [
+        "AD_HP.csv",
+        "APPSECTOR_RUNWAYDIRECTION.csv",
+        "AIRSPACE_RADIO.csv",
+        "CONTROLLED_RADIO.csv",
+        "RESTRICTED_RADIO.csv",
+        "SPECIAL_AIRSPACE_RADIO.csv",
+    ]
+    paths = {name: root / name for name in source_files}
+    if not all(path.is_file() for path in paths.values()):
+        return {
+            "source_files": source_files,
+            "target_scope": "unmodeled",
+            "sdk_elements": ["Com", "Tower"],
+            "disposition": "unavailable",
+            "reason": "缺少用于进近扇区频率作用域审计的当期 424 CSV",
+            "source_records": 0,
+            "unique_radio_total": 0,
+            "airport_total": 0,
+            "examples": [],
+        }
+
+    airport_by_id = {
+        (row.get("AD_HP_ID") or "").strip(): (row.get("CODE_ID") or "").strip().upper()
+        for row in _csv_rows(paths["AD_HP.csv"])
+        if (row.get("AD_HP_ID") or "").strip() and (row.get("CODE_ID") or "").strip()
+    }
+    radios_by_airspace: dict[str, list[dict[str, str]]] = {}
+    radio_files = source_files[2:]
+    for source_file in radio_files:
+        for row in _csv_rows(paths[source_file]):
+            airspace_id = (row.get("AIRSPACE_ID") or "").strip()
+            if not airspace_id:
+                continue
+            radios_by_airspace.setdefault(airspace_id, []).append({
+                **row,
+                "_source_file": source_file,
+            })
+
+    linked: list[dict[str, str]] = []
+    for link in _csv_rows(paths["APPSECTOR_RUNWAYDIRECTION.csv"]):
+        airport = airport_by_id.get((link.get("AD_HP_ID") or "").strip())
+        if not airport:
+            continue
+        runway_direction = (link.get("RWY_DIRECTION_ID") or "").strip()
+        for radio in radios_by_airspace.get((link.get("AIRSPACE_ID") or "").strip(), []):
+            radio_id = (radio.get("RADIO_ID") or "").strip()
+            if not radio_id:
+                continue
+            linked.append({
+                "airport": airport,
+                "airspace_id": (link.get("AIRSPACE_ID") or "").strip(),
+                "runway_direction_id": runway_direction,
+                "source_file": (radio.get("_source_file") or "").strip(),
+                "radio_id": radio_id,
+                "frequency_type": (radio.get("TXT_FREQ_TYPE") or "").strip(),
+                "frequency": (radio.get("VAL_FREQ") or "").strip(),
+                "unit": (radio.get("UOM_FREQ") or "").strip(),
+                "sector": (radio.get("TXT_SECTOR") or "").strip(),
+            })
+
+    radio_links: dict[tuple[str, str], list[dict[str, str]]] = {}
+    for item in linked:
+        radio_links.setdefault((item["source_file"], item["radio_id"]), []).append(item)
+    unique_radios = [
+        min(items, key=lambda item: (
+            item["airport"],
+            item["airspace_id"],
+            item["runway_direction_id"],
+        ))
+        for _, items in sorted(radio_links.items())
+    ]
+    repeated_by_runway = sum(
+        len({item["runway_direction_id"] for item in items}) > 1
+        for items in radio_links.values()
+    )
+    repeated_by_airport = sum(
+        len({item["airport"] for item in items}) > 1
+        for items in radio_links.values()
+    )
+    return {
+        "source_files": source_files,
+        "source_fields": [
+            "APPSECTOR_RUNWAYDIRECTION.AIRSPACE_ID",
+            "APPSECTOR_RUNWAYDIRECTION.AD_HP_ID",
+            "*_RADIO.TXT_FREQ_TYPE",
+            "*_RADIO.VAL_FREQ",
+        ],
+        "target_scope": "airspace/approach_sector",
+        "sdk_elements": ["Com", "Tower"],
+        "disposition": "rejected_by_scope_and_cardinality",
+        "reason": (
+            "进近扇区频率只通过空域和跑道方向关联机场；"
+            "其类型表示空域扇区而非机场通信设施，且同一记录可关联多个跑道方向，"
+            "不能投影为 Com/Tower"
+        ),
+        "source_records": len(linked),
+        "unique_radio_total": len(unique_radios),
+        "airport_total": len({item["airport"] for item in linked}),
+        "frequency_type_counts": dict(sorted(
+            Counter(item["frequency_type"] for item in unique_radios).items(),
+        )),
+        "radios_with_multiple_runway_links": repeated_by_runway,
+        "radios_with_multiple_airport_links": repeated_by_airport,
+        "examples": [
+            {
+                key: item[key]
+                for key in (
+                    "airport",
+                    "airspace_id",
+                    "runway_direction_id",
+                    "source_file",
+                    "frequency_type",
+                    "frequency",
+                    "unit",
+                    "sector",
+                    "radio_id",
+                )
+            }
+            for item in unique_radios[:10]
+        ],
+    }
+
+
 def _source_file_summary(records: list[object]) -> dict[str, object]:
     files = sorted({
         str(getattr(getattr(record, "source", None), "file", "") or "")
@@ -414,13 +547,7 @@ def build_airport_source_inventory(
                 "disposition": "rejected_by_source_scope",
                 "reason": "机场关联字段不能推导为机场子对象投影",
             },
-            "airspace_radios": {
-                "source_fields": ["AIRSPACE_RADIO.csv"],
-                "target_scope": "unmodeled",
-                "sdk_elements": ["Com", "Tower"],
-                "disposition": "rejected_by_source_scope",
-                "reason": "空域扇区频率不构成机场通信设施来源",
-            },
+            "airspace_radios": _app_sector_radio_candidates(model.root),
         },
         "source_rejection_reasons": dict(sorted(rejection_reasons.items())),
         "candidate_xml_tag_counts": _xml_tag_counts(candidate_xml),

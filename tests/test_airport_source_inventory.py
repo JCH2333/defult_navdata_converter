@@ -121,3 +121,71 @@ def test_inventory_lists_direct_runway_offset_threshold_probe_candidates(
         "displacement_meters": "300",
         "source": {"file": "RWY_DIRECTION.csv", "row": 2},
     }]
+
+
+def test_inventory_rejects_airport_linked_approach_sector_radios(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "raw"
+    root.mkdir()
+    (root / "AD_HP.csv").write_text(
+        "AD_HP_ID,CODE_ID\nA1,ZBAA\n",
+        encoding="utf-8",
+    )
+    (root / "APPSECTOR_RUNWAYDIRECTION.csv").write_text(
+        "AIRSPACE_ID,AD_HP_ID,RWY_DIRECTION_ID\n"
+        "S1,A1,D1\n"
+        "S1,A1,D2\n",
+        encoding="utf-8",
+    )
+    (root / "AIRSPACE_RADIO.csv").write_text(
+        "RADIO_ID,AIRSPACE_ID,TXT_SECTOR,TXT_FREQ_TYPE,VAL_FREQ,UOM_FREQ\n"
+        "R1,S1,APP01,APP,120.0,MHz\n",
+        encoding="utf-8",
+    )
+    (root / "CONTROLLED_RADIO.csv").write_text(
+        "RADIO_ID,AIRSPACE_ID,TXT_SECTOR,TXT_FREQ_TYPE,VAL_FREQ,UOM_FREQ\n"
+        "R1,S1,APP02,APP,121.0,MHz\n",
+        encoding="utf-8",
+    )
+    for name in ("RESTRICTED_RADIO.csv", "SPECIAL_AIRSPACE_RADIO.csv"):
+        (root / name).write_text(
+            "RADIO_ID,AIRSPACE_ID,TXT_SECTOR,TXT_FREQ_TYPE,VAL_FREQ,UOM_FREQ\n",
+            encoding="utf-8",
+        )
+
+    report = build_airport_source_inventory(_model(root))
+    candidate = report["sdk_probe_candidates"]["airspace_radios"]
+
+    assert candidate["disposition"] == "rejected_by_scope_and_cardinality"
+    assert candidate["target_scope"] == "airspace/approach_sector"
+    assert candidate["source_records"] == 4
+    assert candidate["unique_radio_total"] == 2
+    assert candidate["airport_total"] == 1
+    assert candidate["frequency_type_counts"] == {"APP": 2}
+    assert candidate["radios_with_multiple_runway_links"] == 2
+    assert candidate["radios_with_multiple_airport_links"] == 0
+    assert candidate["examples"] == [
+        {
+            "airport": "ZBAA",
+            "airspace_id": "S1",
+            "runway_direction_id": "D1",
+            "source_file": "AIRSPACE_RADIO.csv",
+            "frequency_type": "APP",
+            "frequency": "120.0",
+            "unit": "MHz",
+            "sector": "APP01",
+            "radio_id": "R1",
+        },
+        {
+            "airport": "ZBAA",
+            "airspace_id": "S1",
+            "runway_direction_id": "D1",
+            "source_file": "CONTROLLED_RADIO.csv",
+            "frequency_type": "APP",
+            "frequency": "121.0",
+            "unit": "MHz",
+            "sector": "APP02",
+            "radio_id": "R1",
+        },
+    ]
