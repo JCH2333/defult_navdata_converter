@@ -48,7 +48,13 @@ from .package_reader import DEFAULT_READER_TIMEOUT_SECONDS, read_package
 from .paths import detect_paths
 from .profile import DEFAULT_CYCLE
 from .route_fragment_probe import run_route_fragment_probe
-from .semantic_diff import SUPPORTED_TABLES, semantic_diff, write_semantic_diff
+from .semantic_diff import (
+    SUPPORTED_TABLES,
+    semantic_diff,
+    semantic_reproducibility_audit,
+    write_semantic_diff,
+    write_semantic_reproducibility_audit,
+)
 from .source import (
     _load_terminal_coordinate_pages,
     audit_enroute_key_point_ocr_rerun,
@@ -187,6 +193,30 @@ def build_parser() -> argparse.ArgumentParser:
     )
     semantic.add_argument("--sample-limit", type=int, default=50, help="每类差异最多输出的样本数")
     semantic.add_argument("--output", help="可选的本地诊断 JSON 输出路径")
+    reproducibility = sub.add_parser(
+        "semantic-reproducibility-audit",
+        help="只读检查同一包重复读取 SQLite 的语义结果是否一致",
+    )
+    reproducibility.add_argument(
+        "--databases",
+        nargs="+",
+        required=True,
+        help="至少两个重复读取产生的 Navdatareader SQLite",
+    )
+    reproducibility.add_argument(
+        "--bgl-count",
+        required=True,
+        type=int,
+        help="每次读取必须完整登记的 BGL 数",
+    )
+    reproducibility.add_argument(
+        "--tables",
+        nargs="+",
+        choices=SUPPORTED_TABLES,
+        default=list(SUPPORTED_TABLES),
+        help="要审计的读取器表（默认 VOR、NDB、航点、航路）",
+    )
+    reproducibility.add_argument("--output", help="可选的本地诊断 JSON 输出路径")
     bgl_layout = sub.add_parser(
         "bgl-layout-audit",
         help="只读比较候选与参考 BGL 的文件和节表布局，不导出导航记录",
@@ -891,6 +921,18 @@ def main(argv: list[str] | None = None) -> int:
             output = Path(args.output).expanduser().resolve()
             report["output"] = str(output)
             write_semantic_diff(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "semantic-reproducibility-audit":
+        report = semantic_reproducibility_audit(
+            [Path(value) for value in args.databases],
+            expected_bgl_count=args.bgl_count,
+            tables=args.tables,
+        )
+        if args.output:
+            output = Path(args.output).expanduser().resolve()
+            report["output"] = str(output)
+            write_semantic_reproducibility_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "bgl-layout-audit":

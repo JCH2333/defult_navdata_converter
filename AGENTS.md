@@ -410,6 +410,7 @@
 - `normalize-model` 维护跨格式 `NavModel`、原始精度、来源引用、拒绝项和规则版本；任何目标 schema、字符串长度、空值、排序或元数据规则只能存在于目标 profile/adapter。
 - `project-target` 为默认 BGL、Fenix、TFDI、PMDG、FSL/FSLabs、iFly 等分别建立独立 profile/adapter、降级策略、最小 fixture、目标验证器和实机清单；适配器消费模型快照，不重新解析 424。
 - `build-target`、`validate-target` 和 `diff-and-audit` 只能写隔离候选目录。报告必须将自动化测试、结构构建、读取器诊断、语义差分、来源审计、文件树和 SHA-256 分开保存。
+- 对同一 BGL 使用 Navdatareader 做航路语义差分前，必须至少执行两次独立读取并运行 `semantic-reproducibility-audit`。只有目标表的归一化行多集指纹一致时，才能将该表的严格相等、逻辑键和字段差异作为候选进展指标；不一致时仅保留读取器诊断，不得据此修改来源或 adapter。
 - `stage-backup-deploy` 是唯一可写游戏文件的阶段。GUI、CLI 和 GitHub 自动更新系统必须共用同一 profile、候选报告和 `deployable` 门禁，任何入口都不能绕过测试版或部署保护。
 
 ### 每轮 Codex 维护要求
@@ -420,3 +421,10 @@
 4. 完成后更新本节和对应经验章节，记录候选或诊断路径、提交号、测试、构建、读取器、语义差分、`29` 文件哈希、来源审计及保留/否决结论。
 5. 每次代码或仓库文档改动后运行适当测试和 `git diff --check`，仅暂存相关文件，创建一个可解释提交并推送 GitHub。数据库、备份、日志、诊断产物、SDK 中间输出和外部测试包不得提交。
 6. 任何状态汇报必须分开说明：自动化测试、SDK 构建、本地读取器诊断、参考哈希、用户实机验证和正式发布状态。
+
+### 2026-08-19 r174-r175 工作日志
+
+- r174 假设为“SDK XSD 合法的 `Previous* -> Next*` Route 子节点形状可被 Package Tool 编译并由离线读取器完整登记”。游戏关闭后，`airway-route-child-order-probe` 对线性 `Previous -> Next`、汇聚 `Previous -> Previous -> Next`、分叉 `Previous -> Next -> Next` 三个场景均通过：Package Tool 生成一个 `00_enroute.bgl`，读取器登记 `1/1` 个 BGL 和 `8` 条航路。读取器进程仍返回代码 `1` 并写 `_BROKEN.sqlite`，但 SQLite 完整、BGL 登记完整且目标行存在，这是已记录的离线读取器限制，不是 SDK 编译失败。结论：正式 `_append_enroute` 的 `Previous* -> Next*` 顺序是可编译、可读取契约；r169 的反序实验继续保持否决。
+- r175 使用冻结的 `output/intermediate-2608-r155-airway-identities.json.gz`、已验证官方设施索引、官方 `navigraph-nav-base`/`navigraph-nav-jepp` 模板和 2608R1 只读参考构建。`validate` 通过，仍为 `status=candidate`、`local_contract_verified=true`、`byte_equal_reference=false`、`deployable=false`，参考文件 SHA-256 仍为 `0/29`。候选与 r162 的 `00_enroute.bgl` 均为 `2,867,006` 字节、SHA-256 `d2abf742...d3b1`，因此 Route 形状验证没有改变正式投影或二进制内容；r175 仅作为可复现的 SDK 合法性确认，不计为字节收敛改善。
+- r175 布局审计：21/21 个参考范围 BGL 都不相等。机场覆盖候选保持 `0x3/0x13/0x22/0x32/0x34/0x35`，参考普遍为 `0x3/0x13/0x17/0x22/0x32/0x33/0x34` 且分桶计数远高于候选。既有 r140/r141 已证明用 `Ndb` 或 `onlyAddIfReplace` 触发 `0x17/0x33` 不能解释来源数量和新增机场加载契约，故不得把该诊断结果接入正式 adapter。下一轮应继续以来源可证明的对象和隔离 SDK 探针研究机场 BGL 结构，而非根据参考节表反向填充。
+- r175 三次独立 `read-package` 对相同 `00_enroute.bgl` 均完整登记 `1/1` 个 BGL，VOR/NDB/航点行数和归一化指纹稳定为 `121/133/3150`；航路行数均为 `4434`，但归一化行多集指纹有 `3` 个不同值。定位到 `H35` 的 fragment/sequence 几何解释在读取之间发生变化。新增 `semantic-reproducibility-audit` CLI 和回归测试；该审计不输出设施值，只输出指纹和稳定性。航路表在读取器一致性未恢复前不能作为严格相等、字段差异或候选改善的强验收依据，仍可用于受限的结构和来源审计。

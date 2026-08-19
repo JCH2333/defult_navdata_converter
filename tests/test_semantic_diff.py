@@ -12,6 +12,7 @@ from fenix_default_navdata.semantic_diff import (
     TABLE_SPECS,
     SemanticDiffError,
     semantic_diff,
+    semantic_reproducibility_audit,
 )
 
 
@@ -346,3 +347,72 @@ def test_semantic_diff_rejects_partial_requested_bgl_scan(tmp_path: Path):
             expected_reference_bgl_count=1,
             tables=("vor",),
         )
+
+
+def test_semantic_reproducibility_audit_hashes_normalized_rows_without_values(
+    tmp_path: Path,
+):
+    first = _write_database(
+        tmp_path / "first.sqlite",
+        {"airway": [{"airway_name": "A1", "from_lonx": 100.0}]},
+    )
+    second = _write_database(
+        tmp_path / "second.sqlite",
+        {"airway": [{"airway_name": "A1", "from_lonx": 100.0}]},
+    )
+    changed = _write_database(
+        tmp_path / "changed.sqlite",
+        {"airway": [{"airway_name": "A1", "from_lonx": 100.5}]},
+    )
+
+    stable = semantic_reproducibility_audit(
+        [first, second],
+        expected_bgl_count=1,
+        tables=("airway",),
+    )
+    assert stable["reproducible"] is True
+    assert stable["tables"]["airway"] == {
+        "input_rows": [1, 1],
+        "distinct_semantic_fingerprints": 1,
+        "reproducible": True,
+    }
+    assert "100.0" not in json.dumps(stable)
+
+    unstable = semantic_reproducibility_audit(
+        [first, changed],
+        expected_bgl_count=1,
+        tables=("airway",),
+    )
+    assert unstable["reproducible"] is False
+    assert unstable["tables"]["airway"]["distinct_semantic_fingerprints"] == 2
+
+
+def test_semantic_reproducibility_audit_requires_two_inputs(tmp_path: Path):
+    database = _write_database(tmp_path / "one.sqlite", {"vor": [{"ident": "A"}]})
+
+    with pytest.raises(ValueError, match="至少需要两个"):
+        semantic_reproducibility_audit(
+            [database],
+            expected_bgl_count=1,
+            tables=("vor",),
+        )
+
+
+def test_cli_writes_semantic_reproducibility_audit(tmp_path: Path, capsys):
+    first = _write_database(tmp_path / "first.sqlite", {"ndb": [{"ident": "A"}]})
+    second = _write_database(tmp_path / "second.sqlite", {"ndb": [{"ident": "A"}]})
+    output = tmp_path / "reproducibility.json"
+
+    exit_code = main([
+        "semantic-reproducibility-audit",
+        "--databases", str(first), str(second),
+        "--bgl-count", "1",
+        "--tables", "ndb",
+        "--output", str(output),
+    ])
+
+    assert exit_code == 0
+    saved = json.loads(output.read_text(encoding="utf-8"))
+    assert saved["reproducible"] is True
+    assert saved["tables"]["ndb"]["distinct_semantic_fingerprints"] == 1
+    assert json.loads(capsys.readouterr().out)["input_count"] == 2

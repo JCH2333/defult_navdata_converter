@@ -449,6 +449,107 @@ def _table_report(
     }
 
 
+def _row_multiset_fingerprint(rows: Iterable[_SemanticRow]) -> str:
+    """Return a deterministic fingerprint without exposing semantic values."""
+
+    counts = Counter(row.digest for row in rows)
+    payload = [
+        [digest, counts[digest]]
+        for digest in sorted(counts)
+    ]
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def semantic_reproducibility_audit(
+    databases: Sequence[Path],
+    *,
+    expected_bgl_count: int,
+    tables: Sequence[str] | None = None,
+) -> dict[str, object]:
+    """Compare repeated reader outputs without exposing facility values."""
+
+    if len(databases) < 2:
+        raise ValueError("至少需要两个重复读取 SQLite 才能审计可重复性")
+    if expected_bgl_count <= 0:
+        raise ValueError("预期 BGL 数必须为正整数")
+    specs = _resolve_specs(tables)
+    inputs: list[dict[str, object]] = []
+    fingerprints_by_table: dict[str, list[str]] = {
+        spec.table: []
+        for spec in specs
+    }
+    rows_by_table: dict[str, list[int]] = {
+        spec.table: []
+        for spec in specs
+    }
+    for index, value in enumerate(databases, start=1):
+        path = value.expanduser().resolve()
+        label = f"重复读取 {index}"
+        connection = _open_readonly(path, label)
+        try:
+            reader_output = _reader_output_summary(
+                connection,
+                path,
+                label,
+                expected_bgl_count=expected_bgl_count,
+            )
+            table_report: dict[str, object] = {}
+            for spec in specs:
+                rows = _load_rows(connection, path, label, spec)
+                fingerprint = _row_multiset_fingerprint(rows)
+                table_report[spec.table] = {
+                    "rows": len(rows),
+                    "semantic_fingerprint": fingerprint,
+                }
+                fingerprints_by_table[spec.table].append(fingerprint)
+                rows_by_table[spec.table].append(len(rows))
+        finally:
+            connection.close()
+        inputs.append({
+            "database": str(path),
+            "reader_output": reader_output,
+            "tables": table_report,
+        })
+    table_summary = {
+        spec.table: {
+            "input_rows": rows_by_table[spec.table],
+            "distinct_semantic_fingerprints": len(
+                set(fingerprints_by_table[spec.table])
+            ),
+            "reproducible": len(set(fingerprints_by_table[spec.table])) == 1,
+        }
+        for spec in specs
+    }
+    return {
+        "diagnostic": "navdatareader-semantic-reproducibility-v1",
+        "read_only": True,
+        "reference_values_redacted": True,
+        "expected_bgl_count": expected_bgl_count,
+        "input_count": len(inputs),
+        "tables": table_summary,
+        "reproducible": all(
+            bool(table_summary[spec.table]["reproducible"])
+            for spec in specs
+        ),
+        "inputs": inputs,
+    }
+
+
+def write_semantic_reproducibility_audit(
+    path: Path,
+    report: dict[str, object],
+) -> Path:
+    """Persist a reproducibility audit using the standard atomic JSON writer."""
+
+    return write_semantic_diff(path, report)
+
+
 def semantic_diff(
     candidate_db: Path,
     reference_db: Path,
