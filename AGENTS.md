@@ -880,3 +880,10 @@
 - 报告固定声明 `read_only=true`、`reference_records_read=false`、`fenix_records_read=false`。每张卡都保存直接 `SourceRef`、当前拒绝/阻断状态和允许的下一类证据；允许证据仍仅限同周期 424 CSV/PDF、FIR/ACC、受控邻接和符合 OCR 运行时/缓存门禁的直接文本。卡片不是恢复规则、不是参考成品输入，也不能单独触发模型或 BGL 投影。
 - 自动化结果：新增 `tests/test_default_gap_cards.py`，覆盖来源回链、四类计数、报告/模型不一致拒绝及 CLI 写出；全量 `pytest -q` 为 `412 passed`。本轮未构建新候选、未改变 `NavModel`、未改变 BGL adapter、未覆盖 Community。
 - 后续顺序更新：以 r197 的卡为唯一工作队列，优先处理五个航路点及其 12 条关联航段的直接 FIR/ACC 冲突证据；无新证据时保持拒绝。IAP 和未分类程序各卡必须分别完成直接文本/OCR 共识、唯一规则、正反 fixture 与模型门禁后，才允许进入目标投影。不得以“卡片数量下降”为目标放宽来源条件。
+
+## 2026-08-19 r198 航路端点拒绝理由绑定
+
+- r198 只修改 `default-gap-cards-audit` 的航路卡审计字段：复用既有只读 `airway-endpoint-audit`，按端点类型、标识和精确坐标把来源端点分类、相邻地区和 ACC 名称绑定到候选实际跳过的航路段。未改动来源解析、`NavModel`、BGL adapter 或候选投影。
+- 实际报告：`diagnostics/r198-default-gap-cards-endpoints-20260819.json`。12 条跳过航路段中 `11` 条的空端点为 `multiple_neighbor_regions`，邻接地区集合分别为 `ZH/ZL`、`ZG/ZP/ZU`、`ZH/ZP`、`ZG/ZS`、`ZH/ZS` 等跨地区组合；`M771:1` 的 `****` 为 `non_designated_endpoint_identity_unavailable`，不在 `DESIGNATED_POINT.csv` 的唯一身份集合中。
+- 结论：当前五个可识别航路点和其关联的 11 条航段均已有直接来源拒绝理由，不得再次使用单一邻接地区、反转方向或参考结构推断恢复；`M771/****` 不得创建全局航点。除非新增同周期直接 FIR/ACC 证据且与全部现有邻接证据一致，否则这 12 张航路卡保持阻断。
+- 自动化：缺口卡测试加入端点来源理由回归，全量 `pytest -q` 为 `412 passed`。报告仍为 `read_only=true`、`reference_records_read=false`、`fenix_records_read=false`。下一轮不再重复航路邻接方向，转入一个 IAP 或未分类程序卡的直接 PDF/OCR 证据核验。

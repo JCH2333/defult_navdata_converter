@@ -36,6 +36,8 @@ def _model(root: Path) -> NavModel:
                 source,
                 start_country="ZB",
                 end_country="",
+                start_type="VORDME",
+                end_type="DESIGNATED_POINT",
             ),
         ],
         rejected_procedures=[
@@ -111,6 +113,13 @@ def test_gap_cards_keep_all_open_default_gaps_source_linked(tmp_path: Path) -> N
     airway = result["cards"]["airway_endpoint_region"][0]
     assert airway["source"]["file"] == "RTE_SEG.csv"
     assert airway["disposition"] == "blocked_missing_endpoint_region"
+    assert airway["unresolved_endpoint_evidence"] == [{
+        "side": "end",
+        "category": "designated_point_identity_not_found",
+        "reason": "RTE_SEG 端点不能唯一回链到 DESIGNATED_POINT.csv",
+        "neighbor_regions": ["ZB"],
+        "acc_names": [],
+    }]
     assert result["cards"]["enroute_waypoint_region"][0]["key"] == "GAP"
     assert result["cards"]["iap_primary_selection"][0]["disposition"] == (
         "rejected_no_unique_primary"

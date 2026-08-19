@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Mapping
 
+from .airway_endpoint_audit import audit_unresolved_airway_endpoints
 from .model import NavModel, SourceRef
 from .unclassified_procedure_audit import audit_unclassified_procedures
 
@@ -51,6 +52,30 @@ def _projection_airway_cards(
         (leg.airway, leg.sequence, leg.start_ident, leg.end_ident): leg
         for leg in model.airway_legs
     }
+    endpoint_audit = audit_unresolved_airway_endpoints(model)
+    endpoint_items = endpoint_audit.get("items")
+    if not isinstance(endpoint_items, list):
+        raise DefaultGapCardAuditError("航路端点来源审计缺少明细")
+    endpoint_evidence: dict[
+        tuple[str, str, float | None, float | None],
+        Mapping[str, object],
+    ] = {}
+    for item in endpoint_items:
+        if not isinstance(item, Mapping) or not isinstance(item.get("endpoint"), Mapping):
+            raise DefaultGapCardAuditError("航路端点来源审计明细格式无效")
+        endpoint = item["endpoint"]
+        endpoint_type = endpoint.get("type")
+        ident = endpoint.get("ident")
+        latitude = endpoint.get("latitude")
+        longitude = endpoint.get("longitude")
+        if not isinstance(endpoint_type, str) or not isinstance(ident, str):
+            raise DefaultGapCardAuditError("航路端点来源审计缺少端点身份")
+        endpoint_evidence[(
+            endpoint_type,
+            ident,
+            round(float(latitude), 6) if latitude is not None else None,
+            round(float(longitude), 6) if longitude is not None else None,
+        )] = item
     cards: list[dict[str, object]] = []
     unresolved_idents: set[str] = set()
     for detail in details:
@@ -78,6 +103,32 @@ def _projection_airway_cards(
             raise DefaultGapCardAuditError("候选跳过航路段无法回链冻结 NavModel")
         start_region = str(start.get("region") or "")
         end_region = str(end.get("region") or "")
+        unresolved_endpoints: list[dict[str, object]] = []
+        for side, endpoint, region, latitude, longitude in (
+            ("start", start, start_region, leg.start_latitude, leg.start_longitude),
+            ("end", end, end_region, leg.end_latitude, leg.end_longitude),
+        ):
+            if region:
+                continue
+            endpoint_type = str(endpoint.get("type") or "")
+            endpoint_ident = str(endpoint.get("ident") or "")
+            evidence = endpoint_evidence.get((
+                endpoint_type,
+                endpoint_ident,
+                round(latitude, 6) if latitude is not None else None,
+                round(longitude, 6) if longitude is not None else None,
+            ))
+            if evidence is None:
+                raise DefaultGapCardAuditError(
+                    "候选空区域端点无法回链航路端点来源审计"
+                )
+            unresolved_endpoints.append({
+                "side": side,
+                "category": evidence.get("category"),
+                "reason": evidence.get("reason"),
+                "neighbor_regions": evidence.get("neighbor_regions"),
+                "acc_names": evidence.get("acc_names"),
+            })
         if not start_region:
             unresolved_idents.add(start_ident)
         if not end_region:
@@ -100,6 +151,7 @@ def _projection_airway_cards(
                 "region": end_region,
             },
             "reasons": sorted(str(reason) for reason in reasons),
+            "unresolved_endpoint_evidence": unresolved_endpoints,
             "allowed_next_evidence": [
                 "同周期 DESIGNATED_POINT.csv 的唯一身份与 FIR",
                 "AIRSPACE.csv 与 AIRSPACE_BORDER_VERTEX.csv 的非边界 FIR 归属",
