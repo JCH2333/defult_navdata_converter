@@ -1666,3 +1666,11 @@
 - `EO-10` 直接命中 `0`，无同文本行标签-类别链接。`UGOVA` 离场标题、`RW10`、RF 腿和跑道 `10` 不能替代缺失标签锚点，也不能将此段归类为离场。
 - 处置为 `rejected_missing_direct_label_anchor`、`source_proven_kind=null`、`target_mapping_allowed=false`。模型、投影、候选、Community 和部署不变；自重放 `29/29`、参考一致 `0/29`、`deployable=false`，字节收敛未推进。
 - 下一项唯一任务：按稳定排序审计最后一张未分类程序卡 `ZUSH:EO-28:28:12`。它使用不同 PDF 页，必须独立核对；完成后需汇总 13 张未分类程序卡的来源闭合结果，再决定下一阶段的来源卡或 SDK 表达审计。
+
+## 2026-08-19 r236 ZUSH EO-28 程序卡审计与未分类程序卡覆盖闭合
+
+- 实验编号：`r236-zush-eo-28-28-unclassified-procedure-card-audit`。唯一程序卡变量是最后一张 `ZUSH:EO-28:28:12`，只读 `ZUSH-4Z02.pdf` 第 1 页；随后以当前 `default-gap-cards-audit` 清单做诊断覆盖核对，不修改代码、模型、候选、Community 或部署。
+- 真实卡报告为 `diagnostics\r236-zush-eo-28-28-unclassified-procedure-card-audit-20260819.json`。来源 SHA-256 `e9b91d3fd932037c0447d4f7ca15eaad3c63e610ff648416f92c0885f34d7b10` 与模型一致；程序段包含 `IF RW28`、`TF/RF NS500...NS999` 等 15 条腿。页面有 3 条类别标题事实（`UGOVA-8A/9A` 进场及 `RWY10` 进近过渡），`EO-28` 直接命中 `0`，没有标签-类别直接关联。
+- 本卡处置为 `rejected_missing_direct_label_anchor`、`source_proven_kind=null`、`target_mapping_allowed=false`。标题、`RW28`、RF 腿、`NS988` 和跑道都不能替代标签锚点；模型、投影、候选、Community 和部署不变，自重放 `29/29`、参考一致 `0/29`、`deployable=false`，字节收敛未推进。
+- 覆盖核对使用 r187、r188 `conversion-report.json` 与 `diagnostics\r236-default-gap-cards-unclassified-coverage-20260819.json`：当前缺口清单恰有 `13` 张未分类程序卡，r224-r236 恰有 `13` 份唯一精确卡诊断，缺失 `0`、额外 `0`、哈希/标签命中/处置门禁异常 `0`。全部卡均为 `rejected_missing_direct_label_anchor`；未分类程序类别来源卡已完整闭合，不能继续以标签/标题/腿形态扩大投影。
+- 下一项唯一任务：先对剩余 `10` 张 IAP 主段缺口卡做只读来源审计覆盖盘点，区分已有精确拒绝结论与仍缺精确来源卡的对象；不得重做已闭合 IAP 卡，也不得直接处理 `ZBAD:R29R` 等历史卡而跳过覆盖核对。盘点后按稳定排序选择第一张真正未闭合 IAP 卡。
