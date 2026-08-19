@@ -1610,3 +1610,11 @@
 - `CC3-09` 在直接文本中命中 `0`，没有同文本行标签-类别链接。即使若干类别标题和部分腿标识共同出现，也不能将标识重合、跑道一致、图面顺序或等待航线位置转换为标签类别证据。
 - 处置为 `rejected_missing_direct_label_anchor`、`source_proven_kind=null`、`target_mapping_allowed=false`。这证明 r224 的拒绝门禁在不同机场/标签族上仍成立，但不构成修改任何程序投影的正向规则；模型、候选、Community 和部署不变，自重放 `29/29`、参考一致 `0/29`、`deployable=false`，字节收敛未推进。
 - 下一项唯一任务：按稳定排序审计 `ZHCC:CC5-17:30L:5`。该卡与 r228 共用来源页但标签、跑道和腿不同，必须按精确卡独立审计，不能从 `CC3-09` 的标签缺失外推其直接文本结果。
+
+## 2026-08-19 r229 ZHCC CC5-17 程序卡直接来源审计
+
+- 实验编号：`r229-zhcc-cc5-17-30l-unclassified-procedure-card-audit`。唯一变量是从 r228 切换精确卡键到 `ZHCC:CC5-17:30L:5`；继续只读同一 `ZHCC-4Z12.pdf` 第 1 页，不修改代码、模型、候选、Community 或部署。
+- 真实报告为 `diagnostics\r229-zhcc-cc5-17-30l-unclassified-procedure-card-audit-20260819.json`。来源 SHA-256 仍为 `d69025ea3321a275918d57571daba12c315d4f7aca747b90bb918693770be8b2` 并与模型一致；程序段有 16 条腿，从 `IF DWS` 经 `CC518/CC517/...` 到 `TF CC312`。页面类别标题事实仍为 13 条。
+- `CC5-17` 直接命中 `0`，没有同文本行标签-类别链接。页面的 `RWY30L` 标题、`DWS` 或 `CC` 前缀腿标识均不能取代缺失标签锚点；它们只表明同页存在相邻的航图内容，不能证明这段未分类数据库编码属于哪一类程序。
+- 处置保持 `rejected_missing_direct_label_anchor`、`source_proven_kind=null`、`target_mapping_allowed=false`。模型、投影、候选、Community 和部署不变；自重放 `29/29`、参考一致 `0/29`、`deployable=false`，字节收敛未推进。
+- 下一项唯一任务：按稳定排序审计不同来源页的 `ZHCC:CC5-32:30R:6`。不得将本页的腿/标题相邻事实跨页使用。
