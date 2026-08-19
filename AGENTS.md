@@ -1822,3 +1822,12 @@
 - 处置为 `unresolved_direct_database_evidence_inconclusive`、`projection_allowed=false`。不得根据同跑道、`OF103`/`OF105` 等过渡腿与图页角色、RNAV ILS 图题或参考差分发明 `R33` 主进近。模型、BGL、候选、Community 和部署不变；r188/r189 自重放仍 `29/29`，参考一致仍 `0/29`、`deployable=false`，字节收敛未推进。
 - 本轮无代码变化；完整回归、提交前检查和文档提交必须在结束前完成。
 - 下一项唯一任务：按稳定排序对尚无精确补充审计的 `ZSWY:I03` 建立同样的精确来源卡。必须分别核对数据库主段、候选图标题、缓存直接角色和固定点；无唯一来源时保持拒绝。
+
+## 2026-08-19 r240 ZSWY I03 精确 IAP 主段来源审计
+
+- 实验编号：`r240-zswy-i03-exact-iap-primary-source-audit`。本轮只复用 r238 的精确 `--card` 审计，读取 r187、`ZSWY-4Z03.pdf` 数据库编码缓存及同跑道 `ZSWY-5A/5B/6/9A/9C.pdf` 仪表图缓存；不读取参考、Fenix、OCR 或候选内容，不修改代码、模型、投影、Community 或部署。
+- 真实报告为 `diagnostics\r240-zswy-i03-exact-iap-primary-source-audit-20260819.json`。`Terminal\ZSWY\ZSWY-4Z03.pdf` 第 1 页 SHA-256 `f8f8fe6c50e78eb0d46e9b1a10e31ba27fd0f1ade180cebaae65bbda2f60820c` 有 `I03` 的 17 条进近过渡腿，主段与复飞均为零；该页另有 `R03` 的 15 条过渡腿，不能跨标签混用。
+- 缓存验证的 `I03` 标题兼容图恰有两张且角色不一致：`ZSWY-5A.pdf`（SHA-256 `7c91fd121ce3681727687b58942e4ee3a6c503bcd8e6b07936d941f431f933bd`）为 `I03/R03/I03-Z/R03-Z`，直接角色 `WY503/IF`、`WY644/WY805/WY814 IAF`；`ZSWY-5B.pdf`（SHA-256 `1b226e1d07d44dce5439cff8d1bf2ddbb3e9415715823220f9d716b127782e05`）为 `I03/I03-Y`，直接角色 `WY805/WY814/WY820 IAF`。`ZSWY-6/9A/9C.pdf` 不匹配 `I03`。两张兼容图既不能唯一归属，也没有可与数据库主段相交的角色。
+- 处置为 `unresolved_direct_database_evidence_inconclusive`、`projection_allowed=false`。不得把任一图题、同跑道、`WY805/WY814` 等重叠 IAF、`WY503/IF`、同页 `R03` 过渡或缺失的复飞拼接为 `I03` 主进近。模型、BGL、候选、Community 和部署不变；自重放仍 `29/29`、参考一致仍 `0/29`、`deployable=false`，字节收敛未推进。
+- 本轮无代码变化；完整回归、提交前检查和文档提交必须在结束前完成。
+- 下一项唯一任务：按稳定排序对尚无精确补充审计的 `ZUAL:I15` 建立同样的精确来源卡。必须分别核对主段、过渡、复飞、标题、缓存角色和固定点；无唯一来源时继续拒绝。
