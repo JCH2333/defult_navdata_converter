@@ -212,6 +212,8 @@ SID/STAR 名称碰撞。该网格由 XML 中的 `AiracCycle` 触发。无 `Airac
 
 `airport_subset_probe.py` 的报告必须自动记录被编译 BGL 的文件大小、头部版本、QMID 和节表类型/计数/尺寸，不读取任何参考 BGL 记录。2026-08-19 对 `ZUAL` 的受控 Package Tool 构建表明：只保留跑道时节为 `0x3/0x13/0x32/0x35`、计数均为 1；保留机场内终端点、程序和等待航线时出现 `0x22`/`0x34`，计数为 `1/1/10/1/1/1`；再保留根节点终端点时仅将 `0x22` 提升到 153，仍不产生参考机场 BGL 的 `0x17/0x33`。因此根节点终端点重复写入不是参考索引节差异的充分解释，后续必须继续通过隔离 SDK 探针验证其他可控输入。回归：`test_probe_layout_summary_reads_only_bgl_headers`。
 
+机场覆盖必须先写入 `DeleteAirport`，且仅删除 `Approaches`、`Departures`、`Arrivals`，再投影 424 的跑道、终端点、程序和等待航线。证据：2026-08-19 对 2608R1 `ZUAL` 参考 BGL 的 SDK BglExplorer 读取显示 `FAC_TYPE_AIRPORT_DELETE` 的三项删除标记；同一份隔离 XML 仅新增该标记后，Package Tool 生成相同节表、文件增量 12 字节，并确认生成该设施记录及机场替换标记。此规则是默认通用数据的目标覆盖契约，不使用参考内容补写任何航行记录。回归：`test_bgl_xml_is_deterministic`、`test_airport_procedure_deletion_is_inserted_before_source_children`。
+
 ### 导航台区域键
 
 424 的 VOR/NDB 如有有效中国 `SERVICED_AIRPORT`，默认通用数据适配器必须以该 ICAO 前缀作为区域键。这是 FIR 边界导航台唯一可证明的机场侧物理归属。没有服务机场时，才可使用单一 `CODE_FIR` 的映射；跨区域的多 FIR 不得取第一个字符串，必须拒绝。该规则只使用当期 424 字段。

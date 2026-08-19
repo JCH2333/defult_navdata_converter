@@ -56,6 +56,11 @@ def test_bgl_xml_is_deterministic(tmp_path: Path):
     assert root.tag == "FSData"
     assert root.find("AiracCycle").attrib["cycleNumber"] == "08"
     assert root.find("Airport/Runway").attrib["number"] == "03"
+    assert root.find("Airport/DeleteAirport").attrib == {
+        "deleteAllApproaches": "TRUE",
+        "deleteAllDepartures": "TRUE",
+        "deleteAllArrivals": "TRUE",
+    }
     route = root.find("./Waypoint[@waypointIdent='START']/Route")
     assert route is not None
     assert route.attrib == {"name": "W1", "routeType": "BOTH"}

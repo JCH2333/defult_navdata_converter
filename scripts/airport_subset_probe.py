@@ -163,6 +163,20 @@ def parse_attribute_assignments(
     return attributes
 
 
+def add_airport_procedure_deletion(airport: ET.Element) -> None:
+    """Insert the standard procedure replacement marker for a probe only."""
+
+    deletion = ET.Element(
+        "DeleteAirport",
+        {
+            "deleteAllApproaches": "TRUE",
+            "deleteAllDepartures": "TRUE",
+            "deleteAllArrivals": "TRUE",
+        },
+    )
+    airport.insert(0, deletion)
+
+
 def parse_airport_waypoint_selectors(
     values: list[str],
 ) -> set[tuple[str, str]]:
@@ -350,6 +364,11 @@ def _parser() -> argparse.ArgumentParser:
         default=[],
         help="仅诊断用：为每个保留机场设置 name=value 属性。",
     )
+    parser.add_argument(
+        "--delete-airport-procedures",
+        action="store_true",
+        help="仅诊断用：在每个保留机场首部写入程序覆盖删除标记。",
+    )
     parser.add_argument("--move-waypoints-to-root", action="store_true")
     parser.add_argument("--keep-root-waypoints", action="store_true")
     parser.add_argument(
@@ -441,6 +460,8 @@ def main() -> int:
     for airport in selected:
         for attribute, value in assigned_airport_attributes.items():
             airport.set(attribute, value)
+        if args.delete_airport_procedures:
+            add_airport_procedure_deletion(airport)
         for child in list(airport):
             if child.tag in dropped_tags:
                 airport.remove(child)
@@ -601,6 +622,7 @@ def main() -> int:
             "dropped_holding_attributes": args.drop_holding_attribute,
             "assigned_holding_attributes": assigned_holding_attributes,
             "assigned_airport_attributes": assigned_airport_attributes,
+            "delete_airport_procedures": args.delete_airport_procedures,
             "root_waypoints": (
                 "kept" if args.keep_root_waypoints
                 else "removed"

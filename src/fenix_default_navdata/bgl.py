@@ -2008,6 +2008,11 @@ def write_bglcomp_xml(
             "Airport",
             _airport_bgl_attrs(airport),
         )
+        ET.SubElement(airport_element, "DeleteAirport", _attrs(
+            deleteAllApproaches="TRUE",
+            deleteAllDepartures="TRUE",
+            deleteAllArrivals="TRUE",
+        ))
         airport_runway_ends = [
             item for item in projected_runways if item.airport_key == airport.key
         ]

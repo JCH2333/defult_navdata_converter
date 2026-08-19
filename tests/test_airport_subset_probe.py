@@ -4,6 +4,7 @@ from xml.etree import ElementTree as ET
 import pytest
 
 from scripts.airport_subset_probe import (
+    add_airport_procedure_deletion,
     drop_selected_waypoints,
     inspect_bgl_layouts,
     isolate_holding_group,
@@ -144,6 +145,23 @@ def test_airport_attribute_assignments_are_diagnostic_and_deterministic():
 
     with pytest.raises(ValueError, match="--set-airport-attribute"):
         parse_airport_attributes(["country=China", "country=China"])
+
+
+def test_airport_procedure_deletion_is_inserted_before_source_children():
+    airport = ET.fromstring(
+        '<Airport ident="ZUAL"><Runway number="15" /></Airport>'
+    )
+
+    add_airport_procedure_deletion(airport)
+
+    deletion = airport.find("DeleteAirport")
+    assert deletion is not None
+    assert deletion.attrib == {
+        "deleteAllApproaches": "TRUE",
+        "deleteAllDepartures": "TRUE",
+        "deleteAllArrivals": "TRUE",
+    }
+    assert [child.tag for child in airport] == ["DeleteAirport", "Runway"]
 
 
 def test_isolated_holding_group_keeps_only_its_waypoint_and_holding_pattern():
