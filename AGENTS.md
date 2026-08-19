@@ -1579,3 +1579,11 @@
 - 处置为 `rejected_missing_direct_label_anchor`、`source_proven_kind=null`、`target_mapping_allowed=false`。模型、投影、候选、Community 和部署状态均未改变；r188/r189 自重放继续为 `29/29`，参考一致继续为 `0/29`，`deployable=false`，字节收敛未推进。
 - 新增最小正反 fixture：无标签直接锚点但存在相邻“进近及复飞”标题时必须拒绝；仅为未来来源规则验证的正例要求 `RNP-0` 与单一类别在同一文本行。CLI 参数和输出写入路径亦有独立回归。完整回归为 `440 passed`。
 - 下一项唯一任务：按稳定排序处理 `ZGBS:RNP-0:15:1`。复用 r224 审计器，仅替换精确卡键；无新的唯一标签-类别直接关联时保持拒绝，不得修改模型或投影。
+
+## 2026-08-19 r225 ZGBS RNP-0 跑道 15 程序卡直接来源审计
+
+- 实验编号：`r225-zgbs-rnp-0-15-unclassified-procedure-card-audit`。唯一变量是将 r224 的精确卡键替换为 `ZGBS:RNP-0:15:1`；复用同一只读审计器、r187 冻结模型和同周期 424 PDF，不修改代码、模型、候选、Community 或部署。
+- 真实输出为 `diagnostics\r225-zgbs-rnp-0-15-unclassified-procedure-card-audit-20260819.json`。卡片源仍为 `ZGBS-0C-2.pdf` 第 1 页，SHA-256 `16a443504222d3732bac6b9ea1023c56c6a6b6727f6b8bf91ac93b643f2e52b0` 与模型一致；`RNP-0` 直接命中仍为 `0`，类别标题事实仍为 8 条，且不存在同文本行的标签-类别链接。
+- 该模型段的跑道字段为 `15`，而同页 terminal-database-coding 图页仅列 `12/30`。这不是类别映射证据，也不能用于否定、修正或按相邻数据库记录推断该段；只记录为来源页与模型字段的审计事实。
+- 处置继续为 `rejected_missing_direct_label_anchor`、`source_proven_kind=null`、`target_mapping_allowed=false`。模型、投影、候选、Community 和部署状态不变；自重放保持 `29/29`、参考一致保持 `0/29`、`deployable=false`，字节收敛未推进。
+- 下一项唯一任务：按稳定排序审计 `ZGBS:RNP-0:15:2`。该卡指向不同的 `ZGBS-0C-3.pdf`，可复用 r224 审计器，但必须作为独立来源卡处理，不得把本页拒绝结论跨页套用。
