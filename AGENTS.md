@@ -742,3 +742,14 @@
 3. 只接受“未引入未解释差异、候选自重放保持全等、参考相同文件数增加且影响范围符合假设”的结果。`0/29` 不因局部 schema、OCR 或 SDK 冒烟成功而改变结论。
 4. 无法由 424/PDF、受审计 OCR 或 SDK 契约证明的差异必须沉淀为显式拒绝策略和最小 fixture；不得用参考成品解析、复制或人工抄录伪造字节一致。
 5. 达到 `29/29` 后仍须从干净输入完整重建两次、完成恢复演练并确认游戏关闭，随后才可由用户实机验证。任何一个前置条件缺失时 `deployable=false`。
+
+## 2026-08-19 r187 模型来源重放结果
+
+本节优先于上一节中“r187 对 r155 的初始白名单”的临时限制；该限制已按本轮实际代码、来源和投影边界完成验证并收紧为精确哈希清单。
+
+- r187 使用正确的 `--general-doc-cache` 父目录、r155 的 ENR 4.4 keypoint 缓存和三份 r80 IAP OCR 缓存导出。输出为 `output/intermediate-2608-r187-navaid-label-replay.json.gz`，SHA-256 为 `7cec24bd4a57545d39aab037abe4125c763ad12f364bd5f8f0073b0e050fdb4b`。顶层规模保持机场 `275`、跑道 `640`、导航台 `438`、航点 `2741`、航路 `4446`、程序段 `10409`、拒绝记录 `435`、拒绝程序 `10`。
+- 无白名单的 `model-replay-audit` 得到 `15` 项差异。ENR 4.1 导航台证据已恢复；因此 r186 的 `138` 条证据丢失不再出现。审计报告 `diagnostics/r187-model-replay-audit.json` 由标准 JSON 库重读成功。
+- 其中 `13` 项是已测试的 DOVIV 规则：四个精确航路端点与一个航点的 `country` 由空恢复为 `ZB`，以及八项 ACC/邻接派生统计。该规则仍只能以精确路径、旧/新哈希和现有正反例测试接受。
+- 另 `2` 项来自 `885058f fix: refresh snapshot IAP coverage audit`：`iap_coverage.version` 从 `23` 升至 `24`，并新增七组 `source_incomplete_chart_title_matches`。代码只在无主进近时收集标题命中审计，未修改 `procedure_segments`、`rejected_records` 或 IAP 投影选择；`package.py` 构建前也会从模型内容重新计算覆盖报告。因此它是已验证的审计元数据升级，不是 424、PDF/OCR 缓存或目标内容漂移。
+- 本轮局部白名单 `diagnostics/r187-model-replay-allowlist.json` 含全部 `15` 项的精确路径和两侧 SHA-256。带 `--fail-on-unexpected` 的复跑报告 `diagnostics/r187-model-replay-audit-allowed.json` 为 `allowed_difference_count=15`、`unexpected_difference_count=0`、`consistent=true`。白名单和报告均为本地诊断产物，不得提交；不得把路径前缀、类别或计数阈值改成宽松白名单。
+- r187 已通过模型来源门禁，允许进入 r188/r189 的双重候选构建；仍须使用同一 r187 冻结模型、同一官方基线与设施索引。只有有效文件树再次完全自重放、`validate`、标准 JSON 解析和 `file-convergence-audit` 全部完成，才能评价参考 `0/29` 是否变化。继续禁止部署、实机验收和 Release。
