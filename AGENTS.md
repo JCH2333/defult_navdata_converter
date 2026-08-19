@@ -1479,3 +1479,11 @@
 - 两个 ACC 名称均可映射，但“广州 -> ZG”、“武汉 -> ZH”，映射地区集合为 `ZG/ZH`；模型侧相邻地区为 `ZH/ZP`。处置为 `rejected_multiple_neighbor_regions_with_conflicting_acc_regions`、`projection_allowed=false`。不得根据共同出现的 `ZH`、任一 ACC 或相邻地区发明唯一区域。
 - 自动化新增“全部 ACC 已映射但映射地区冲突必须拒绝”反例；定向回归 `19 passed`，完整回归、提交前检查待本轮完成。模型、BGL、候选、Community 和部署状态均未变，参考一致仍 `0/29`、`deployable=false`，字节收敛未推进。
 - 下一项唯一任务：按稳定排序复核 `J35:1` 的精确身份 `DESIGNATED_POINT/P121`。继续仅做 UUID 精确关联、FIR/服务机场、ACC 映射和邻接来源审计；未获得唯一直接来源时保持拒绝。
+
+## 2026-08-19 r221 P121 部分 ACC 映射复核
+
+- 实验编号：`r221-p121-airway-endpoint-card-source-audit`。P121 使用已由 r219 建立的“部分 ACC 映射”审计路径；本轮唯一变量是精确 UUID 卡 `P121`，不修改审计器、模型、BGL、候选或部署逻辑。
+- 真实报告为 `diagnostics\r221-p121-airway-endpoint-card-source-audit-20260819.json`。P121 的唯一指定点行为 `1651`、UUID `7de5f462-998e-4a0d-bdc1-638e95a9f241`，自身 `CODE_FIR`、`SERVICED_AIRPORT` 和 J35 第 `2215`、`2216` 行的端点 FIR 均为空。
+- ACC 名称为“广州、长沙”；“广州”唯一映射 `ZG`，“长沙”无映射。模型侧相邻地区为 `ZG/ZS`。处置保持 `rejected_multiple_neighbor_regions_with_incomplete_acc_evidence`、`projection_allowed=false`；部分 `ZG` 映射不能覆盖或替代另一侧 `ZS` 邻接。
+- 本轮只复用 r219 的已通过回归，不增加投影规则；模型、BGL、候选、Community 和部署均未变，参考一致仍 `0/29`、`deployable=false`，字节收敛未推进。完整回归、提交前检查待本轮完成。
+- 下一项唯一任务：按稳定排序复核 `X62:1` 的精确身份 `DESIGNATED_POINT/P188`。仅做同一只读来源卡审计；没有唯一直接来源时继续拒绝。
