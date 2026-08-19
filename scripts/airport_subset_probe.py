@@ -163,6 +163,47 @@ def parse_airport_child_specs(values: list[str]) -> tuple[ET.Element, ...]:
     return tuple(children)
 
 
+def parse_root_object_specs(values: list[str]) -> tuple[ET.Element, ...]:
+    """Parse root diagnostic objects with an optional one-level child sequence.
+
+    The compact grammar is ``Parent;name=value|Child;name=value``.  It keeps
+    SDK-only object experiments out of the source model while allowing objects
+    such as ``Vor`` to include their schema-defined ``Dme`` child.
+    """
+
+    objects: list[ET.Element] = []
+    for raw in values:
+        levels = [level.strip() for level in raw.split("|")]
+        if not levels or not levels[0]:
+            raise ValueError(
+                "--append-root-object must start with an XML element name"
+            )
+        if any(not level for level in levels):
+            raise ValueError(
+                "--append-root-object cannot contain an empty object level"
+            )
+        parent = _parse_object_spec(levels[0], option="--append-root-object")
+        for level in levels[1:]:
+            child = _parse_object_spec(level, option="--append-root-object")
+            parent.append(child)
+        objects.append(parent)
+    return tuple(objects)
+
+
+def _parse_object_spec(raw: str, *, option: str) -> ET.Element:
+    parts = [part.strip() for part in raw.split(";")]
+    tag = parts[0] if parts else ""
+    if not tag or not tag.isidentifier():
+        raise ValueError(
+            f"{option} must start with an XML element name"
+        )
+    attributes = parse_attribute_assignments(
+        [part for part in parts[1:] if part],
+        option=option,
+    )
+    return ET.Element(tag, attributes)
+
+
 def append_airport_children(
     airport: ET.Element,
     children: tuple[ET.Element, ...],
@@ -429,6 +470,16 @@ def _parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--append-root-object",
+        action="append",
+        default=[],
+        metavar="TAG;NAME=VALUE|CHILD;NAME=VALUE",
+        help=(
+            "diagnostic only: append a root SDK object with optional one-level "
+            "children; for example Vor;ident=PRV|Dme;lat=32.1"
+        ),
+    )
+    parser.add_argument(
         "--delete-airport-procedures",
         action="store_true",
         help="仅诊断用：在每个保留机场首部写入程序覆盖删除标记。",
@@ -511,6 +562,9 @@ def main() -> int:
         )
         appended_root_children = parse_airport_child_specs(
             args.append_root_child
+        )
+        appended_root_children += parse_root_object_specs(
+            args.append_root_object
         )
         dropped_airport_waypoints = parse_airport_waypoint_selectors(
             args.drop_airport_waypoint

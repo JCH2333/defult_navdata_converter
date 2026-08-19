@@ -15,6 +15,7 @@ from scripts.airport_subset_probe import (
     parse_airport_child_specs,
     parse_airport_waypoint_selectors,
     parse_holding_attributes,
+    parse_root_object_specs,
     select_airports,
     select_holding_patterns,
 )
@@ -187,6 +188,28 @@ def test_root_children_reuse_diagnostic_specs_without_reparenting():
         ("Ndb", {"frequency": "385", "ident": "PRB"}),
     ]
     assert children[0].get("frequency") == "385"
+
+
+def test_root_object_specs_support_one_level_sdk_children():
+    objects = parse_root_object_specs([
+        (
+            "Vor;lat=32.1;lon=80.053056;alt=14022F;type=HIGH;"
+            "frequency=113.0;magvar=0;range=125NM;region=ZU;ident=PRV;"
+            "name=Probe;nav=TRUE;dme=TRUE|"
+            "Dme;lat=32.1;lon=80.053056;alt=14022F;range=125NM"
+        ),
+    ])
+    root = ET.fromstring("<FSData />")
+
+    append_root_children(root, objects)
+
+    assert root[0].tag == "Vor"
+    assert root[0].attrib["ident"] == "PRV"
+    assert [(child.tag, child.attrib["range"]) for child in root[0]] == [
+        ("Dme", "125NM"),
+    ]
+    with pytest.raises(ValueError, match="--append-root-object"):
+        parse_root_object_specs(["|Dme;lat=32.1"])
 
 
 def test_airport_procedure_deletion_is_inserted_before_source_children():
