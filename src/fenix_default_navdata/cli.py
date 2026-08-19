@@ -54,6 +54,11 @@ from .iap_ocr_consensus import (
 )
 from .iap_ocr_recheck import audit_iap_ocr_role_recheck, write_iap_ocr_role_recheck
 from .model_io import load_model
+from .model_replay_audit import (
+    audit_model_replay,
+    load_difference_allowlist,
+    write_model_replay_audit,
+)
 from .ocr_cache import build_ocr_cache
 from .ocr_runtime import resolve_runtime_profile
 from .official_index import build_official_navaid_index
@@ -254,6 +259,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="可选的同输入重复候选，用于逐文件重放确定性比较",
     )
     convergence.add_argument("--output", required=True, help="本地收敛看板 JSON 输出路径")
+    model_replay = sub.add_parser(
+        "model-replay-audit",
+        help="只读比较两个 NavModel 快照，并以精确路径和哈希执行白名单门禁",
+    )
+    model_replay.add_argument("--baseline", required=True, help="冻结的 NavModel 快照")
+    model_replay.add_argument("--replay", required=True, help="待验证的 NavModel 快照")
+    model_replay.add_argument("--output", required=True, help="本地模型重放审计 JSON 输出路径")
+    model_replay.add_argument(
+        "--allowlist",
+        help="可选的精确差异白名单 JSON；每项必须含路径和两侧 SHA-256",
+    )
+    model_replay.add_argument(
+        "--fail-on-unexpected",
+        action="store_true",
+        help="存在白名单外模型差异时返回非零，供自动化门禁使用",
+    )
     source_gap = sub.add_parser(
         "source-gap-audit",
         help="只读按 424 原始记录分类已脱敏的航点/航路来源缺口",
@@ -1018,6 +1039,24 @@ def main(argv: list[str] | None = None) -> int:
         report["output"] = str(output)
         write_file_convergence_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "model-replay-audit":
+        output = Path(args.output).expanduser().resolve()
+        allowlist = (
+            load_difference_allowlist(Path(args.allowlist))
+            if args.allowlist
+            else ()
+        )
+        report = audit_model_replay(
+            load_model(Path(args.baseline)),
+            load_model(Path(args.replay)),
+            allowed_differences=allowlist,
+        )
+        report["output"] = str(output)
+        write_model_replay_audit(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        if args.fail_on_unexpected and report["unexpected_difference_count"]:
+            return 1
         return 0
     if args.command == "source-gap-audit":
         raw = _path(args.raw) or detect_paths().raw_root

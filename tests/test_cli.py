@@ -6,6 +6,7 @@ import pytest
 from fenix_default_navdata import cli
 from fenix_default_navdata.bgl import CompilerInfo
 from fenix_default_navdata.model import NavModel
+from fenix_default_navdata.model_io import dump_model
 from fenix_default_navdata.profile import DEFAULT_CYCLE
 
 
@@ -249,6 +250,30 @@ def test_file_convergence_audit_writes_requested_report(monkeypatch) -> None:
     assert received["repeat_candidate_root"] == Path("output/r182")
     assert received["output"] == Path("diagnostics/convergence.json").resolve()
     assert received["report"]["output"] == str(received["output"])
+
+
+def test_model_replay_audit_fails_on_unexpected_difference(tmp_path: Path) -> None:
+    baseline = NavModel(tmp_path / "raw")
+    replay = NavModel(tmp_path / "raw")
+    baseline.iap_coverage = {"version": 23}
+    replay.iap_coverage = {"version": 24}
+    baseline_path = tmp_path / "baseline.json.gz"
+    replay_path = tmp_path / "replay.json.gz"
+    output = tmp_path / "audit.json"
+    dump_model(baseline, baseline_path)
+    dump_model(replay, replay_path)
+
+    result = cli.main([
+        "model-replay-audit",
+        "--baseline", str(baseline_path),
+        "--replay", str(replay_path),
+        "--output", str(output),
+        "--fail-on-unexpected",
+    ])
+
+    assert result == 1
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert report["unexpected_difference_count"] == 1
 
 
 def test_airport_source_inventory_reads_model_and_writes_report(monkeypatch) -> None:
