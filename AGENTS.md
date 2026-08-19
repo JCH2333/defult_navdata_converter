@@ -950,3 +950,12 @@
 - `build-target`、`validate-target` 与 `diff-and-audit` 只在隔离输出运行，统一产出可机读报告。GUI、CLI、自动更新和部署入口必须共用同一 profile、候选清单和 `deployable` 决策，任何界面都不得绕过备份和游戏关闭门禁。
 - 每轮开始时记录 r 编号、唯一假设、唯一变量、允许/禁止读取内容、冻结输入与工具哈希、预期影响文件角色、成功条件和否决条件。每轮结束时记录候选或诊断路径、测试、SDK/读取器轨迹、JSON 重读、文件树哈希、参考 `29` 文件统计、来源审计和保留/否决结论。
 - 只有实际状态变化才更新本节中的候选编号、哈希、测试数、卡片数、参考一致数、Git 领先数和部署状态；不得沿用历史数字。代码或仓库文档改动后必须运行 `pytest -q`、`git diff --check`、审查精确暂存区、提交一个可解释变更并尝试普通 `git push`。代理不可用时保留本地提交，待网络恢复后集中推送。
+
+## 2026-08-19 r200 ZBAD/R29R 无主进近来源审计
+
+- 实验编号：`r200-zbad-r29r-primary-source-audit`。唯一假设是“当冻结模型和与其 `SourceRef` 精确匹配的 424 数据库编码页都只给出同标签进近过渡与复飞、没有主进近时，该 IAP 必须保持显式拒绝，不能借用其他跑道、图页或复飞腿”。允许读取 r187 `NavModel` 与受审计 PDF 直接证据缓存；禁止读取参考 BGL/SQLite/坐标、Fenix、OCR 一次性结果或人工转录。
+- 新增可复用 CLI：`iap-primary-source-audit --model <NavModel> --pdf-evidence-cache <cache.json>... --output <JSON>`。它只读取缓存中 `terminal-database-coding` 图页，且要求机场、PDF 完整路径、页码和 PDF SHA-256 与 `RejectedProcedure` 的 `SourceRef` 同时精确匹配。输出固定声明 `read_only=true`、`reference_records_read=false`、`fenix_records_read=false`、`model_mutated=false`、`projection_changed=false`；缓存只是来源审计输入，绝不回写 `NavModel`。
+- 实际输入缓存为 `C:\Users\Administrator\AppData\Local\default_navdata_converter\pdf-evidence-cache-2608r1-r43\36aa3108bbe5f9b5e32a80cf4bbb6f16c45fe40b56be71117196112e0a3b2dc3.json`，缓存文件 SHA-256 为 `027a78c2f7a51d6b1611df49daf36d138ed9c65db880fc0815602c483e2878dc`；其中 `ZBAD-0C-19.pdf` 的 PDF SHA-256 为 `7120b21074af83279e14196e54572714779e750365b9a451694ebcee34b5ec8e`。
+- 实际报告为 `diagnostics/r200-zbad-r29r-primary-source-audit-20260819.json`。r187 的 `10` 个 IAP 未决组中，`9` 个因本轮只提供 ZBAD 单页缓存而保持 `not_evaluated_no_matching_direct_database_chart`；`ZBAD:R29R` 是唯一精确命中项，结论为 `rejected_transition_and_missed_without_primary`。模型段统计为主进近 `0`、进近过渡 `1`、复飞 `1`；缓存直接腿统计为主进近 `0`、进近过渡 `2`（`IF AD521`、`TF AD790`）、复飞 `2`（`CA 291`、`DF AD521`），逐腿身份与模型一致。
+- 正反例测试覆盖“过渡和复飞均存在但无主段时明确拒绝”以及“直接缓存出现主段时保持证据不充分、不得拒绝性归纳”。CLI 输出和空缓存拒绝同样覆盖。全量 `pytest -q` 为 `416 passed`。
+- 本轮未修改 424 解析、`iap_coverage` 决策、`ProcedureSegment`、BGL adapter、冻结模型或 r188/r189 候选。因此参考一致继续为 `0/29`、状态继续为 `candidate`、`deployable=false`。下一轮从其余 `9` 张 IAP 卡中只选择一张，并先取得同样精确、可审计的直接来源页或在 OCR 运行时门禁恢复后取得可复跑的限定证据。

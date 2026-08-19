@@ -27,6 +27,10 @@ from .default_gap_cards import (
     audit_default_gap_cards,
     write_default_gap_cards,
 )
+from .iap_primary_source_audit import (
+    audit_iap_primary_sources,
+    write_iap_primary_source_audit,
+)
 from .unclassified_procedure_audit import (
     audit_unclassified_procedures,
     write_unclassified_procedure_audit,
@@ -350,6 +354,26 @@ def build_parser() -> argparse.ArgumentParser:
         "--output",
         required=True,
         help="本地来源缺口卡 JSON 输出路径",
+    )
+    iap_primary_source_audit = sub.add_parser(
+        "iap-primary-source-audit",
+        help="只读审计 IAP 未决组在精确来源数据库编码页中的主段、过渡和复飞证据",
+    )
+    iap_primary_source_audit.add_argument(
+        "--model",
+        required=True,
+        help="冻结的可复用 NavModel 快照（JSON 或 JSON.GZ）",
+    )
+    iap_primary_source_audit.add_argument(
+        "--pdf-evidence-cache",
+        nargs="+",
+        required=True,
+        help="一个或多个受审计的 PDF 直接证据缓存 JSON；只允许精确 SourceRef 匹配",
+    )
+    iap_primary_source_audit.add_argument(
+        "--output",
+        required=True,
+        help="本地 IAP 主段来源审计 JSON 输出路径",
     )
     airway_diff = sub.add_parser(
         "airway-diff-audit",
@@ -1133,6 +1157,16 @@ def main(argv: list[str] | None = None) -> int:
         output = Path(args.output).expanduser().resolve()
         report["output"] = str(output)
         write_default_gap_cards(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "iap-primary-source-audit":
+        report = audit_iap_primary_sources(
+            load_model(Path(args.model)),
+            [Path(path) for path in args.pdf_evidence_cache],
+        )
+        output = Path(args.output).expanduser().resolve()
+        report["output"] = str(output)
+        write_iap_primary_source_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "airway-diff-audit":
