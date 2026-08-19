@@ -11,7 +11,36 @@ from fenix_default_navdata.bgl import (
     find_compiler,
     write_package_project,
 )
+from fenix_default_navdata.bgl_format import (
+    BglFormatError,
+    header_summary,
+    parse_bgl_file,
+)
 from fenix_default_navdata.package_reader import PackageReaderError, read_package
+
+
+def inspect_bgl_layouts(package_root: Path) -> list[dict[str, object]]:
+    """Return only BGL header/layout facts for a controlled SDK probe."""
+
+    rows: list[dict[str, object]] = []
+    for path in sorted(package_root.rglob("*.bgl")):
+        row: dict[str, object] = {
+            "path": path.relative_to(package_root).as_posix().lower(),
+            "size": path.stat().st_size,
+        }
+        try:
+            header = parse_bgl_file(path)
+        except BglFormatError as error:
+            row["layout_error"] = str(error)
+        else:
+            row["layout"] = {
+                **header_summary(header),
+                "version": f"{header.version:#x}",
+                "section_counts": [section.count for section in header.sections],
+                "section_sizes": [section.size for section in header.sections],
+            }
+        rows.append(row)
+    return rows
 
 
 def select_holding_patterns(
@@ -551,6 +580,7 @@ def main() -> int:
                 "root" if args.move_waypoints_to_root else "airport"
             ),
             "package_root": str(package_root),
+            "bgl_layouts": inspect_bgl_layouts(package_root),
             "reader": reader_status,
         },
         ensure_ascii=False,

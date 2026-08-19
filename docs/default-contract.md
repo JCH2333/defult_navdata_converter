@@ -210,6 +210,8 @@ SID/STAR 名称碰撞。该网格由 XML 中的 `AiracCycle` 触发。无 `Airac
 
 `bgl-layout-audit` 以参考包的顶层包名确定比较范围，只读对比候选和参考最终包内每个 BGL 的文件大小、SHA-256 是否相等以及 BGL 头部/节表布局；候选根目录下的 SDK `_work` 中间产物和不在参考范围内的官方依赖副本必须排除，数量记入 `scope`。不解析或输出导航记录，不能作为内容反向来源。它用于区分 SDK 编译布局差异与更深层的 424 内容覆盖差异。回归：`test_bgl_layout_audit_reports_only_file_and_header_contract`、`test_bgl_layout_audit_ignores_sdk_work_area`、`test_bgl_layout_audit_excludes_candidate_support_packages`。
 
+`airport_subset_probe.py` 的报告必须自动记录被编译 BGL 的文件大小、头部版本、QMID 和节表类型/计数/尺寸，不读取任何参考 BGL 记录。2026-08-19 对 `ZUAL` 的受控 Package Tool 构建表明：只保留跑道时节为 `0x3/0x13/0x32/0x35`、计数均为 1；保留机场内终端点、程序和等待航线时出现 `0x22`/`0x34`，计数为 `1/1/10/1/1/1`；再保留根节点终端点时仅将 `0x22` 提升到 153，仍不产生参考机场 BGL 的 `0x17/0x33`。因此根节点终端点重复写入不是参考索引节差异的充分解释，后续必须继续通过隔离 SDK 探针验证其他可控输入。回归：`test_probe_layout_summary_reads_only_bgl_headers`。
+
 ### 导航台区域键
 
 424 的 VOR/NDB 如有有效中国 `SERVICED_AIRPORT`，默认通用数据适配器必须以该 ICAO 前缀作为区域键。这是 FIR 边界导航台唯一可证明的机场侧物理归属。没有服务机场时，才可使用单一 `CODE_FIR` 的映射；跨区域的多 FIR 不得取第一个字符串，必须拒绝。该规则只使用当期 424 字段。

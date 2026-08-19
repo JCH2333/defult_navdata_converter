@@ -1,9 +1,11 @@
+import struct
 from xml.etree import ElementTree as ET
 
 import pytest
 
 from scripts.airport_subset_probe import (
     drop_selected_waypoints,
+    inspect_bgl_layouts,
     isolate_holding_group,
     normalize_holding_file_groups,
     parse_airport_waypoint_selectors,
@@ -11,6 +13,22 @@ from scripts.airport_subset_probe import (
     select_airports,
     select_holding_patterns,
 )
+
+
+def _bgl_header() -> bytes:
+    return (
+        struct.pack(
+            "<IIIIII",
+            0x19920201,
+            0x38,
+            0,
+            0,
+            0x08051803,
+            1,
+        )
+        + struct.pack("<" + "I" * 8, 0x924, 0, 0, 0, 0, 0, 0, 0)
+        + struct.pack("<IIIII", 0x03, 1, 4, 0x6C, 0x40)
+    )
 
 
 def _airport() -> ET.Element:
@@ -180,3 +198,27 @@ def test_drop_selected_waypoints_keeps_unselected_scopes() -> None:
         point.get("waypointIdent")
         for point in root.find("Airport[@ident='ZGUH']").findall("Waypoint")
     ] == ["UH401"]
+
+
+def test_probe_layout_summary_reads_only_bgl_headers(tmp_path) -> None:
+    package = tmp_path / "package"
+    bgl = package / "scenery" / "probe.bgl"
+    bgl.parent.mkdir(parents=True)
+    bgl.write_bytes(_bgl_header())
+
+    report = inspect_bgl_layouts(package)
+
+    assert report == [{
+        "path": "scenery/probe.bgl",
+        "size": bgl.stat().st_size,
+        "layout": {
+            "section_count": 1,
+            "section_types": ["0x3"],
+            "qmid_tiles": ["0x924", "0x0", "0x0", "0x0", "0x0", "0x0", "0x0", "0x0"],
+            "embedded_magvar_size": 0,
+            "has_embedded_magvar": False,
+            "version": "0x8051803",
+            "section_counts": [4],
+            "section_sizes": [64],
+        },
+    }]
