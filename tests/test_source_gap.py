@@ -31,8 +31,11 @@ def _semantic_report(
     waypoint_omitted: int = 0,
     waypoint_field_deltas: list[dict[str, object]] | None = None,
     waypoint_field_deltas_omitted: int = 0,
+    airway_field_deltas: list[dict[str, object]] | None = None,
+    airway_field_deltas_omitted: int = 0,
 ) -> dict[str, object]:
     waypoint_field_deltas = waypoint_field_deltas or []
+    airway_field_deltas = airway_field_deltas or []
     return {
         "diagnostic": "navdatareader-semantic-diff-v1",
         "read_only": True,
@@ -54,6 +57,9 @@ def _semantic_report(
                 "reference_only_logical_keys": len(airway_samples),
                 "reference_only_samples": airway_samples,
                 "reference_only_samples_omitted": 0,
+                "field_delta_rows": len(airway_field_deltas),
+                "field_delta_samples": airway_field_deltas,
+                "field_delta_samples_omitted": airway_field_deltas_omitted,
             },
         },
     }
@@ -195,6 +201,104 @@ def test_source_gap_audit_distinguishes_projected_source_pairs(
         "unique_route_pairs": 1,
         "skipped": {},
     }
+
+
+def test_source_gap_audit_profiles_same_source_airway_field_deltas(
+    tmp_path: Path,
+) -> None:
+    model = _model(tmp_path)
+    model.airway_legs[0] = AirwayLeg(
+        "A1",
+        1,
+        "ENDPOINT",
+        "TAIL",
+        model.airway_legs[0].source,
+        direction="X",
+        start_latitude=35.0,
+        start_longitude=105.0,
+        end_latitude=36.0,
+        end_longitude=106.0,
+        start_country="ZU",
+        end_country="ZB",
+        source_code_type="RNAV2",
+        source_airspace_remark="source-only",
+        source_segment_rnp_designator="P4",
+        source_enroute_location_type="domestic",
+        source_segment_minimum_crossing_altitude="2300",
+        source_route_minimum_crossing_altitude="2600",
+        source_segment_found=True,
+        source_en_route_rte_found=True,
+    )
+    report = _semantic_report(
+        waypoint_samples=[],
+        airway_samples=[],
+        airway_field_deltas=[
+            {
+                "logical_key": {
+                    "airway_name": "A1",
+                    "airway_type": "B",
+                    "route_type": None,
+                    "airway_fragment_no": 1,
+                    "sequence_no": 1,
+                },
+                "fields": ["from_laty", "minimum_altitude"],
+            },
+            {
+                "logical_key": {
+                    "airway_name": "A1",
+                    "airway_type": "B",
+                    "route_type": None,
+                    "airway_fragment_no": 1,
+                    "sequence_no": 9,
+                },
+                "fields": ["to_lonx"],
+            },
+            {
+                "logical_key": {
+                    "airway_name": "A2",
+                    "airway_type": "B",
+                    "route_type": None,
+                    "airway_fragment_no": 1,
+                    "sequence_no": 1,
+                },
+                "fields": ["to_laty"],
+            },
+        ],
+    )
+
+    result = audit_source_gaps(model, report)
+
+    assert result["airway_field_delta_coverage"] == {
+        "total": 3,
+        "changed_fields": {
+            "from_laty": 1,
+            "minimum_altitude": 1,
+            "to_laty": 1,
+            "to_lonx": 1,
+        },
+        "source_categories": {
+            "absent_from_rte_seg": 1,
+            "same_source_airway_and_sequence": 1,
+            "source_airway_name_with_different_sequence": 1,
+        },
+        "source_metadata": {
+            "airspace_remark_populated": 1,
+            "direction_populated": 1,
+            "endpoint_coordinates_complete": 1,
+            "endpoint_regions_complete": 1,
+            "pbn_code_populated": 1,
+            "route_linked": 1,
+            "route_location_type_populated": 1,
+            "route_mtca_populated": 1,
+            "same_source_rows": 1,
+            "segment_linked": 1,
+            "segment_mtca_populated": 1,
+            "segment_rnp_designator_populated": 1,
+        },
+    }
+    serialized = json.dumps(result)
+    for value in ("A1", "A2", "ENDPOINT", "TAIL", "source-only", "RNAV2"):
+        assert value not in serialized
 
 
 def test_source_gap_audit_rejects_truncated_reference_gap_samples(tmp_path: Path) -> None:
@@ -652,5 +756,5 @@ def test_cli_writes_source_gap_audit_without_loading_terminal_documents(
 
     assert exit_code == 0
     assert observed["include_terminal_documents"] is False
-    assert json.loads(output.read_text(encoding="utf-8"))["diagnostic"] == "source-gap-audit-v4"
+    assert json.loads(output.read_text(encoding="utf-8"))["diagnostic"] == "source-gap-audit-v5"
     assert json.loads(capsys.readouterr().out)["read_only"] is True

@@ -577,6 +577,103 @@ def _airway_categories(
     return dict(sorted(categories.items()))
 
 
+def _airway_field_delta_coverage(
+    model: NavModel,
+    semantic_report: Mapping[str, object],
+    candidate_pairs: set[tuple[str, str, str, str, str]] | None = None,
+) -> dict[str, object]:
+    """Summarize 424 evidence behind redacted airway field deltas.
+
+    This intentionally reports only aggregate source availability and source
+    metadata presence. Reference values, logical identities, and raw source
+    values remain out of the output, so the audit cannot become a backfill
+    channel for target coordinates or altitude values.
+    """
+    deltas = _field_delta_keys(semantic_report, "airway", _AIRWAY_FIELDS)
+    source_sequences: dict[tuple[str, int], list[object]] = defaultdict(list)
+    for leg in model.airway_legs:
+        source_sequences[(_normalized(leg.airway), int(leg.sequence))].append(leg)
+    source_airways = {_normalized(leg.airway) for leg in model.airway_legs}
+
+    categories: Counter[str] = Counter()
+    changed_fields: Counter[str] = Counter()
+    metadata: Counter[str] = Counter()
+    for key, fields in deltas:
+        changed_fields.update(fields)
+        airway = _normalized(key["airway_name"])
+        sequence = int(key["sequence_no"])
+        matches = source_sequences.get((airway, sequence), [])
+        if not matches:
+            categories[
+                "source_airway_name_with_different_sequence"
+                if airway in source_airways
+                else "absent_from_rte_seg"
+            ] += 1
+            continue
+        if len(matches) != 1:
+            categories["same_source_airway_and_sequence_ambiguous"] += 1
+            continue
+
+        leg = matches[0]
+        pair = (
+            _normalized(leg.airway),
+            _normalized(leg.start_country),
+            _normalized(leg.start_ident),
+            _normalized(leg.end_country),
+            _normalized(leg.end_ident),
+        )
+        if candidate_pairs is None:
+            categories["same_source_airway_and_sequence"] += 1
+        elif pair in candidate_pairs:
+            categories["same_source_airway_and_sequence_candidate_pair_projected"] += 1
+        elif not pair[1] or not pair[3]:
+            categories[
+                "same_source_airway_and_sequence_unprojected_missing_endpoint_region"
+            ] += 1
+        else:
+            categories[
+                "same_source_airway_and_sequence_unprojected_from_candidate_xml"
+            ] += 1
+
+        metadata["same_source_rows"] += 1
+        if leg.source_segment_found:
+            metadata["segment_linked"] += 1
+        if leg.source_en_route_rte_found:
+            metadata["route_linked"] += 1
+        if leg.source_segment_minimum_crossing_altitude.strip():
+            metadata["segment_mtca_populated"] += 1
+        if leg.source_route_minimum_crossing_altitude.strip():
+            metadata["route_mtca_populated"] += 1
+        if leg.source_code_type.strip():
+            metadata["pbn_code_populated"] += 1
+        if leg.source_segment_rnp_designator.strip():
+            metadata["segment_rnp_designator_populated"] += 1
+        if leg.source_enroute_location_type.strip():
+            metadata["route_location_type_populated"] += 1
+        if leg.source_airspace_remark.strip():
+            metadata["airspace_remark_populated"] += 1
+        if leg.direction.strip():
+            metadata["direction_populated"] += 1
+        if (
+            leg.start_latitude is not None
+            and leg.start_longitude is not None
+            and leg.end_latitude is not None
+            and leg.end_longitude is not None
+        ):
+            metadata["endpoint_coordinates_complete"] += 1
+        if leg.start_country and leg.end_country:
+            metadata["endpoint_regions_complete"] += 1
+
+    if sum(categories.values()) != len(deltas):
+        raise SourceGapAuditError("航路字段差异来源分类未覆盖全部参考逻辑身份")
+    return {
+        "total": len(deltas),
+        "changed_fields": dict(sorted(changed_fields.items())),
+        "source_categories": dict(sorted(categories.items())),
+        "source_metadata": dict(sorted(metadata.items())),
+    }
+
+
 def _xml_tag(element: ET.Element) -> str:
     return element.tag.rsplit("}", 1)[-1]
 
@@ -775,12 +872,17 @@ def audit_source_gaps(
         airway_keys,
         candidate_pairs=candidate_pairs,
     )
+    airway_field_delta_coverage = _airway_field_delta_coverage(
+        model,
+        semantic_report,
+        candidate_pairs=candidate_pairs,
+    )
     if sum(waypoint_categories.values()) != len(waypoint_keys):
         raise SourceGapAuditError("航点来源分类未覆盖全部参考缺失逻辑身份")
     if sum(airway_categories.values()) != len(airway_keys):
         raise SourceGapAuditError("航路来源分类未覆盖全部参考缺失逻辑身份")
     return {
-        "diagnostic": "source-gap-audit-v4",
+        "diagnostic": "source-gap-audit-v5",
         "read_only": True,
         "reference_values_redacted": True,
         "source": {
@@ -791,6 +893,7 @@ def audit_source_gaps(
         "waypoint_source_categories": waypoint_categories,
         "airway_reference_only_total": len(airway_keys),
         "airway_source_categories": airway_categories,
+        "airway_field_delta_coverage": airway_field_delta_coverage,
         "candidate_airway_projection": candidate_projection,
         "flight_airline_point_evidence": _flight_airline_point_evidence(
             model, airway_keys
