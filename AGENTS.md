@@ -1143,3 +1143,53 @@
 - 主覆盖包 `manifest.json` 的依赖、兼容版本、包名、标题、构建器和顺序提示字段已与参考一致；`total_package_size` 不一致（候选 `10916053`，参考 `47584567`），它是 Package Tool 对最终包树的派生大小，不能作为来源字段或独立修复目标。
 - r190 已证明两个包的 `layout.json`、`bglIndex.bout`、ContentHistory 和 `manifest.json` 均属于同一 `29` 文件收敛范围；其中布局和大小字段依赖 BGL、索引及内容历史。手写总大小、布局日期、索引或 ContentHistory 既不能生成正确 BGL，也会使派生元数据与实际文件树不一致，禁止作为取得 SHA-256 的手段。
 - 结论：后续先闭合 424 来源投影和 SDK BGL 表达契约，再由正常构建链重生成包元数据；不得把包元数据作为独立字节收敛任务。当前参考一致仍为 `0/29`、候选自重放 `29/29`、`deployable=false`。
+
+## 2026-08-19 r211 权威项目状态、进度口径与后续计划
+
+本节优先于本文件中更早的默认通用数据进度描述。每次继续工作前，Codex 必须重新核对本节、工作区根目录 `AGENTS.md`、`git status --short --branch`、冻结模型 SHA-256、最近两个有效候选的 `conversion-report.json`、最近的 `file-convergence-audit` 与本轮诊断。文档与可复跑产物冲突时，以可复跑命令、候选报告、测试和 Git 提交为准，并在同一轮同步修正两份 `AGENTS.md`。
+
+### 1. 当前事实与独立进度
+
+- 仓库为公开 `https://github.com/JCH2333/defult_navdata_converter`，当前分支 `main` 比 `origin/main` 领先 `23` 个本地提交。普通推送此前因 `127.0.0.1:7897` 未监听而失败；网络恢复后仅执行普通 `git push` 和 `git ls-remote --heads origin main`，禁止强推。
+- 冻结内容模型为 `output\intermediate-2608-r187-navaid-label-replay.json.gz`，SHA-256 为 `7cec24bd4a57545d39aab037abe4125c763ad12f364bd5f8f0073b0e050fdb4b`。内容只能来自当期 `424源数据\2608\2608` 的 CSV/PDF 及带来源哈希的受控证据缓存；`navigraph-nav-base`/`navigraph-nav-jepp` 只作全球基线与加载契约，`Default navdata 2608R1` 只作只读比较。Fenix、参考 BGL/SQLite、参考坐标和参考导航记录禁止作为内容输入。
+- 有效候选是 r188/r189：`status=candidate`、`test_build=true`、`local_contract_verified=true`、`deployable=false`。同一冻结模型的两次独立构建在参考范围有效树内自重放一致 `29/29`；与参考中国覆盖包的 SHA-256 一致数仍为 `0/29`。这说明构建确定性已建立，不说明内容、BGL 契约、游戏加载或发布已完成。
+- 当前工程能力可粗略估计为 `45%`：424 解析、`NavModel`、证据审计、CLI/GUI、Package Tool ASCII 暂存、目标验证、候选双构建和文件收敛看板已具备。字节级验收进度单独记为 `0/29`，上线验收进度为 `0%`；三项指标不得合并或相互替代。
+- r211 全量 IAP 标题候选审计保持 10 张卡：明确拒绝 `2` 张（`ZBAD:R29R`、`ZYTL:R10`，均为“过渡/复飞存在但无主进近”），来源不足 `8` 张。10 张卡的冻结模型主进近和精确数据库编码页主进近均为 `0`。`ZJSY:I08-X` 只有一张直接标题命中图 `ZJSY-5L-3.pdf`，但标题命中不能创建缺失主段，当前仍不得投影。
+- 尚未覆盖 `F:\games\community\Community`，未为当前候选创建部署备份，未进行实机验证，未创建正式 Release。
+
+### 2. 已确认经验与硬边界
+
+1. `NavModel` 是跨 AIRAC、跨目标格式的唯一内容边界。新目标只能消费版本化模型快照；不得重解析已冻结 424、读取 Fenix，或把 OCR 缓存和参考成品当作内容数据库。
+2. OCR 是受控消歧证据，不是数据生成器。只有在已有数据库主进近、已有精确 PDF 归属、页面 SHA-256 和多次独立结果一致时，才可消歧既有角色；不得用 OCR 创建程序、主段、航段、坐标、类型或图页归属。
+3. 参考包只用于只读验收。逐文件收敛看板只能保存路径、角色、大小、哈希和 BGL 摘要，且必须保持 `read_only=true`、`reference_records_exported=false`；禁止复制、筛选、拼接或反向填写参考内容。
+4. `manifest.json`、`layout.json`、`bglIndex.bout`、ContentHistory 和包大小均是 BGL 与包树的派生输出，不得单独手写修复。任何此类差异必须回溯到来源投影或 SDK 编译契约。
+5. 每个可接入正式适配器的规则都必须有直接来源、最小正例、最小反例、审计字段和明确拒绝路径。不能唯一证明时保留拒绝；减少未决数量不是成功指标。
+6. 读取器日志只有完整登记所有请求 BGL 后才可用于语义判断。既有已否决方向（跑道表面、阈值位移、机场关联 VOR/NDB、空域通信、`onlyAddIfReplace`、根终端点重复、等待航线隔离和无来源 route type 猜测）不得重复作为正式适配器方向。
+
+### 3. 接下来的执行顺序与阶段出口
+
+1. **阶段 A：冻结基线与单卡队列。** 每轮分配连续 `rNNN`，记录唯一假设、唯一变量、允许/禁止来源、模型/工具哈希、预期受影响的文件角色、成功指标和否决条件。优先从 8 张来源不足 IAP 卡中选择一张；先处理 `ZJSY:I08-X` 的只读页面角色审计，验证其直接标题命中是否能在“不创建主段”的边界内产生新事实。不能唯一闭合即记录拒绝，转下一卡，不修改模型。
+2. **阶段 B：关闭可证明的 424 缺口。** IAP 按“已有模型主段 -> 精确 SourceRef PDF -> 必要时受控 OCR -> 唯一保守规则 -> 来源审计 -> 正反 fixture -> BGL 投影”执行。并行工作队列仅限：12 条航路端点区域、5 个全局航点区域、13 条未分类程序。只允许使用当期 CSV/PDF、FIR/ACC、受控邻接和已审计 OCR；多地区、身份冲突、`****` 和无直接类型证据保持拒绝。
+3. **阶段 C：SDK 表达契约取证。** 只对来源完整且尚未否决的一个 SDK 子对象做一次隔离探针。保留输入 XML、脚本、源/工具 SHA-256、Package Tool 轨迹、完整包树、BGL 头/节表和读取器完整登记。探针结论先进入诊断与 fixture，不直接写进正式适配器。
+4. **阶段 D：规则接入与模型门禁。** 规则通过来源审计后，先补测试和审计字段，导出新的版本化模型，再执行 `model-replay-audit --fail-on-unexpected`。允许差异必须精确列出对象身份、字段路径和两侧 SHA-256；有任何未允许差异即停止，不构建候选。
+5. **阶段 E：候选收敛循环。** 对通过模型门禁的规则，从同一冻结模型、同一官方双基线和同一工具版本独立构建两次；依次执行 `validate`、报告 JSON 标准重读、有效树自重放、`file-convergence-audit`。只有“自重放仍为 `29/29` + 受影响文件角色符合假设 + 参考一致文件数增加”同时成立，才记录为字节收敛进展。仍为 `0/29` 的实验只能记录为否决或未收敛，不扩大规则。
+6. **阶段 F：按文件角色定位剩余差异。** 分别追踪 1 个航路 BGL、10 个区域机场 BGL、10 个机场补丁 BGL、2 个索引、2 个布局、2 个清单和 2 个 ContentHistory。先解决来源投影和 SDK BGL 契约，后让正常构建链重生派生包文件；禁止为了哈希单独改元数据。
+7. **阶段 G：最终干净验收与部署。** 仅当参考 `29/29`、全新隔离输出双构建一致、完整验证和来源审计通过时，才检查 `FlightSimulator2024.exe` 已退出，为两个 Community 覆盖包及元数据创建带时间戳 SHA-256 备份并完成一次恢复演练。随后才覆盖 Community，交由用户验证 `ZBCF`、`ZUNZ`、`ZUUU` 的机场输入、跑道、SID、STAR、IAP、航路/航点、退出飞行和退出模拟器。实机通过前仅可标记测试版，禁止正式 Release。
+
+### 4. 可复用的 424 转换管线
+
+固定主链为：
+
+`lock-inputs -> ingest-424 -> evidence-audit -> normalize-model -> model-audit -> project-target -> build-target -> validate-target -> diff-and-audit -> stage-backup-deploy`
+
+- `lock-inputs` 输出 AIRAC、源文件、模板、SDK、OCR/解析器和工具 SHA-256 清单；新周期必须重新锁定，禁止混用旧周期证据。
+- `ingest-424` 保留原始精度、单位、`SourceRef`、解析失败和结构化拒绝；`evidence-audit` 单独保存 PDF/OCR 证据及其运行指纹，不直接产出导航内容。
+- `normalize-model` 输出可序列化、可重放、可差分的 `NavModel`；`model-audit` 验证身份、引用、区域、程序、航路连通性和拒绝计数。
+- 每个目标格式建立独立 `profile/adapter/validator/deployer`，负责目标 schema、单位、NULL/default、排序、容量、元数据、运行时契约、降级策略、最小 fixture 和实机清单；禁止把目标专有分支写回 `source.py`。
+- GUI、CLI、自动更新和部署必须共用同一 profile、候选报告和 `deployable` 门禁。任何入口都不得绕过 `stage-backup-deploy` 直接写入 Community。
+
+### 5. Codex 每轮维护协议
+
+- 开始前记录：r 编号、唯一假设/变量、输入和工具哈希、允许/禁止来源、预期文件角色、成功和否决指标。
+- 结束后更新：诊断或候选路径、模型 SHA-256、代码/文档提交、测试、SDK/读取器结果、JSON 重读、候选自重放、参考 `x/29`、缺口卡状态、部署状态和下一项唯一任务。没有提升参考一致数时必须明确写“字节收敛未推进”。
+- 代码或仓库文档变更后必须运行 `pytest -q`、`git diff --check`、精确检查暂存区、创建单一主题提交并尝试普通 `git push`。数据库、备份、日志、诊断、候选、SDK 中间产物、外部测试包和生成导航包继续保持在 Git 之外。
