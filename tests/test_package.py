@@ -20,6 +20,7 @@ from fenix_default_navdata.package import (
     AIRPORT_PACKAGE,
     NAV_PACKAGE,
     _normalize_package_tool_manifest,
+    _normalize_package_tool_time_metadata,
     build_candidate,
 )
 from fenix_default_navdata.profile import DEFAULT_CYCLE
@@ -45,6 +46,67 @@ def test_package_tool_manifest_restores_2608r1_compatibility_contract(
         "minimum_compatibility_version": "7.26.0.214",
         "total_package_size": "123",
     }
+
+
+def _index_filetime(value: int) -> bytes:
+    high = (value >> 32) & 0xFFFFFFFF
+    low = value & 0xFFFFFFFF
+    return high.to_bytes(4, "little") + low.to_bytes(4, "little")
+
+
+def test_package_tool_time_metadata_normalizes_only_verified_index_fields(
+    tmp_path: Path,
+):
+    package = tmp_path / "package"
+    bgl_a = package / "scenery" / "navdata" / "a.bgl"
+    bgl_b = package / "scenery" / "navdata" / "b.bgl"
+    bgl_a.parent.mkdir(parents=True)
+    bgl_a.write_bytes(b"a")
+    bgl_b.write_bytes(b"b")
+    timestamp_a = 134304864020000006
+    timestamp_b = 134304864170000006
+    package.joinpath("layout.json").write_text(json.dumps({
+        "content": [
+            {"path": "scenery/navdata/a.bgl", "size": 1, "date": timestamp_a},
+            {"path": "scenery/navdata/b.bgl", "size": 1, "date": timestamp_b},
+        ],
+    }), encoding="utf-8")
+    original_index = (
+        b"prefix"
+        + _index_filetime(timestamp_a)
+        + b"middle"
+        + _index_filetime(timestamp_b)
+        + b"suffix"
+    )
+    package.joinpath("bglIndex.bout").write_bytes(original_index)
+
+    _normalize_package_tool_time_metadata(package)
+
+    assert package.joinpath("bglIndex.bout").read_bytes() == (
+        b"prefix" + b"\0" * 8 + b"middle" + b"\0" * 8 + b"suffix"
+    )
+    assert json.loads(package.joinpath("layout.json").read_text(encoding="utf-8")) == {
+        "content": [
+            {"path": "bglindex.bout", "size": len(original_index), "date": 0},
+            {"path": "scenery/navdata/a.bgl", "size": 1, "date": 0},
+            {"path": "scenery/navdata/b.bgl", "size": 1, "date": 0},
+        ],
+    }
+
+
+def test_package_tool_time_metadata_rejects_unverified_index_layout_link(
+    tmp_path: Path,
+):
+    package = tmp_path / "package"
+    package.mkdir()
+    timestamp = 134304864020000006
+    package.joinpath("layout.json").write_text(json.dumps({
+        "content": [{"path": "scenery/navdata/a.bgl", "size": 1, "date": timestamp}],
+    }), encoding="utf-8")
+    package.joinpath("bglIndex.bout").write_bytes(b"not-an-index")
+
+    with pytest.raises(ValueError, match="timestamp linkage is not exact"):
+        _normalize_package_tool_time_metadata(package)
 
 
 def test_missing_compiler_blocks_both_overlay_packages(tmp_path: Path, monkeypatch):

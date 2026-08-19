@@ -125,6 +125,63 @@ def _normalize_package_tool_manifest(package_root: Path) -> None:
     _write_json(path, payload)
 
 
+def _index_filetime_bytes(value: int) -> bytes:
+    """Encode a Package Tool index FILETIME as high then low LE DWORDs."""
+    if value <= 0:
+        raise ValueError(f"Package Tool layout timestamp must be positive: {value}")
+    high = (value >> 32) & 0xFFFFFFFF
+    low = value & 0xFFFFFFFF
+    return high.to_bytes(4, "little") + low.to_bytes(4, "little")
+
+
+def _find_all(data: bytes, needle: bytes) -> list[int]:
+    positions: list[int] = []
+    start = 0
+    while True:
+        position = data.find(needle, start)
+        if position < 0:
+            return positions
+        positions.append(position)
+        start = position + len(needle)
+
+
+def _normalize_package_tool_time_metadata(package_root: Path) -> None:
+    """Remove wall-clock times after verifying Package Tool index linkage.
+
+    Each BGL FILETIME in ``layout.json`` must occur exactly once per matching
+    BGL entry in ``bglIndex.bout``. Only those verified fields are normalized.
+    """
+    layout_path = package_root / "layout.json"
+    index_path = package_root / "bglIndex.bout"
+    payload = json.loads(layout_path.read_text(encoding="utf-8-sig"))
+    content = payload.get("content") if isinstance(payload, dict) else None
+    if not isinstance(content, list):
+        raise ValueError(f"Package Tool layout has no content list: {layout_path}")
+
+    timestamps = Counter(
+        int(entry["date"])
+        for entry in content
+        if isinstance(entry, dict)
+        and str(entry.get("path", "")).lower().endswith(".bgl")
+    )
+    if not timestamps:
+        raise ValueError(f"Package Tool layout has no BGL timestamps: {layout_path}")
+
+    index = bytearray(index_path.read_bytes())
+    for timestamp, expected_count in timestamps.items():
+        positions = _find_all(bytes(index), _index_filetime_bytes(timestamp))
+        if len(positions) != expected_count:
+            raise ValueError(
+                "Package Tool BGL index timestamp linkage is not exact: "
+                f"timestamp={timestamp}, layout_entries={expected_count}, "
+                f"index_entries={len(positions)}, package={package_root}"
+            )
+        for position in positions:
+            index[position:position + 8] = b"\0" * 8
+    index_path.write_bytes(index)
+    _write_json(layout_path, _package_layout(package_root))
+
+
 def _manifest(name: str, title: str, dependencies: list[dict[str, str]], size: int = 0) -> dict[str, object]:
     return {
         "dependencies": dependencies,
@@ -223,6 +280,7 @@ def _compile_xml_package(
         built_root = Path(str(compile_report["package_root"]))
         shutil.copytree(built_root, package_root, dirs_exist_ok=True)
         _normalize_package_tool_manifest(package_root)
+        _normalize_package_tool_time_metadata(package_root)
     else:
         compile_reports = []
         for xml_path in xml_paths:

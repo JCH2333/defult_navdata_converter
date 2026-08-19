@@ -557,3 +557,12 @@
 固定管线为 `lock-inputs -> ingest-424 -> evidence-audit -> normalize-model -> model-audit -> project-target -> build-target -> validate-target -> diff-and-audit -> stage-backup-deploy`。`NavModel` 是跨 AIRAC、跨格式的唯一内容边界；新目标只能新增独立 profile/adapter、验证器和部署器，且只消费模型快照。目标 schema、字符串限制、NULL/default、排序、元数据和加载契约留在 profile，不得回写 `source.py`。
 
 每个 rNNN 必须先写出：单一假设、单一变量、冻结输入/工具哈希、禁止读取的数据、预期指标和失败判据。完成后必须更新：候选或诊断路径、代码/文档提交号、测试、SDK 构建、读取器完整性/重复性、29 文件哈希、来源审计、明确的保留或否决结论，以及上表各阶段的状态。代码或仓库文档变更后运行相关测试、`git diff --check`、审查暂存区、单主题提交并推送；数据库、备份、日志、诊断、SDK 中间产物和外部测试包继续排除在 Git 之外。
+
+### 2026-08-19 r181/r182 Package Tool 时间确定性日志
+
+- 假设：r180 的四个自比较差异仅来自 Package Tool 写入 `layout.json` 和 `bglIndex.bout` 的墙钟 FILETIME，而不是 424 内容、XML 排序或 BGL 载荷。唯一变量是 Package Tool 输出后的严格时间元数据规范化；输入继续冻结为 `output/intermediate-2608-r155-airway-identities.json.gz` 和已验证官方设施索引。未读取 Fenix、参考 BGL/SQLite 导航记录、参考坐标或参考节表。
+- 取证：r175/r180 的 BGL 均相同；两个 `layout.json` 仅改变 11 个 BGL、`bglIndex.bout` 和 ContentInfo 的 Windows FILETIME。两个 BGL 索引各有 11 组变化，固定记录步长为 394 字节；每组编码均与同路径 `layout.json` 的 BGL FILETIME 相等，格式为高 32 位小端后接低 32 位小端。
+- 实现：`_normalize_package_tool_time_metadata` 只在每一个 layout BGL 时间戳在索引中出现次数与 BGL 条目数精确相同后，才将该 8 字节字段归零，并以确定性路径/大小/零日期重写 `layout.json`。缺少内容列表、没有 BGL 时间戳或任一索引匹配次数不正确均失败；不得按偏移、包名或参考内容盲改索引。自动化测试覆盖成功规范化与索引/布局关联失败拒绝。
+- r181 `candidate-2608-default-r181-package-time-normalized` 与 r182 `candidate-2608-default-r182-package-time-repeat` 均由真实 Package Tool 从同一冻结输入独立构建，均通过独立 `validate`（21 个 BGL、`local_contract_verified=true`、`deployable=false`）。排除 `_work` 与 `conversion-report.json` 后，候选有效树 `2256/2256` 文件 SHA-256 全部一致；构建载荷重放确定性阶段因此通过。
+- 边界：该证明仅覆盖本地包契约和两次构建的字节重放，尚不构成游戏运行时加载证明；`bglIndex.bout` 经规范化后的实机接受性仍须在最终字节一致、备份和部署门禁满足后与用户飞行验证一起确认。参考范围仍为 `0/29`，不得部署或发布。
+- 后续顺序更新为：先把 29 文件候选/参考哈希、BGL 结构、来源对象组和影响实验固化为逐文件收敛看板；然后按来源证据处理航路/区域缺口、10 个 IAP 未决和来源完整的机场 SDK 探针。后续候选全部必须沿用 r181 的时间元数据规范化和“两次独立构建全树相等”门禁。
