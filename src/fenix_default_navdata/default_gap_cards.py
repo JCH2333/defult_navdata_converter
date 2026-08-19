@@ -301,7 +301,10 @@ def _iap_cards(
                 "direct_database_sections": evidence.get("direct_database_sections"),
                 "evidence_pages": evidence.get("evidence_pages"),
             }
-            if disposition == "rejected_transition_and_missed_without_primary":
+            if disposition in {
+                "rejected_transition_and_missed_without_primary",
+                "rejected_related_same_page_sections_without_primary",
+            }:
                 card["disposition"] = disposition
                 card["allowed_next_evidence"] = [
                     "同一标签、同一来源页中可证明主进近存在的直接 424 证据",

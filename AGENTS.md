@@ -1121,3 +1121,11 @@
 - 只有实际改变的指标才更新；不得复制旧 Git 领先数、测试数、模型哈希或进度百分比。没有参考一致数提升时，明确写“字节收敛未推进”。
 - 每次代码或仓库文档变更后必须运行 `pytest -q`、`git diff --check`，审查精确暂存区，完成一个可解释的本地提交，并尝试普通 `git push`。诊断、缓存、候选、日志、数据库、备份和外部测试包必须保持忽略。
 - 下一项工作固定为：不重跑既有 `ZWKN/R30-Y` OCR 组；从剩余 `8` 张 `no_unique_primary` IAP 卡、`12` 条航路端点、`5` 个航点区域或 `13` 条未分类程序中，选择一张有新的同周期直接来源可能性的单卡，先完成只读来源审计。若没有新直接来源，则记录拒绝理由并转到另一张卡，不修改模型或候选。
+
+## 2026-08-19 r208 ZYDD/R01 同页关联标签无主进近审计
+
+- 实验编号：`r208-zydd-r01-related-same-page-primary-source-audit`。唯一假设是：当同一机场、同一跑道、同一精确数据库编码页中的无后缀基础标签和单字母 `W/X/Y/Z` 变体合计只包含进近过渡和复飞，且冻结模型和该页均不存在主进近时，两条相关卡都可被明确拒绝；该结论不得把过渡或复飞拼接为主进近。
+- 允许读取 r187 冻结模型及 r43 中与 `SourceRef` 精确匹配的数据库编码页缓存；禁止读取参考 BGL/SQLite/坐标、Fenix、IAP 图页 OCR 结果或人工转录。实现位于 `iap_primary_source_audit.py`：只接受严格形如 `R01-Y` 的“跑道身份加单个 W/X/Y/Z”标签族，要求相同跑道、至少两个相关标签、模型主段为零、直接页关联标签主段为零、并且关联页合计同时存在过渡和复飞。复合后缀、不相关标签、跨跑道、跨页或任一主段存在时不命中。
+- 新处置为 `rejected_related_same_page_sections_without_primary`，只影响来源审计和缺口卡，不改变 `NavModel`、IAP 投影、BGL、候选或 Community。正反回归：`test_audit_rejects_related_same_page_base_and_variant_without_primary`、`test_audit_keeps_related_same_page_labels_unresolved_when_primary_exists`、`test_gap_cards_bind_related_same_page_primary_rejection`。
+- 实际命令使用 r201 已记录的 9 个 r43 精确缓存重跑 `iap-primary-source-audit`，报告为 `diagnostics\r208-zydd-related-label-primary-source-audit-20260819.json`，并生成绑定卡片 `diagnostics\r208-default-gap-cards-20260819.json`。`ZYDD-0C-2.pdf`（SHA-256 `0f21ec38cd9cc0187f8722ad9b69ef1511cdf45b32c5d25867759da00fe4981e`）中 `R01` 有 `6` 条过渡、`R01-Y` 有 `3` 条复飞，当前页主进近为 `0`。但 r187 在另一页 `ZYDD-0C-4.pdf` 中含 `R01-Z` 主进近；它属于同一严格标签族，因此模型族主段计数为 `1`，r208 假设不成立。
+- 结论是 `ZYDD:R01` 与 `ZYDD:R01-Y` 继续为 `unresolved_direct_database_evidence_inconclusive`，不得借用跨页、不同变体 `R01-Z` 的主段。审计总计仍为“明确拒绝 `2`、继续来源不足 `8`”，参考一致仍为 `0/29`、`deployable=false`。本轮只验证并固化了“任何关联标签族已有主段时不得误判为全族无主段”的防护边界，没有推进候选或字节收敛。

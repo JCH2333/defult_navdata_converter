@@ -127,6 +127,124 @@ def _cache(
     return path
 
 
+def _related_label_model(root: Path) -> tuple[NavModel, SourceRef]:
+    source = SourceRef(
+        "Terminal/ZYDD/ZYDD-0C-2.pdf",
+        page=1,
+        sha256="related-database-hash",
+    )
+    model = NavModel(root)
+    model.procedure_segments.extend([
+        ProcedureSegment(
+            "ZYDD",
+            "R01",
+            "进近过渡",
+            "01",
+            "DD505",
+            (
+                ChartTerminalLeg(
+                    "R01", "01", "IF", "DD505", "fixture", sequence=1,
+                ),
+            ),
+            source,
+        ),
+        ProcedureSegment(
+            "ZYDD",
+            "R01-Y",
+            "复飞",
+            "01",
+            "",
+            (
+                ChartTerminalLeg(
+                    "R01-Y", "01", "DF", "DD503", "fixture", sequence=1,
+                ),
+            ),
+            source,
+        ),
+    ])
+    model.rejected_procedures.extend([
+        RejectedProcedure("ZYDD", "R01", "no unique primary", source),
+        RejectedProcedure("ZYDD", "R01-Y", "no unique primary", source),
+    ])
+    model.iap_coverage = {
+        "unresolved_groups": [
+            {
+                "airport": "ZYDD",
+                "label": "R01",
+                "runway": "01",
+                "status": "no_unique_primary",
+                "source": {
+                    "file": source.file,
+                    "page": source.page,
+                    "sha256": source.sha256,
+                },
+            },
+            {
+                "airport": "ZYDD",
+                "label": "R01-Y",
+                "runway": "01",
+                "status": "no_unique_primary",
+                "source": {
+                    "file": source.file,
+                    "page": source.page,
+                    "sha256": source.sha256,
+                },
+            },
+        ],
+    }
+    return model, source
+
+
+def _related_label_cache(
+    path: Path,
+    source: SourceRef,
+    *,
+    include_primary: bool = False,
+) -> Path:
+    legs = [
+        {
+            "procedure_kind": "进近过渡",
+            "procedure_label": "R01",
+            "runway": "01",
+            "transition": "DD505",
+            "leg_type": "IF",
+            "fix_ident": "DD505",
+        },
+        {
+            "procedure_kind": "复飞",
+            "procedure_label": "R01-Y",
+            "runway": "01",
+            "transition": "",
+            "leg_type": "DF",
+            "fix_ident": "DD503",
+        },
+    ]
+    if include_primary:
+        legs.append({
+            "procedure_kind": "进近",
+            "procedure_label": "R01",
+            "runway": "01",
+            "transition": "",
+            "leg_type": "TF",
+            "fix_ident": "RW01",
+        })
+    path.write_text(json.dumps({
+        "charts": [{
+            "airport": "ZYDD",
+            "chart_name": "数据库编码",
+            "chart_type": "terminal-database-coding",
+            "filename": "ZYDD-0C-2.pdf",
+            "source": {
+                "file": source.file,
+                "page": source.page,
+                "sha256": source.sha256,
+            },
+            "terminal_legs": legs,
+        }],
+    }), encoding="utf-8")
+    return path
+
+
 def test_audit_rejects_transition_and_missed_without_primary(
     tmp_path: Path,
 ) -> None:
@@ -169,6 +287,110 @@ def test_audit_rejects_transition_and_missed_without_primary(
         },
     }]
     assert item["projection_allowed"] is False
+
+
+def test_audit_rejects_related_same_page_base_and_variant_without_primary(
+    tmp_path: Path,
+) -> None:
+    model, source = _related_label_model(tmp_path / "raw")
+
+    report = audit_iap_primary_sources(
+        model,
+        [_related_label_cache(tmp_path / "evidence.json", source)],
+    )
+
+    assert report["summary"] == {
+        "unresolved_group_total": 2,
+        "by_disposition": {
+            "rejected_related_same_page_sections_without_primary": 2,
+        },
+    }
+    for item in report["items"]:
+        assert item["disposition"] == (
+            "rejected_related_same_page_sections_without_primary"
+        )
+        assert item["related_same_page_sections"] == {
+            "base_label": "R01",
+            "members": [
+                {
+                    "label": "R01",
+                    "runway": "01",
+                    "sections": {
+                        "approach": 0,
+                        "approach_transition": 1,
+                        "missed": 0,
+                    },
+                },
+                {
+                    "label": "R01-Y",
+                    "runway": "01",
+                    "sections": {
+                        "approach": 0,
+                        "approach_transition": 0,
+                        "missed": 1,
+                    },
+                },
+            ],
+            "sections": {
+                "approach": 0,
+                "approach_transition": 1,
+                "missed": 1,
+            },
+        }
+        assert item["projection_allowed"] is False
+
+
+def test_audit_keeps_related_same_page_labels_unresolved_when_primary_exists(
+    tmp_path: Path,
+) -> None:
+    model, source = _related_label_model(tmp_path / "raw")
+
+    report = audit_iap_primary_sources(
+        model,
+        [_related_label_cache(
+            tmp_path / "evidence.json",
+            source,
+            include_primary=True,
+        )],
+    )
+
+    assert {
+        item["disposition"] for item in report["items"]
+    } == {"unresolved_direct_database_evidence_inconclusive"}
+
+
+def test_audit_keeps_related_same_page_labels_unresolved_when_model_has_primary(
+    tmp_path: Path,
+) -> None:
+    model, source = _related_label_model(tmp_path / "raw")
+    model.procedure_segments.append(
+        ProcedureSegment(
+            "ZYDD",
+            "R01",
+            "进近",
+            "01",
+            "",
+            (
+                ChartTerminalLeg(
+                    "R01", "01", "TF", "RW01", "fixture", sequence=1,
+                ),
+            ),
+            SourceRef(
+                "Terminal/ZYDD/ZYDD-0C-3.pdf",
+                page=1,
+                sha256="other-page-hash",
+            ),
+        ),
+    )
+
+    report = audit_iap_primary_sources(
+        model,
+        [_related_label_cache(tmp_path / "evidence.json", source)],
+    )
+
+    assert {
+        item["disposition"] for item in report["items"]
+    } == {"unresolved_direct_database_evidence_inconclusive"}
 
 
 def test_audit_does_not_reject_when_direct_database_evidence_has_primary(

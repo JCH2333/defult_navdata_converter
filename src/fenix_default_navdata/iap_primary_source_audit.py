@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections import Counter
 from pathlib import Path
 from typing import Any, Iterable, Mapping
@@ -19,6 +20,10 @@ _SOURCE_SECTION_KINDS = {
     "approach_transition",
     "missed",
 }
+_SINGLE_LETTER_VARIANT_LABEL = re.compile(
+    r"^(?P<base>[A-Z]\d{2}[LRC]?)-[WXYZ]$",
+    re.IGNORECASE,
+)
 
 
 def _source_payload(source: SourceRef) -> dict[str, object]:
@@ -103,6 +108,88 @@ def _model_section_summary(
         {kind: sections[kind] for kind in sorted(_SOURCE_SECTION_KINDS)},
         legs,
     )
+
+
+def _related_label_set(label: str) -> tuple[str, set[str]]:
+    match = _SINGLE_LETTER_VARIANT_LABEL.fullmatch(label)
+    base_label = match["base"].upper() if match else label.upper()
+    return base_label, {
+        base_label,
+        *(f"{base_label}-{suffix}" for suffix in "WXYZ"),
+    }
+
+
+def _related_model_section_summary(
+    model: NavModel,
+    airport: str,
+    label: str,
+    runway: str,
+) -> dict[str, int]:
+    """Count all source-model sections in one strict base/variant family."""
+
+    _, related_labels = _related_label_set(label)
+    sections: Counter[str] = Counter()
+    for segment in model.procedure_segments:
+        kind = iap_section_kind(segment)
+        if (
+            segment.airport != airport
+            or segment.runway != runway
+            or segment.label.upper() not in related_labels
+            or kind not in _SOURCE_SECTION_KINDS
+        ):
+            continue
+        sections[kind] += 1
+    return {kind: sections[kind] for kind in sorted(_SOURCE_SECTION_KINDS)}
+
+
+def _same_page_related_section_summary(
+    page_labels: Iterable[Mapping[str, object]],
+    label: str,
+    runway: str,
+) -> dict[str, object] | None:
+    """Summarize an unsuffixed IAP identity and its single-letter variants.
+
+    This is intentionally stricter than the BGL inheritance rule: it only
+    proves that a directly cached database page has no primary anywhere in a
+    related base/variant family. It never assigns those sections to a target.
+    """
+
+    base_label, related_labels = _related_label_set(label)
+    sections: Counter[str] = Counter()
+    members: list[dict[str, object]] = []
+    for item in page_labels:
+        page_label = item.get("label")
+        page_runway = item.get("runway")
+        page_sections = item.get("sections")
+        if (
+            not isinstance(page_label, str)
+            or not isinstance(page_runway, str)
+            or not isinstance(page_sections, Mapping)
+            or page_runway != runway
+            or page_label.upper() not in related_labels
+        ):
+            continue
+        member_sections: dict[str, int] = {}
+        for kind in sorted(_SOURCE_SECTION_KINDS):
+            value = page_sections.get(kind)
+            if not isinstance(value, int):
+                raise IapPrimarySourceAuditError("数据库编码图页分段计数无效")
+            sections[kind] += value
+            member_sections[kind] = value
+        members.append({
+            "label": page_label,
+            "runway": page_runway,
+            "sections": member_sections,
+        })
+    if len(members) < 2:
+        return None
+    return {
+        "base_label": base_label,
+        "members": sorted(members, key=lambda item: str(item["label"])),
+        "sections": {
+            kind: sections[kind] for kind in sorted(_SOURCE_SECTION_KINDS)
+        },
+    }
 
 
 def _cache_section_summary(
@@ -234,6 +321,17 @@ def audit_iap_primary_sources(
             evidence_pages,
             same_page_labels,
         ) = _cache_section_summary(charts, airport, label, runway, rejected_item.source)
+        related_same_page_sections = _same_page_related_section_summary(
+            same_page_labels,
+            label,
+            runway,
+        )
+        related_model_sections = _related_model_section_summary(
+            model,
+            airport,
+            label,
+            runway,
+        )
         if not evidence_pages:
             disposition = "not_evaluated_no_matching_direct_database_chart"
         elif (
@@ -245,6 +343,14 @@ def audit_iap_primary_sources(
             and cache_sections["missed"] > 0
         ):
             disposition = "rejected_transition_and_missed_without_primary"
+        elif (
+            related_same_page_sections is not None
+            and related_model_sections["approach"] == 0
+            and related_same_page_sections["sections"]["approach"] == 0
+            and related_same_page_sections["sections"]["approach_transition"] > 0
+            and related_same_page_sections["sections"]["missed"] > 0
+        ):
+            disposition = "rejected_related_same_page_sections_without_primary"
         else:
             disposition = "unresolved_direct_database_evidence_inconclusive"
         status_counts[disposition] += 1
@@ -258,10 +364,12 @@ def audit_iap_primary_sources(
             "disposition": disposition,
             "model_sections": model_sections,
             "model_legs": model_legs,
+            "related_model_sections": related_model_sections,
             "direct_database_sections": cache_sections,
             "direct_database_legs": cache_legs,
             "evidence_pages": evidence_pages,
             "same_page_iap_labels": same_page_labels,
+            "related_same_page_sections": related_same_page_sections,
             "projection_allowed": False,
         })
     return {

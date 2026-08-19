@@ -194,6 +194,27 @@ def test_gap_cards_bind_exact_iap_primary_source_rejection(
     )
 
 
+def test_gap_cards_bind_related_same_page_primary_rejection(
+    tmp_path: Path,
+) -> None:
+    audit = _iap_primary_source_audit(tmp_path / "iap-primary-source-audit.json")
+    payload = json.loads(audit.read_text(encoding="utf-8"))
+    payload["items"][0]["disposition"] = (
+        "rejected_related_same_page_sections_without_primary"
+    )
+    audit.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = audit_default_gap_cards(
+        _model(tmp_path / "raw"),
+        _candidate_report(tmp_path / "candidate.json"),
+        iap_primary_source_audit_path=audit,
+    )
+
+    assert result["cards"]["iap_primary_selection"][0]["disposition"] == (
+        "rejected_related_same_page_sections_without_primary"
+    )
+
+
 def test_gap_cards_reject_iap_source_audit_with_wrong_source(
     tmp_path: Path,
 ) -> None:
