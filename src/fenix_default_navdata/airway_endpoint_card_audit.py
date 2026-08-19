@@ -140,6 +140,7 @@ def audit_airway_endpoint_card(
         for name in acc_names
         if name in fir_acc_countries
     }
+    unmapped_acc = sorted(set(acc_names) - mapped_acc.keys())
     direct_firs = sorted({
         str(segment["endpoint_fir"]).strip()
         for segment in raw_segments
@@ -149,10 +150,22 @@ def audit_airway_endpoint_card(
         (point.get("CODE_FIR") or "").strip()
         or (point.get("SERVICED_AIRPORT") or "").strip()
         or direct_firs
-        or mapped_acc
     )
     model_category = str(model_item["category"])
     if (
+        model_category == "multiple_neighbor_regions"
+        and unmapped_acc
+    ):
+        disposition = (
+            "rejected_multiple_neighbor_regions_with_incomplete_acc_evidence"
+        )
+        projection_allowed = False
+        reason = (
+            "相邻已解析地区不唯一，且至少一个航段 ACC 名称不能由 "
+            "AIRSPACE.csv 的 FIR 标题唯一映射；不能以部分 ACC 映射或任一相邻地区"
+            "发明区域键"
+        )
+    elif (
         direct_region_blank
         and model_category == "multiple_neighbor_regions"
     ):
@@ -160,7 +173,7 @@ def audit_airway_endpoint_card(
         projection_allowed = False
         reason = (
             "指定点自身 FIR/服务机场为空，关联航段端点 FIR 为空，"
-            "且相邻已解析地区不唯一；不能从 ACC 名称或任一相邻地区发明区域键"
+            "且相邻已解析地区不唯一；不能从任一相邻地区发明区域键"
         )
     else:
         disposition = "unresolved_requires_new_direct_evidence"
@@ -194,6 +207,7 @@ def audit_airway_endpoint_card(
             "endpoint_firs": direct_firs,
             "acc_names": acc_names,
             "fir_acc_region_mappings": mapped_acc,
+            "unmapped_acc_names": unmapped_acc,
         },
         "model_source_evidence": {
             "category": model_category,

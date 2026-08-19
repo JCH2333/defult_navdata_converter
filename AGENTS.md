@@ -1463,3 +1463,11 @@
 - 模型侧的同一精确身份仍有两个已来源化相邻地区：`P612 -> ZH` 和 `SHX -> ZL`。因此处置为 `rejected_multiple_neighbor_regions_with_blank_direct_region`，`projection_allowed=false`：不能从一个 ACC 名称、任一相邻地区或 BGL 节表选择 `ZH` 或 `ZL`。这是对 r198 “多地区邻接”拒绝的直接原始行复核，不是新模型规则。
 - 自动化新增精确 UUID 关联、空直接地区加多相邻地区拒绝、重复 `CODE_ID` 身份失败和 CLI 路径回归；全量回归为 `433 passed`。r188/r189 自重放仍 `29/29`，参考一致仍 `0/29`、`deployable=false`，字节收敛未推进。
 - 下一项唯一任务：按剩余端点卡稳定排序复核 `H35:2` 的精确身份 `DESIGNATED_POINT/P127`。该轮仍只允许对指定点 FIR/服务机场、精确 UUID 关联航段 FIR、ACC 映射及邻接证据做只读审计；多地区或缺乏唯一直接来源时保持拒绝，不得修改模型、候选或部署状态。
+
+## 2026-08-19 r219 P127 部分 ACC 映射拒绝
+
+- 实验编号：`r219-p127-airway-endpoint-card-source-audit`。唯一假设是：P127 的 ACC 备注中若有部分名称可由 `AIRSPACE.csv` FIR 标题映射，是否能够在多地区邻接时唯一恢复区域。变量仅为把 `airway-endpoint-card-audit` 的 ACC 结果细化为“已映射”和“未映射”；审计规则与既有 `_restore_waypoint_countries_from_airway_acc` 门禁一致：任一 ACC 名称无法映射时，禁止恢复。
+- 真实报告为 `diagnostics\r219-p127-airway-endpoint-card-source-audit-20260819.json`。`P127` 的唯一指定点行为 `505`、UUID `754c8ef2-dab0-444a-a16e-fc306b7d96b8`，自身 `CODE_FIR` 和 `SERVICED_AIRPORT` 为空。其精确关联航段是 H35 第 `60`、`61` 行和 J75 第 `342` 行，端点 FIR 均为空。
+- 原始 ACC 名称为“广州、长沙、成都”；只有“广州”可由 `AIRSPACE.csv` FIR 标题映射到 `ZG`，“长沙、成都”均无可用映射。模型侧相邻地区同时为 `ZG`、`ZP`、`ZU`。因此处置为 `rejected_multiple_neighbor_regions_with_incomplete_acc_evidence`、`projection_allowed=false`；不得用部分 `ZG` 映射覆盖或选择任一邻接地区。
+- 自动化新增“部分 ACC 映射加多地区边界必须拒绝”反例，并将 P225 同类未知 ACC 防护对齐该门禁；定向回归 `18 passed`，完整回归、提交前检查待本轮完成。模型、BGL、候选和 Community 未变，参考一致仍 `0/29`、`deployable=false`，字节收敛未推进。
+- 下一项唯一任务：按稳定排序复核 `H38:2` 的精确身份 `DESIGNATED_POINT/P239`。仅复用 UUID 精确关联、FIR/服务机场、ACC 映射和邻接来源审计；无唯一直接来源不得修改 `NavModel`、BGL 投影、候选或部署状态。
