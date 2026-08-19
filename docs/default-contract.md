@@ -530,3 +530,4 @@ BGL 标记。
 ## AD 2.19 VOR/DME 高程投影结论
 
 AD 2.19 的 VOR/DME 表继续保存为带页码和 SHA-256 的审计证据，但不得新增、重区域化或修改任何 VOR 本体字段，也不得写入默认 BGL 的 `Vor/Dme.alt`。2026-08-14 的 r52 真实 SDK 构建与受控 Navdatareader 差分表明，投影 108 条已匹配 VOR 的 PDF DME 高程后，VOR 严格一致行从 40 降至 36、字段差异从 75 增至 79、含 `dme_altitude` 的差异样本从 27 增至 44。因此该高程不是默认 BGL `Vor/Dme.alt` 的可证明来源。
+机场磁差的统一模型投影（默认通用数据、2608R1，证据：424 `AD_HP.csv` 的 `VAL_MAG_VAR`、SDK `bglcomp.xsd` 的 `Airport.magvar`、源读取与 BGL XML 回归测试，2026-08-19）：`AD_HP.csv` 为全部 275 个中国机场直接提供非空磁差，统一 `Airport.magnetic_variation` 必须按原始数值保存，并投影到默认 BGL 的 `Airport magvar` 属性，数值最多保留三位小数并遵循适配器既有的尾随零规范化。该字段属于通用中间模型，不得在默认 BGL 适配器中重新读取 CSV；其他目标适配器应消费相同字段。模型快照 schema 升至 2，旧快照必须从当期 424 重新导出，避免缺失磁差的旧快照参与构建。自动化测试：`test_load_naip_preserves_airport_magnetic_variation`、`test_bgl_xml_is_deterministic`、`test_dump_and_load_roundtrip_json_and_gzip`。

@@ -140,6 +140,7 @@ def _airport_bgl_attrs(airport) -> dict[str, str]:
         lat=_float(airport.latitude),
         lon=_float(airport.longitude),
         alt=_feet(airport.elevation_ft),
+        magvar=_float(airport.magnetic_variation, 3),
         transitionAltitude=_feet(airport.transition_altitude),
         transitionLevel=_feet(airport.transition_level),
     )

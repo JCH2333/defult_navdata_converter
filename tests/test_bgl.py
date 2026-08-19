@@ -35,7 +35,18 @@ from fenix_default_navdata.source import _project_same_page_rnp_primary_to_ils
 
 def test_bgl_xml_is_deterministic(tmp_path: Path):
     model = NavModel(Path("source"))
-    model.airports["a"] = Airport("a", "ZBCF", "TEST", 35.0, 105.0, 1000, 18000, 180, SourceRef("AD_HP.csv", 2))
+    model.airports["a"] = Airport(
+        "a",
+        "ZBCF",
+        "TEST",
+        35.0,
+        105.0,
+        1000,
+        18000,
+        180,
+        SourceRef("AD_HP.csv", 2),
+        magnetic_variation=-9.1,
+    )
     model.runways.append(Runway("r", "a", "03L", 30.0, 10000, 150, "ASP", 1000, SourceRef("RWY_DIRECTION.csv", 2)))
     model.waypoints.extend([
         Waypoint("w1", "START", "START", 35.0, 105.0, SourceRef("points", 1), "ZB"),
@@ -55,6 +66,7 @@ def test_bgl_xml_is_deterministic(tmp_path: Path):
     root = ET.parse(first).getroot()
     assert root.tag == "FSData"
     assert root.find("AiracCycle").attrib["cycleNumber"] == "08"
+    assert root.find("Airport").attrib["magvar"] == "-9.1"
     assert root.find("Airport/Runway").attrib["number"] == "03"
     assert root.find("Airport/DeleteAirport").attrib == {
         "deleteAllApproaches": "TRUE",

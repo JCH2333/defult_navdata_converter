@@ -34,6 +34,7 @@ def _sample_model(root: Path) -> NavModel:
         9800,
         10800,
         source,
+        magnetic_variation=-7.5,
     )
     model.waypoints.append(
         Waypoint("ZB.P01", "P01", "P01", 40.1, 116.1, source, country="ZB"),
@@ -104,6 +105,7 @@ def test_dump_and_load_roundtrip_json_and_gzip(tmp_path: Path) -> None:
     assert encode(loaded_json) == encode(model)
     assert encode(loaded_gzip) == encode(model)
     assert loaded_json.airports["A1"].icao == "ZBAA"
+    assert loaded_json.airports["A1"].magnetic_variation == -7.5
     assert loaded_json.iap_ocr_role_evidence is not None
     key = ("ZBAA", "R36L", "36L", "ZBAA-9A.pdf", "ef" * 32)
     assert loaded_json.iap_ocr_role_evidence.candidate_roles[key] == frozenset(

@@ -791,8 +791,8 @@ def _minimal_naip_root(tmp_path: Path, composition: str, *, include_second_airpo
     root = tmp_path / "raw"
     root.mkdir()
     airports = [
-        "AD_HP_ID,CODE_ID,TXT_NAME,GEO_LAT_ACCURACY,GEO_LONG_ACCURACY,VAL_ELEV,VAL_TRANSITION_ALT,VAL_TRANSITION_LEVEL",
-        "airport,ZBCF,TEST,N350000.00,E1050000.00,100,5486,5486",
+        "AD_HP_ID,CODE_ID,TXT_NAME,GEO_LAT_ACCURACY,GEO_LONG_ACCURACY,VAL_ELEV,VAL_MAG_VAR,VAL_TRANSITION_ALT,VAL_TRANSITION_LEVEL",
+        "airport,ZBCF,TEST,N350000.00,E1050000.00,100,-9.1,5486,5486",
     ]
     runways = [
         "RWY_ID,AD_HP_ID,VAL_LEN,VAL_WID,CODE_COMPOSITION",
@@ -804,7 +804,7 @@ def _minimal_naip_root(tmp_path: Path, composition: str, *, include_second_airpo
         "end21,runway,21,210,100",
     ]
     if include_second_airport:
-        airports.append("airport-two,ZGAA,SECOND,N230000.00,E1130000.00,20,5486,5486")
+        airports.append("airport-two,ZGAA,SECOND,N230000.00,E1130000.00,20,-5.0,5486,5486")
         runways.append(f"runway-two,airport-two,1828.8,30,{composition}")
         runway_directions.append("end09,runway-two,09,90,20")
     _write_csv(root, "AD_HP.csv", "\n".join(airports))
@@ -818,6 +818,12 @@ def _minimal_naip_root(tmp_path: Path, composition: str, *, include_second_airpo
     ):
         _write_csv(root, name, header)
     return root
+
+
+def test_load_naip_preserves_airport_magnetic_variation(tmp_path: Path) -> None:
+    model = load_naip(_minimal_naip_root(tmp_path, "ASP"))
+
+    assert model.airports["airport"].magnetic_variation == -9.1
 
 
 @pytest.mark.parametrize(("composition", "expected"), (

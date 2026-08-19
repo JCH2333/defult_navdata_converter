@@ -1573,7 +1573,8 @@ def load_naip(
         model.airports[key] = Airport(key, icao, row.get("TXT_NAME") or icao,
             round(parse_dms(row.get("GEO_LAT_ACCURACY") or ""), 6), round(parse_dms(row.get("GEO_LONG_ACCURACY") or ""), 6),
             _feet(row.get("VAL_ELEV") or "0"), _airport_altitude_feet(row.get("VAL_TRANSITION_ALT") or "0"),
-            _airport_altitude_feet(row.get("VAL_TRANSITION_LEVEL") or "0"), SourceRef("AD_HP.csv", row_number))
+            _airport_altitude_feet(row.get("VAL_TRANSITION_LEVEL") or "0"), SourceRef("AD_HP.csv", row_number),
+            magnetic_variation=_float(row.get("VAL_MAG_VAR") or "0"))
 
     _load_airport_pdf_names(model)
 

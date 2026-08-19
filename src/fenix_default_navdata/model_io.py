@@ -11,7 +11,7 @@ from .model import NavModel
 
 
 FORMAT_ID = "default-navdata-intermediate-model"
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 _TAG = "__n__"
 _VALUE = "v"
 _DATACLASS_TYPES = {

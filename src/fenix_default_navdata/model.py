@@ -31,6 +31,7 @@ class Airport:
     transition_level: int
     source: SourceRef
     name_source: SourceRef | None = None
+    magnetic_variation: float = 0.0
 
 
 @dataclass(frozen=True)
