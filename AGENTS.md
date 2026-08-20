@@ -74,6 +74,14 @@ SHA-256：
 - 修复 `bgl-record-layout-audit` 的确定性：持久化 JSON 不再写入输出绝对路径，报告可跨输出目录字节一致；专项回归 `30 passed`。
 - r330 未改变 `NavModel`、BGL adapter 或候选；当前仍无足够来源证据进入最小投影探针。
 
+### r331 ZJ 根导航台 Section 触发隔离
+
+- 来源清单确认 `ZJ` 机场为 `ZJHK/ZJQH/ZJSY/ZJYX`；机场 XML 的直接来源对象为机场、跑道、终端航点、ILS、程序、等待航线和删除标记。机场通信未进入 `NavModel`，机场关联 VOR/NDB 仍限定为 enroute 作用域。
+- 同一份 424-derived XML 只保留四个 ZJ 机场时，保留根 `Vor/Ndb` 的 SDK BGL 为 `0x13=122`、`0x17=92`、`0x22=17`；移除根 `Ndb` 后 `0x17/0x33` 消失且 `0x13=122` 保持；移除根 `Vor` 后 `0x13=3` 且 `0x17=92` 保持。
+- 结论：该隔离实验只证明根 `Vor`/`Ndb` 对 SDK Section 的触发关系，并支持 Section 计数是空间桶/索引布局而非直接实体数量；不能解释参考机场 BGL 的 `2003` 计数，也不能授权把根导航台复制到机场 adapter。
+- 三份报告：`diagnostics/r331-zj-source-baseline-probe-20260820.json`、`diagnostics/r331-zj-drop-root-ndb-probe-20260820.json`、`diagnostics/r331-zj-drop-root-vor-probe-20260820.json`；SHA-256 依次为 `02607b0f6617eb2dbbf760d48fa6ffa8258f4733cd1cd6d49d8dfe3d01f87a54`、`ea57f0a17cbb17cc2bb7b0ef2dc69ec7308a0de8a0a9351eb3e1df81f69bf98e`、`b7f0795df45abbdbb2f1f06b9fe7a8959491b675cc420ea3aa24488e48870631`。
+- Package Tool 三次均生成 BGL；探针 Navdatareader 均未登记 BGL 来源，因此运行时语义仍为“未验证”。未修改 `NavModel`、正式 adapter 或候选。
+
 ## 已确认的通用契约
 
 - 官方包必须保留全球基线，区域覆盖独立生成。
@@ -116,6 +124,7 @@ SHA-256：
 - r328：`onlyAddIfReplace` 隔离探针和相同输入重放门禁；不改变 adapter。
 - r329：424 到投影贡献度矩阵；当前最新阶段。
 - r330：`ZJ_airports.bgl` 脱敏记录边界审计和诊断报告确定性修复；确认 Section 差异不足以授权投影变更。
+- r331：ZJ 仅来源投影的根 `Vor/Ndb` 单变量 SDK 探针；确认 Section 触发关系，未授权正式投影。
 
 ## 维护协议
 
