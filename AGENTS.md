@@ -3716,3 +3716,21 @@ ejected_non_designated_endpoint_identity_unavailable。
 - **验证结论**：
   - 489 项全量测试完全通过，推导与阻断行为完全确定、安全且可重复。
   - 下一步将按计划进入第二阶段：选取单 BGL 开展 Section 与 Payload 内部排序及二进制差异审计。
+
+## 2026-08-21 r319 未分类特殊程序与 IAP 主进近缺口证据审计
+
+- **审计对象与范围**：
+  - 13 张未分类特殊程序缺口卡（ZGBS RNP-0/15/30, ZHCC CC3-09/CC5-17/CC5-32, ZPDQ EO-16/EO-34, ZUKD EO-15/EO-33, ZUSH EO-10/EO-28）；
+  - 10 张未决 IAP 主进近缺口卡（ZBAD:R29R, ZJSY:I08-X, ZSNJ:I25, ZSOF:R15/R33, ZSWY:I03, ZUAL:I15, ZYDD:R01, ZYTL:R10 等）。
+- **确立的证据与安全边界**：
+  1. **未分类程序（13 项）**：
+     - EO/CC/RNP-0 等特殊程序在 424 数据库中存在编码，但在图表中缺少直接的同行航段类型锚定（如明确标注 SID/STAR/IAP）；
+     - 严格保持 locked_unclassified_procedure，禁止仅凭标签命名规则（如 EO-* 盲猜为离场、CC* 盲猜为进近）进行无证据投影；
+  2. **IAP 主进近未决项（10 项）**：
+     - 验证了 	est_audit_rejects_transition_and_missed_without_primary 机制：当图表或数据库仅包含进场过渡（Approach Transition）与复飞（Missed），而无主进近航段时，严禁合成或伪造主进近；
+     - 对 ZBAD:R29R、ZYTL:R10 等确立明确 
+ejected 边界；对 ZSNJ:I25 等保持 
+o_unique_primary 阻断。
+- **验证结论**：
+  - 全部 21 项缺口审计测试通过，全量 489 项测试保持通过；
+  - 来源缺口卡的只读证据、阻断状态与分类边界清晰明确，下一步按计划开展单 BGL Section 与 Payload 内部二进制结构审计。
