@@ -40,7 +40,7 @@
 - 候选自重放：`29/29`
 - 与参考默认数据字节一致：`0/29`
 - `deployable=false`
-- 当前完整回归：`498 passed`
+- 当前完整回归：`499 passed`
 - 当前未部署 Community、未实机验证、未创建 Release。
 
 ### r329 贡献度矩阵
@@ -95,6 +95,14 @@ SHA-256：
 - 使用同周期终端坐标页缓存复核：3 条机场作用域身份在坐标页出现，但均为 `terminal_single_airport`；99 条机场作用域身份不在坐标页；98 条全局身份不在坐标页。带 `--check-retention` 后 3 条均为 `airport_terminal_coordinate_not_retained`，仍只是调查信号，不授权提升或补写。报告：`r334-terminal-coordinate-r74-zj-20260820.json`、`r334-terminal-coordinate-r74-zj-retention-20260820.json`。
 - r334 未修改 `NavModel`、BGL adapter、候选或部署；ZJ 来源侧当前没有可安全提升的新增记录。
 
+### r335 全量来源缺口审计
+
+- 使用完整 `r162-00-enroute-semantic-diff-all-full.json` 审计 waypoint/airway；输入完整性通过：waypoint `1013` 条、airway `1186` 条，未截断。
+- waypoint 缺口分类：`662` 条不在结构化指定点或航路端点集合，`331` 条虽有直接指定点但区域不同，`5` 条直接指定点区域未解析，`15` 条航路端点区域不同。没有独立 424 来源契约前，均不得按参考身份或区域猜测补写。
+- airway 缺口分类：`484` 条不在 `RTE_SEG.csv`，`579` 条可回链同源航路和序号，`123` 条同源航路但序号不同；字段差异 `2045` 条全部可回链到同源 `RTE_SEG.csv`，主要是坐标格式/包围盒差异，不能据参考值回填。
+- 旁证：`FLIGHT_AIRLINE_POINT.csv` 的 `390659` 条均回链到直接 424 点；参考独有航路名对应的 54 个航路没有该表行。`ROUTE_HOLDING` 的 116 条中 52 条点 ID 未解析，当前没有可安全构造独立全局航点的区域/身份契约。
+- 报告：`diagnostics/r335-source-gap-r162-full-20260820.json`。r335 为只读审计，未修改 `NavModel`、BGL adapter、候选、部署或 Release；下一步仍是寻找可独立证明的 424 来源，不得用参考包反向补全。
+
 ## 已确认的通用契约
 
 - 官方包必须保留全球基线，区域覆盖独立生成。
@@ -140,6 +148,7 @@ SHA-256：
 - r331：ZJ 仅来源投影的根 `Vor/Ndb` 单变量 SDK 探针；确认 Section 触发关系，未授权正式投影。
 - r333：来源缺口审计增加单表探针；ZJ waypoint 203 条缺口中仅 102 条有当前 424 机场作用域来源，未授权模型或 adapter 修改。
 - r334：ZJ GeneralDoc 与终端坐标页复核未发现可安全提升的来源；3 条坐标页命中均为单机场且当前未保留，未授权模型或 adapter 修改。
+- r335：全量 waypoint/airway 来源缺口审计完成；`1013/1186` 条参考缺口均未获得足够独立来源授权，未修改模型或 adapter。
 
 ## 维护协议
 
