@@ -115,6 +115,15 @@ python -m fenix_default_navdata.cli sdk-toolchain-pair-audit `
   --first-report diagnostics\r308-sdk153-route-child-order-20260820\probe-report.json `
   --second-report diagnostics\r308-sdk169-route-child-order-20260820\probe-report.json `
   --output diagnostics\r308-sdk-toolchain-pair-audit-20260820.json
+python -m fenix_default_navdata.cli reader-repeatability-audit `
+  --package diagnostics\r308-sdk153-route-child-order-20260820\project\_compiled\airway-route-child-order-probe `
+  --reader diagnostics\navdatareader\app\Navdatareader-win-1.2.4\navdatareader.exe `
+  --output diagnostics\r309-reader-repeatability-audit-20260820.json `
+  --work-directory diagnostics\r309-reader-repeatability-runs-20260820 `
+  --repeat 5 `
+  --filename-pattern 00_enroute.bgl `
+  --table airway `
+  --table waypoint
 python -m fenix_default_navdata.cli source-gap-audit `
   --raw "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
   --semantic-diff diagnostics\navdatareader\semantic-diff.json `

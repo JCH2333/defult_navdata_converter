@@ -161,6 +161,11 @@ from .package_reader import DEFAULT_READER_TIMEOUT_SECONDS, read_package
 from .paths import detect_paths
 from .profile import DEFAULT_CYCLE
 from .route_fragment_probe import run_route_fragment_probe
+from .reader_repeatability_audit import (
+    DEFAULT_TABLES,
+    audit_reader_repeatability,
+    write_reader_repeatability_audit,
+)
 from .semantic_diff import (
     SUPPORTED_TABLES,
     semantic_diff,
@@ -1371,6 +1376,33 @@ def build_parser() -> argparse.ArgumentParser:
     sdk_toolchain_pair.add_argument("--first-report", required=True)
     sdk_toolchain_pair.add_argument("--second-report", required=True)
     sdk_toolchain_pair.add_argument("--output", required=True)
+    reader_repeatability = sub.add_parser(
+        "reader-repeatability-audit",
+        help="重复读取同一 BGL 包并检查读取器结果是否稳定",
+    )
+    reader_repeatability.add_argument("--package", required=True)
+    reader_repeatability.add_argument("--reader", required=True)
+    reader_repeatability.add_argument("--output", required=True)
+    reader_repeatability.add_argument("--work-directory", required=True)
+    reader_repeatability.add_argument("--repeat", type=int, default=3)
+    reader_repeatability.add_argument(
+        "--filename-pattern",
+        action="append",
+        dest="filename_patterns",
+        default=None,
+    )
+    reader_repeatability.add_argument(
+        "--table",
+        action="append",
+        dest="tables",
+        default=None,
+    )
+    reader_repeatability.add_argument("--cache-root")
+    reader_repeatability.add_argument(
+        "--reader-timeout",
+        type=int,
+        default=DEFAULT_READER_TIMEOUT_SECONDS,
+    )
     coordinate_precision_audit = sub.add_parser(
         "airway-coordinate-precision-audit",
         help="只读审计 424 DMS 航路坐标在 SDK float32 前是否被 6 位格式化改变",
@@ -2231,6 +2263,20 @@ def main(argv: list[str] | None = None) -> int:
             Path(args.second_report),
         )
         write_sdk_toolchain_pair_audit(Path(args.output), report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "reader-repeatability-audit":
+        report = audit_reader_repeatability(
+            Path(args.package),
+            reader=Path(args.reader),
+            output_directory=Path(args.work_directory),
+            repeats=args.repeat,
+            filename_patterns=tuple(args.filename_patterns or ("*.bgl",)),
+            tables=tuple(args.tables or DEFAULT_TABLES),
+            cache_root=_path(args.cache_root),
+            timeout_seconds=args.reader_timeout,
+        )
+        write_reader_repeatability_audit(Path(args.output), report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "airway-coordinate-precision-audit":

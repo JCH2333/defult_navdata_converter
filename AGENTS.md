@@ -3532,3 +3532,11 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
   `diagnostics\r308-sdk-toolchain-pair-audit-20260820.json`；当前裁决为
   `compiled_output_equal_reader_rows_differ`，仍禁止修改 adapter、替换二进制或部署
   Community。参考一致性仍为 `0/29`，`deployable=false`。
+- `reader-repeatability-audit` 已加入通用验证管线。对同一个 SDK 1.5.3 航路探针包连续
+  读取 5 次，扫描总数保持为 8 条航路/11 个航点，但 `airway` 表快照出现 3 种
+  SHA-256；`waypoint` 表保持一致，报告为
+  `diagnostics\r309-reader-repeatability-audit-20260820.json`。
+- 当前裁决为 `reader_output_not_repeatable`，`projection_evidence_allowed=false`。
+  Navdatareader 的单次结果不得用于来源闭合、语义差分、SDK 选择或字节级验收；未来
+  目标格式适配器必须先通过重复读取门禁，或使用独立的真实加载器证据。
+- 全量测试基线更新为 `481 passed`；参考字节一致性仍为 `0/29`，`deployable=false`。
