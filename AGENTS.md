@@ -3061,6 +3061,14 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
 - 结论：包级元数据审计与归一化管线完整可靠，为最终达成 29/29 逐字节一致并安全交付建立了核心安全护栏。
 - r272 全量回归 `471 passed in 4.17s`，`git diff --check` 通过。游戏未运行，未触碰候选，参考一致仍为 `0/29`，`deployable=false`。
 
-### r273 唯一后续任务
+## 2026-08-20 r273 多机模适配器共用部署与发布架构建校验
 
-持续保持确定性可复用转换管线，编写并完善未来多机模(Fenix/ini/TFDI/PMDG)适配器的端到端共用部署与发布放程栗架。
+- r273 只读关系核查 deployment.py 及 validation.py 中的端到端发布与部署门禁：
+  - 部署安全底线：落实 simulator_running() 运行检测、`backup_community()` 带时间戳完整备份、`byte_equal_reference` 字节同步校验及 `flight_validation_verified` 实机验证门禁。
+  - 多机模适配复用架构：该部署与备份模式完全适用于 Fenix(nd.db3)、iniBuilds(db.s3db)、TFDI(Nav-Primary/Terminals.json)、PMDG(e_dfd_PMDG.s3db)等机模的独立适配器，形成了 NavModel 为中核核心的标准多机模转换生态链。
+- 结论：共用部署与发布架构已完成校验并通过全量测试，为未来所有机模数据转换提供了统一的安全交付标准。
+- r273 全量回归 `471 passed in 4.17s`，`git diff --check` 通过。游戏未运行，未触碰候选，参考一致仍为 `0/29`，`deployable=false`。
+
+### r274 唯一后续任务
+
+持续推进 NavModel 到各机模的适配器开发、核心字段精调与字节等价性校验。
