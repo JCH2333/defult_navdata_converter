@@ -2889,3 +2889,39 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
   （`feat: audit complete 424 CSV inventory`）。2026-08-20 的普通 `git push` 失败：
   `Failed to connect to 127.0.0.1 port 7897 after 2103 ms`。未强推、未重写历史、未覆盖 Community；
   网络恢复后只从当前 `main` 普通推送，并用 `git ls-remote --heads origin main` 核验。
+
+## 2026-08-20 r260 ROUTE_HOLDING 来源关系审计
+
+- r260 只读审计命令为：
+  `route-holding-source-audit --raw-root <424-2608-root> --model <r187-model> --output <report>`。
+  它只读取 424 `ROUTE_HOLDING.csv`、`DESIGNATED_POINT.csv`、`NDB.csv`、`VOR.csv` 和冻结
+  `NavModel`，不读取参考导航 payload、Fenix、OCR、候选或 SDK；不修改模型、adapter、候选或
+  Community。
+- 实际报告为
+  `diagnostics\r260-route-holding-source-audit-20260820.json`，SHA-256：
+  `f559d6311da0c785510640d36cab2beb44bbf8435dd4cbc506a01d65e134c151`。报告经 Python
+  标准 `json.loads` 重读。`ROUTE_HOLDING.csv` 有 `116` 条记录、`116` 个唯一
+  `ROUTE_HOLDING_ID` 和 `116` 个唯一 `POINT_ID`，全部有源坐标。
+- `POINT_ID` 精确回链到 `DESIGNATED_POINT.csv` 的 `44` 条、`NDB.csv` 的 `3` 条、
+  `VOR.csv` 的 `17` 条，共 `64` 条；另有 `52` 条无法回链到这三个结构化点表。冻结模型中
+  同样有 `64` 条点键可匹配。表内机场字段为 `0` 条，结构化航路归属字段为 `0` 条；只有
+  `LOCATION_POINT` 描述和 `TXT_AIRWAY_DESC`，不能建立机场、终端程序、跑道或结构化航路所有权。
+- r260 结论为 `source_evidence_only`、`projection_allowed=false`。现有 `NavModel.holdings`
+  的 `1297` 条记录来自终端数据库 PDF 的机场作用域解析，不能把 `ROUTE_HOLDING` 的点键或坐标
+  直接并入该集合。坐标存在不等于机场归属，禁止为了增加 BGL 记录而猜测机场或把描述文本当作外键。
+- `source-model-completeness-audit` 已将 `ROUTE_HOLDING.csv` 登记为 `route_holdings`、
+  `source_evidence_only` 组。更新报告为
+  `diagnostics\r260-source-model-completeness-20260820.json`，SHA-256：
+  `311694f72241bdabfdb1720ea3ca3b73d08a269e02673ddebbe6b732d2d4cacc`；声明组由 `8` 增至
+  `9`，`9/9` 组完整，根 CSV 待分类由 `17` 降为 `16`。该登记不把表伪装成模型内容来源。
+- r260 新增可复用 CLI、审计器和最小 fixture；定向回归 `25 passed`，完整回归
+  `462 passed in 4.03s`，`git diff --check` 通过。游戏未运行，未构建候选，参考一致仍为
+  `0/29`，`deployable=false`。
+
+### r261 唯一任务
+
+只读审计 `ROUTE_RESTRICT.csv` 与 `ROUTE_RESTRICT_RTE.csv`：冻结两表表头、行数、主键/外键、
+`ROUTE_SEGMENT_UUID`/`AIRWAY_POINT_UUID` 的真实关系，检查是否能无歧义回链到同周期
+`RTE_SEG.csv`/`DESIGNATED_POINT.csv` 的航路或航点约束，并判断默认 BGL 是否有已证实的目标对象。
+必须先完成来源证据和目标作用域审计，不能因为字段名像限制条件就修改 `NavModel`、航路投影、
+BGL 或候选；若无法建立唯一关系，登记 `source_evidence_only` 或明确拒绝。

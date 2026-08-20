@@ -148,6 +148,31 @@ _AUDIT_ONLY_GROUPS = (
         "region-resolution",
         "FIR 多边形只证明空白指定点的区域，当前不形成独立默认 BGL 空域对象。",
     ),
+    _SourceGroup(
+        "route_holdings",
+        ("ROUTE_HOLDING.csv",),
+        (
+            "ROUTE_HOLDING.ROUTE_HOLDING_ID",
+            "ROUTE_HOLDING.POINT_ID",
+            "ROUTE_HOLDING.HOLDING_TYPE",
+            "ROUTE_HOLDING.GEO_LAT_ACCURACY",
+            "ROUTE_HOLDING.GEO_LONG_ACCURACY",
+            "ROUTE_HOLDING.CODE_DIRECTION",
+            "ROUTE_HOLDING.VAL_DISTANCE",
+            "ROUTE_HOLDING.VAL_ANGLE",
+            "ROUTE_HOLDING.VAL_MIN_HEIGHT",
+            "ROUTE_HOLDING.VAL_MAX_HEIGHT",
+            "ROUTE_HOLDING.VAL_SPEED_LIMIT",
+            "ROUTE_HOLDING.VAL_RADIUS",
+        ),
+        (),
+        "source_evidence_only",
+        "airport/holding-or-enroute",
+        (
+            "ROUTE_HOLDING 通过 POINT_ID 提供保持参数和部分固定点身份，但不携带机场、"
+            "终端程序、跑道或结构化航路归属；独立关系审计未授权默认 BGL 投影。"
+        ),
+    ),
 )
 
 _UNMODELED_GROUPS = (
