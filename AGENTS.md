@@ -3254,3 +3254,12 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
   - 维持数据源纯洁性：未引用任何外部非 424 派生数据，未修改候选包。
 - 结论：GUI 交互链路完备健壮，提供了友好的单机一键转换与安全部署操作体验。
 - r282 全量回归 `471 passed in 4.31s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
+
+## 2026-08-20 r283 自动更新管理器 (update_manager.py) 安全校验契约审计
+
+- r283 对 `src/fenix_default_navdata/update_manager.py` 的远程发布检查与更新包安全校验展开审计：
+  - 远程仓库一致性：明确绑定目标 GitHub 仓库 `JCH2333/defult_navdata_converter` 与 API 端点；
+  - 完整性与安全校验：`validate_update_package` 包含基于 SHA-256 的散列校验与 `update-manifest.json` 架构检查，防止篡改或损坏包安装；
+  - 维持数据源纯洁性：未引用任何外部非 424 派生数据，未修改候选包。
+- 结论：自动更新模块遵循严格的安全哈希校验，完全适配 GitHub Releases 发布工作流。
+- r283 全量回归 `471 passed in 4.43s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
