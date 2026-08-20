@@ -128,6 +128,13 @@
 - `airway-diff-audit-v1`：`2020` 条同逻辑键字段差异全部能唯一回链到 424 航路和序号，端点坐标完整；`1990` 条为纯几何差异，`30` 条为几何加最低高度差异。该证据不能授权复制官方坐标、字段或 payload，也没有形成安全的 adapter 修复。
 - 本阶段只读阻断，不修改 `NavModel`、BGL adapter 或候选；候选仍为 `0/29` 字节一致、`deployable=false`、未部署、未实机验证。证据：`diagnostics/r356-00-enroute-semantic-diff-full.json`、`diagnostics/r356-source-gap-audit-full.json`、`diagnostics/r356-airway-diff-audit.json`。
 
+### r358 候选航段关联与航路类型来源审计（2026-08-20）
+
+- 将候选 `china-navdata.xml` 纳入 `source-gap-audit-v5` 后，候选含 `8868` 个 Route link、`4434` 个唯一端点对；参考独有 airway `1182` 条中 `562` 条已确认对应候选已投影的 424 航段，`13` 条因端点区域缺失未投影，`123` 条为同名不同序号，`484` 条不在 `RTE_SEG.csv`。字段差异 `2020` 条中 `2013` 条已投影，`7` 条受端点区域缺失影响。
+- 对 `APOGO、P121、P127、P188、P225、P239、LELIM、****` 八个未解析端点完成来源卡审计；直接 FIR/ACC、唯一邻接区域或 DESIGNATED_POINT 身份均不足，全部保持拒绝，不修改区域恢复规则。`APOGO` 的四条邻接航段同时指向 `ZB/ZL`，且 ACC 名称没有 `AIRSPACE.csv` 唯一映射。
+- 目标读取器额外出现 `airway_type=J` `432` 条、`V` `56` 条，而候选全部为 `B`。对可按航路名/序号关联的目标 J/V 样本，来源 `TXT_LOC_TYPE`、`CODE_TYPE`、`CODE_DIR` 均呈多种组合，且 `488` 条样本中 `250` 条不能用 `VAL_SORT` 唯一对应，未形成可复核的 `B/J/V` 映射。不得按航路前缀、PBN 或参考类型猜测 `routeType`。
+- 本阶段仍为只读阻断；未修改模型、adapter 或候选。证据：`diagnostics/r357-source-gap-with-candidate.xml.json`、`diagnostics/r357-airway-endpoint-card-APOGO.json`、既有端点卡片 `r218-r223/r336`、`diagnostics/r357-route-type-source-association-v2.json`。
+
 ## 已确认的通用契约
 
 - 官方包必须保留全球基线，区域覆盖独立生成。
