@@ -121,6 +121,10 @@ from .bgl_format import (
     write_bgl_layout_audit,
     write_file_convergence_audit,
 )
+from .bgl_binary_diff_audit import (
+    audit_bgl_binary_differences,
+    write_bgl_binary_diff_audit,
+)
 from .package_metadata_audit import (
     audit_package_derived_metadata,
     write_package_derived_metadata_audit,
@@ -336,6 +340,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="Default navdata 2608R1 参考包根目录；省略时自动检测",
     )
     bgl_layout.add_argument("--output", help="可选的本地 BGL 布局审计 JSON 输出路径")
+    bgl_binary_diff = sub.add_parser(
+        "bgl-binary-diff-audit",
+        help="只读比较 BGL 字节、Section 元数据和载荷差异，不导出导航记录",
+    )
+    bgl_binary_diff.add_argument("--candidate", required=True, help="候选包根目录")
+    bgl_binary_diff.add_argument("--reference", help="参考包根目录")
+    bgl_binary_diff.add_argument(
+        "--path",
+        dest="relative_paths",
+        action="append",
+        help="受控 BGL 相对路径，可重复传入",
+    )
+    bgl_binary_diff.add_argument("--output", required=True, help="差分 JSON 输出路径")
     convergence = sub.add_parser(
         "file-convergence-audit",
         help="只读建立候选、重复候选与参考包的逐文件收敛看板，不导出导航记录",
@@ -1511,6 +1528,22 @@ def main(argv: list[str] | None = None) -> int:
             output = Path(args.output).expanduser().resolve()
             report["output"] = str(output)
             write_bgl_layout_audit(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "bgl-binary-diff-audit":
+        reference = _path(args.reference) or detect_paths().reference_root
+        if not reference:
+            raise SystemExit(
+                "无法自动检测 Default navdata 2608R1 参考目录，请显式传入 --reference"
+            )
+        output = Path(args.output).expanduser().resolve()
+        report = audit_bgl_binary_differences(
+            Path(args.candidate),
+            reference,
+            relative_paths=args.relative_paths,
+        )
+        report["output"] = str(output)
+        write_bgl_binary_diff_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "file-convergence-audit":

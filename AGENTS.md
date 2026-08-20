@@ -3452,3 +3452,25 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
   - 维持数据源纯洁性：未引用任何外部非 424 派生数据，未修改候选包。
 - 结论：MSFS 官方包编译与时间归一化逻辑结构严密，保证了构建产物完全具备确定性与可重复性。
 - r303 全量回归 `471 passed in 4.53s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
+## 2026-08-20 r304 BGL 字节差分审计管线与当前收敛结论
+
+- 新增只读 `src/fenix_default_navdata/bgl_binary_diff_audit.py`、CLI 子命令
+  `bgl-binary-diff-audit` 及最小 fixture。工具只输出受控相对路径、SHA-256、文件大小、
+  首个差异偏移、Section 元数据和载荷差异计数，不导出参考导航记录，不修改 `NavModel`、
+  adapter、候选或 Community，可复用于后续 AIRAC 和其他目标格式的二进制收敛诊断。
+- 对 `output\candidate-2608-default-r248-preserve-package-tool-times` 与
+  `Default navdata 2608R1` 的 21 个受控 BGL 运行全量审计，报告为
+  `diagnostics\r304-bgl-binary-diff-20260820.json`：
+  - 候选/参考均为 21 个文件，SHA-256 一致 `0/21`，Section 元数据完全一致 `0/21`；
+  - 20 个区域机场 BGL 中，参考稳定存在而候选稳定缺少 `0x17`；
+  - 18 个参考文件存在而候选缺少 `0x33`，候选另有 20 个文件出现参考不存在的 `0x35`；
+  - `00_enroute.bgl` 候选为 `2,867,006` 字节、参考为 `2,910,826` 字节，首个差异偏移
+    `64`，不同字节计数 `731,570`。
+- 这些结果只能证明 Section/载荷存在稳定差异，不能从参考 Section 数量或文件大小反推
+  导航对象语义。没有新的 424 直接来源、真实加载契约或可复核 SDK 单变量证据前，
+  `model_or_adapter_change_authorized=false`，不接入任何新的投影规则。
+- r304 定向回归 `72 passed`，全量回归 `474 passed in 4.80s`，`git diff --check`
+  通过；游戏未运行，未修改候选，参考成品一致性仍为 `0/29`，`deployable=false`。
+- 下一准入条件：先取得新的、可复跑且与当前变量隔离的来源/加载契约/SDK 证据，或明确
+  证明一个 XML 表达变量对应上述 Section 变化；随后才允许单变量探针、双构建和文件
+  收敛审计。禁止仅因 Section 缺失、文件大小接近或读取器输出差异而改写投影。

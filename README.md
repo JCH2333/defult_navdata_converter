@@ -66,6 +66,11 @@ python -m fenix_default_navdata.cli bgl-layout-audit `
   --candidate output\candidate-2608-default `
   --reference "F:\我的世界动画\AI项目\导航数据\424源数据\2608\Default navdata 2608R1" `
   --output diagnostics\bgl-layout-audit.json
+python -m fenix_default_navdata.cli bgl-binary-diff-audit `
+  --candidate output\candidate-2608-default `
+  --reference "F:\我的世界动画\AI项目\导航数据\424源数据\2608\Default navdata 2608R1" `
+  --path zzz-pmdg-china-navdata/scenery/pmdg-china-navdata/00_enroute.bgl `
+  --output diagnostics\bgl-binary-diff.json
 python -m fenix_default_navdata.cli file-convergence-audit `
   --candidate output\candidate-2608-default-r181-package-time-normalized `
   --repeat-candidate output\candidate-2608-default-r182-package-time-repeat `
