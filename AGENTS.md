@@ -3322,3 +3322,12 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
   - 维持数据源纯洁性：未引用任何外部非 424 派生数据，未修改候选包。
 - 结论：元数据审计模块具备高度确定性，为包级构建产物的完整性与时间一致性提供了可信的审计工具。
 - r289 全量回归 `471 passed in 4.24s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
+
+## 2026-08-20 r290 424 原始数据解析与区域恢复逻辑 (source.py) 审计
+
+- r290 对 `src/fenix_default_navdata/source.py` 的核心解析函数 `load_naip` 展开契约与证据链审计：
+  - 规范化实体解析：涵盖 33 个 CSV 与 Terminal/GeneralDoc PDF 中的机场、跑道、VOR/NDB 导航台、航路点、航路段、程序及等待航线；
+  - 空间与拓扑恢复链：结合 FIR 边界多边形空间包含判断（`_point_is_inside_fir`）、显式 ACC 映射与航路邻接一致性投票（`_restore_waypoint_countries_from_airway_neighbors`），严密恢复缺失区域代码；
+  - 维持数据源纯洁性：严格遵循单向证据链，未引入任何外部推测数据，未修改候选包。
+- 结论：424 原始数据抽取层架构健壮，具备完全的工程确定性与跨机模复用能力。
+- r290 全量回归 `471 passed in 4.16s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
