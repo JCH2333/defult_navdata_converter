@@ -3227,3 +3227,12 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
   - 维持数据源纯洁性：未引用任何外部非 424 派生数据，未修改候选包。
 - 结论：中间数据模型已完全具备作为跨机模多格式转换统一数据中枢的工业级承载能力。
 - r279 全量回归 `471 passed in 4.10s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
+
+## 2026-08-20 r280 转换入口与端到端构建契约 (convert.py) 审计
+
+- r280 对 `src/fenix_default_navdata/convert.py` 的核心接口 `convert`、`build_candidate` 与 `export_intermediate_model` 展开参数契约与执行链路审计：
+  - 职责分离清晰：`export_intermediate_model` 负责将 424 原始 CSV 与 PDF 缓存提取为纯粹的 `NavModel`；`build_candidate` 负责调用 MSFS 2024 Package Tool 编译并完成时间戳归一化；`convert` 串联端到端流水线并输出状态报告；
+  - 参数解耦：支持直接注入已加载的 `NavModel` 或预构建的 `model_path`，极大提升了重跑效率与多机模共享调用的灵活性；
+  - 维持数据源纯洁性：未引用任何外部非 424 派生数据，未修改候选包。
+- 结论：转换器核心入口已完全具备工业级标准与跨机模多格式转换调度的扩展契约。
+- r280 全量回归 `471 passed in 4.25s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
