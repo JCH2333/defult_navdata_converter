@@ -121,6 +121,13 @@
 - r356 候选通过本地验证；与 r347 候选相比参考范围 `29` 个文件中 `28` 个字节相同，仅 `00_enroute.bgl` 受上述 33 条区域差异影响。对 `Default navdata 2608R1` 仍为 `0/29`，`deployable=false`，未部署、未实机验证、不得 Release。证据：`diagnostics/r356-vs-r347-file-convergence.json`。
 - 可复用重放命令：`export-model --raw ... --general-doc-cache ...`，随后 `build --model ... --baseline-db ...`、`validate`、`file-convergence-audit`。中间模型仍是跨目标格式唯一内容边界，缓存和参考包只作证据输入。
 
+### r357 00_enroute 读取器语义差异审计（2026-08-20）
+
+- 对 r356 候选与官方同路径 `00_enroute.bgl` 建立的 Navdatareader SQLite 完成完整脱敏差分；候选/参考为：waypoint `3150/3266`、airway `4434/4614`。读取器两侧均返回 `1` 并标记 `broken`，但 SQLite、来源和设施检查仍可继续作为只读审计输入。
+- `source-gap-audit-v5`：参考独有 waypoint `1014`，其中 `662` 个不在结构化指定点或航路端点、`332` 个仅有不同区域、`5` 个区域未解析、`15` 个仅有航路端点区域冲突；参考独有 airway `1182`，其中 `484` 个不在 `RTE_SEG.csv`、`575` 个同名同序号、`123` 个同名不同序号。
+- `airway-diff-audit-v1`：`2020` 条同逻辑键字段差异全部能唯一回链到 424 航路和序号，端点坐标完整；`1990` 条为纯几何差异，`30` 条为几何加最低高度差异。该证据不能授权复制官方坐标、字段或 payload，也没有形成安全的 adapter 修复。
+- 本阶段只读阻断，不修改 `NavModel`、BGL adapter 或候选；候选仍为 `0/29` 字节一致、`deployable=false`、未部署、未实机验证。证据：`diagnostics/r356-00-enroute-semantic-diff-full.json`、`diagnostics/r356-source-gap-audit-full.json`、`diagnostics/r356-airway-diff-audit.json`。
+
 ## 已确认的通用契约
 
 - 官方包必须保留全球基线，区域覆盖独立生成。
