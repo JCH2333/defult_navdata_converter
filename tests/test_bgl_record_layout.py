@@ -73,6 +73,25 @@ def test_record_layout_audit_compares_only_structural_summaries(tmp_path: Path) 
 
     assert report["read_only"] is True
     assert report["reference_records_exported"] is False
-    assert report["candidate"]["sections"][0]["records"][0]["sha256"] != (
-        report["reference"]["sections"][0]["records"][0]["sha256"]
-    )
+    assert "records" not in report["candidate"]["sections"][0]
+    comparison = report["section_comparisons"][0]
+    assert comparison["status"] == "changed"
+    assert comparison["matching_position_count"] == 0
+    assert comparison["first_different_record_index"] == 0
+    assert comparison["ordered_record_sha256_equal"] is False
+
+
+def test_record_layout_audit_detects_record_order_difference(tmp_path: Path) -> None:
+    candidate = tmp_path / "candidate.bgl"
+    reference = tmp_path / "reference.bgl"
+    candidate.write_bytes(_bgl(((0x03, 2, b"AAAABBBB"),)))
+    reference.write_bytes(_bgl(((0x03, 2, b"BBBBAAAA"),)))
+
+    report = audit_bgl_record_layouts(candidate, reference)
+
+    comparison = report["section_comparisons"][0]
+    assert comparison["candidate_record_count"] == 2
+    assert comparison["reference_record_count"] == 2
+    assert comparison["matching_position_count"] == 0
+    assert comparison["first_different_record_index"] == 0
+    assert report["summary"]["equal_ordered_sections"] == 0

@@ -3922,3 +3922,10 @@ untime_contract_audit.py 中多机模契约验证机制、语义差分、物理�
 - 真实 `ZJ_airports.bgl` 审计：`diagnostics/r326-zj-airports-record-layout-20260820.json`，SHA-256 `aa7b014d55bc16793c3a9ecb119c6071516dc298c618f7c0e38e5bfa5506361c`。候选和参考全部已按 16 字节固定长度记录闭合；候选有 6 个 Section（`0x03/0x13/0x22/0x32/0x34/0x35`），参考有 7 个（`0x03/0x13/0x22/0x32/0x33/0x34`）。这只是结构差异，尚未证明 Section 语义、父子索引或应修改的 XML/投影规则。
 - 本轮完整回归：`python -m pytest -q` 为 `494 passed in 4.99s`。未部署 Community、未执行备份恢复演练、未实机验证、未创建 Release。
 - 下一步：在记录布局审计上增加按 Section/记录序列的脱敏收敛摘要和最小 SDK 单变量触发矩阵；在获得可复跑的 Section 语义和 XML 触发证据前，禁止依据 `0x33/0x35` 差异修改默认 BGL adapter。
+
+## 2026-08-20 r327 ZJ BGL 脱敏记录序列收敛审计
+
+- `bgl-record-layout-audit` 的报告改为紧凑 Section 序列摘要：每个闭合固定长度 Section 仅保留有序记录 SHA-256、公共记录数、相同位置数、首个差异索引以及候选/参考尾部记录数；不再输出逐条参考记录摘要，避免大型真实 BGL 的诊断文件泄露或膨胀。回归：`tests/test_bgl_record_layout.py` 覆盖紧凑摘要、记录顺序差异与原有边界拒绝行为。
+- 真实审计：`diagnostics/r327-zj-airports-record-sequence-20260820.json`，SHA-256 `2c0900eadf6f01b2e410b0a81c6f419dc4afb5bd5a85f13b1c84d471baed4ef7`。候选与参考所有 Section 均按 16 字节记录闭合；候选为 `0x03/0x13/0x22/0x32/0x34/0x35`，参考为 `0x03/0x13/0x17/0x22/0x32/0x33/0x34`。`0x13` 为 `3/2003` 条、`0x22` 为 `17/2003` 条；共同 Section 的有序摘要均不一致，首个共同记录位置均不同；`0x17`、`0x33` 缺失于候选，`0x35` 缺失于参考。
+- 该结果仅定位“记录数量和序列尚未收敛”，不证明任何 Section 的导航语义、父子索引或应新增的 424 投影对象。r310/r311 的 SDK 输入矩阵仍只可用于表达诊断；在取得可解释来源、作用域和真实加载契约的单变量证据前，禁止为匹配 Section 类型、记录数量或文件体积而复制参考记录或改写 adapter。
+- 未部署 Community、未执行备份恢复演练、未实机验证、未创建 Release；参考字节一致性仍为 `0/29`，`deployable=false`。下一步应以隔离 SDK 探针验证 `onlyAddIfReplace` 对 `0x35` 的精确触发边界，并同时保留 XML、SDK 指纹、BGL 哈希、序列摘要与重复读取门禁；该探针不得修改 `NavModel` 或正式候选。
