@@ -3302,3 +3302,13 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
   - 维持数据源纯洁性：未引用任何外部非 424 派生数据，未修改候选包。
 - 结论：离线 BGL 读取模块架构安全可靠，为底层的语义级差分审计提供了可信的执行环境。
 - r287 全量回归 `471 passed in 4.18s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
+
+## 2026-08-20 r288 BGL 二进制结构解析与文件收敛判定契约 (bgl_format.py) 审计
+
+- r288 对 `src/fenix_default_navdata/bgl_format.py` 的底层二进制头部解析与文件级收敛逻辑展开契约审计：
+  - 核心结构常量：准确契合 MSFS BGL 规范（`_HEADER_MAGIC=0x19920201`，56 字节头，20 字节 Section 记录）；
+  - 布局与截断提取：`parse_bgl_header` 精准提取 Section 类型、记录数、偏移量及 MAGVAR 特征；
+  - 差分与收敛门禁：`audit_bgl_layouts` 对比 BGL Section 数量与类型一致性；`audit_file_convergence` 统筹 29 个受控文件（BGL/Index/Layout/Manifest/History）的逐字节 SHA-256 状态判定；
+  - 维持数据源纯洁性：未引用任何外部非 424 派生数据，未修改候选包。
+- 结论：BGL 二进制解析与收敛审计链路结构严谨，为后续逐字节对齐提供了严格的代码判定标准。
+- r288 全量回归 `471 passed in 4.28s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
