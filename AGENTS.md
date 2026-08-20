@@ -73,6 +73,13 @@
 - 结论：机场终端航点作用域已恢复，但设施字段、航路投影和来源缺口仍需按 `r347-semantic-diff.json` 分层调查；禁止复制参考记录或 payload。候选未部署、未实机验证、不得 Release。
 - 证据：`diagnostics/r347-candidate-navreader.sqlite`、`diagnostics/r347-semantic-diff.json`、`output/candidate-2608-default-r347-airport-terminal-waypoints/conversion-report.json`。
 
+### r348 航路类型来源审计（2026-08-20）
+
+- 424 `RTE_SEG.csv`、`SEGMENT.csv`、`EN_ROUTE_RTE.csv` 共读取 `4446/4311/1354` 行；`CODE_TYPE` 是 RNAV/RNP 来源语义，`TXT_LOC_TYPE` 是来源分类，未发现直接提供 SDK `VICTOR/JET/BOTH` 的字段。
+- 最小 SDK 探针已证实 `Route.routeType` 会生成读取器的 `airway_type=B/J/V`；参考数据同名航路可混合多种类型，不能用名称前缀或参考类别反推源字段。
+- 因无 424 直接映射证据，本轮不修改 `NavModel`、`_route_type` 或 BGL adapter；当前候选 `airway=5044`、参考 `4620`，字节一致仍为 `0/29`。
+- 证据：`diagnostics/r348-airway-type-source-audit-20260820.json`、`diagnostics/route-type-hint-probe-r71-20260817/probe-report.json`、`diagnostics/route-type-name-fixed-probe-r71-20260817/probe-report.json`。状态：`blocked`，等待同周期 424 直接类别字段或官方转换规则。
+
 ## 已确认的通用契约
 
 - 官方包必须保留全球基线，区域覆盖独立生成。
@@ -115,6 +122,7 @@
 - r328：`onlyAddIfReplace` 隔离探针和相同输入重放门禁；不改变 adapter。
 - r329-r335：贡献度、ZJ Section、运行时触发和来源缺口只读审计；参考差异未授权投影，waypoint/airway 缺口 `1013/1186` 保持拒绝。
 - r338-r343：GeneralDoc 边界修复、全量 BGL 结构审计、SDK 作用域探针和根级终端航点实验；候选仍 `0/29` 字节一致、未部署。
+- r347-r348：设施索引修复、机场终端航点作用域恢复、航路类型来源审计；候选仍 `0/29`，航路类型映射保持阻断。
 
 ## 维护协议
 
