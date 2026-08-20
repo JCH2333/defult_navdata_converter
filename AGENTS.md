@@ -3443,3 +3443,12 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
   - 维持数据源纯洁性：未引用任何外部非 424 派生数据，未修改候选包。
 - 结论：IAP 进近覆盖与角色决策层具备完全确定性，为 MSFS 进近航段的准确生成提供了坚实的算法支撑。
 - r302 全量回归 `471 passed in 4.71s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
+
+## 2026-08-20 r303 MSFS 官方包项目构建与时间戳归一化 (package.py) 审计
+
+- r303 对 `src/fenix_default_navdata/package.py` 统筹的 MSFS 2024 Package Tool 官方包编译与元数据生成机制展开契约审计：
+  - 包项目生成契约：`write_package_project` 精确生成符合 MSFS 2024 Package Definitions 规范的 XML 工程描述文件，配置 `_TARGET_MINIMUM_GAME_VERSION=1.7.35` 与 `_TARGET_MINIMUM_COMPATIBILITY_VERSION=7.26.0.214`；
+  - 确定性时间戳归一化：`_normalize_package_tool_time_metadata` 强制同步 Windows `FILETIME` 时间戳，彻底消除了多次打包生成文件时的系统时间扰动；
+  - 维持数据源纯洁性：未引用任何外部非 424 派生数据，未修改候选包。
+- 结论：MSFS 官方包编译与时间归一化逻辑结构严密，保证了构建产物完全具备确定性与可重复性。
+- r303 全量回归 `471 passed in 4.53s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
