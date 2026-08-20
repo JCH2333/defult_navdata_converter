@@ -76,6 +76,12 @@ python -m fenix_default_navdata.cli reference-template-source-audit `
   --template-base "F:\games\community\Community\navigraph-nav-base" `
   --template-jepp "F:\games\community\Community\navigraph-nav-jepp" `
   --output diagnostics\reference-template-source-audit.json
+python -m fenix_default_navdata.cli runtime-contract-audit `
+  --binary pmdg738 "C:\Users\Administrator\AppData\Roaming\Microsoft Flight Simulator 2024\WASM\MSFS2024\pmdg-aircraft-738\m6677f85214a84cd5_0.dll" `
+  --binary tfdi-md11 "C:\Users\Administrator\AppData\Roaming\Microsoft Flight Simulator 2024\WASM\MSFS2024\tfdidesign-aircraft-md11\m663c42dcb7b68d27_0.dll" `
+  --binary toliss-a346 "F:\games\community\Community\aerosoft-aircraft-a346-pro\SimObjects\Airplanes\airbus-a346-pro\common\wasm\MSFS_ToLiss_Plugin.wasm" `
+  --strings "C:\Users\Administrator\AppData\Local\Microsoft\WinGet\Packages\BrechtSanders.WinLibs.MCF.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\mingw64\bin\strings.exe" `
+  --output diagnostics\runtime-contract-audit.json
 python -m fenix_default_navdata.cli file-convergence-audit `
   --candidate output\candidate-2608-default-r181-package-time-normalized `
   --repeat-candidate output\candidate-2608-default-r182-package-time-repeat `

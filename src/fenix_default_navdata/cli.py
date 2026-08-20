@@ -81,6 +81,10 @@ from .reference_template_source_audit import (
     audit_reference_template_sources,
     write_reference_template_source_audit,
 )
+from .runtime_contract_audit import (
+    audit_runtime_contract_binaries,
+    write_runtime_contract_audit,
+)
 from .airport_source_inventory import (
     build_airport_source_inventory,
     write_airport_source_inventory,
@@ -387,6 +391,30 @@ def build_parser() -> argparse.ArgumentParser:
         help="官方 navigraph-nav-jepp 根目录",
     )
     reference_template.add_argument("--output", required=True, help="审计 JSON 输出路径")
+    runtime_contract = sub.add_parser(
+        "runtime-contract-audit",
+        help="只读提取运行时二进制中的 SQL、表名和文件路径契约",
+    )
+    runtime_contract.add_argument(
+        "--binary",
+        action="append",
+        nargs=2,
+        metavar=("NAME", "PATH"),
+        required=True,
+        help="运行时二进制名称和路径，可重复传入",
+    )
+    runtime_contract.add_argument(
+        "--strings",
+        required=True,
+        help="strings.exe 路径",
+    )
+    runtime_contract.add_argument(
+        "--minimum-length",
+        type=int,
+        default=6,
+        help="strings 最短字符串长度",
+    )
+    runtime_contract.add_argument("--output", required=True, help="审计 JSON 输出路径")
     convergence = sub.add_parser(
         "file-convergence-audit",
         help="只读建立候选、重复候选与参考包的逐文件收敛看板，不导出导航记录",
@@ -1647,6 +1675,17 @@ def main(argv: list[str] | None = None) -> int:
         )
         report["output"] = str(output)
         write_reference_template_source_audit(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "runtime-contract-audit":
+        output = Path(args.output).expanduser().resolve()
+        report = audit_runtime_contract_binaries(
+            {name: Path(path) for name, path in args.binary},
+            strings_executable=Path(args.strings),
+            minimum_length=args.minimum_length,
+        )
+        report["output"] = str(output)
+        write_runtime_contract_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "file-convergence-audit":

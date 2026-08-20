@@ -3586,3 +3586,19 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
   文件级来源登记接口，但不改变 `NavModel`、BGL adapter、候选或 Community。
 - 本轮最小测试通过 `25 passed`；全量回归、提交和推送完成后，参考一致性仍应以
   可复跑产物核对，当前基线为 `0/29`、`deployable=false`。
+
+## 2026-08-20 r313 真实运行时契约提取管线
+
+- 新增可复用只读 `runtime-contract-audit`。它调用本机 `strings.exe`，对任意目标
+  DLL/WASM/EXE 记录二进制大小与 SHA-256，并分类提取 SQL 字符串、`tbl_*` 表名和
+  导航/数据库路径；不读取数据库记录、不读取参考 BGL payload、不修改候选或 Community。
+- 真实报告为 `diagnostics\r313-runtime-contract-audit-20260820.json`，输入为
+  PMDG 738、TFDI MD-11、ToLiss A346 运行时二进制和 MSFS 2024 主程序：
+  共提取 290 条 SQL、29 个 DFDv2 表名、85 条路径。
+- PMDG/ToLiss 二进制提供了机场、跑道、设施、航路、SID/STAR/IAP 的真实 DFDv2
+  查询；TFDI 提供 `Terminals.json`、`ProcedureLegs`、`Navaids.json` 等文件契约；
+  MSFS 主程序提供 `bglIndex.bout`、`GENERIC_NAVDATA`、BGL 编译/读取错误文本，
+  但未暴露可直接用于默认导航内容投影的记录 SQL。
+- 裁决为 `runtime_contract_evidence_only`、`default_bgl_projection_authorized=false`：
+  其他机模的 SQLite/JSON 加载契约只能进入各自 profile 和未来复用证据层，不能
+  反推默认 BGL 记录或授权复制参考数据。默认 BGL 参考一致性仍为 `0/29`。
