@@ -135,6 +135,12 @@
 - 目标读取器额外出现 `airway_type=J` `432` 条、`V` `56` 条，而候选全部为 `B`。对可按航路名/序号关联的目标 J/V 样本，来源 `TXT_LOC_TYPE`、`CODE_TYPE`、`CODE_DIR` 均呈多种组合，且 `488` 条样本中 `250` 条不能用 `VAL_SORT` 唯一对应，未形成可复核的 `B/J/V` 映射。不得按航路前缀、PBN 或参考类型猜测 `routeType`。
 - 本阶段仍为只读阻断；未修改模型、adapter 或候选。证据：`diagnostics/r357-source-gap-with-candidate.xml.json`、`diagnostics/r357-airway-endpoint-card-APOGO.json`、既有端点卡片 `r218-r223/r336`、`diagnostics/r357-route-type-source-association-v2.json`。
 
+### r359 routeType 来源审计管线（2026-08-20）
+
+- 新增可复用 CLI `route-type-source-audit`，只消费 `NavModel` 与完整、只读、脱敏的 `semantic-diff`；输出目标 J/V 计数、来源字段组合唯一匹配率和冲突数，不读取参考坐标/payload，不修改模型或候选。
+- r356 实际运行：目标额外 `J=432`、`V=56`；按航路名/序号唯一匹配 `238` 条，`250` 条无法匹配；`23` 个来源字段组合中 `3` 个同时对应多个目标类型，状态 `insufficient_for_adapter_rule`。因此仍不得猜测 `routeType`。
+- 代码与回归：`src/fenix_default_navdata/route_type_source_audit.py`、`tests/test_route_type_source_audit.py`；真实证据：`diagnostics/r359-route-type-source-audit.json`。针对性测试 `42 passed`，候选仍 `0/29`、`deployable=false`。
+
 ## 已确认的通用契约
 
 - 官方包必须保留全球基线，区域覆盖独立生成。

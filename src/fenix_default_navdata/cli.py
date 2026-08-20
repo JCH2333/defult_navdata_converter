@@ -184,6 +184,10 @@ from .package_reader import DEFAULT_READER_TIMEOUT_SECONDS, read_package
 from .paths import detect_paths
 from .profile import DEFAULT_CYCLE
 from .route_fragment_probe import run_route_fragment_probe
+from .route_type_source_audit import (
+    audit_route_type_source,
+    write_route_type_source_audit,
+)
 from .reader_repeatability_audit import (
     DEFAULT_TABLES,
     audit_reader_repeatability,
@@ -936,6 +940,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="最多输出多少条哈希化关联样本（默认 100）",
     )
     airway_diff.add_argument("--output", help="可选的本地航路差异审计 JSON 输出路径")
+    route_type_source = sub.add_parser(
+        "route-type-source-audit",
+        help="只读审计目标 J/V 航路类型与 NavModel 来源字段的唯一性",
+    )
+    route_type_source.add_argument("--model", required=True)
+    route_type_source.add_argument("--semantic-diff", required=True)
+    route_type_source.add_argument("--output", required=True)
     airway_projection_matrix = sub.add_parser(
         "airway-projection-matrix-audit",
         help="只读关联 NavModel 航路腿与候选 XML 的 Route/Previous/Next 序列化",
@@ -2117,6 +2128,16 @@ def main(argv: list[str] | None = None) -> int:
         output = Path(args.output).expanduser().resolve()
         report["output"] = str(output)
         write_sdk_bgl_expression_matrix(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "route-type-source-audit":
+        report = audit_route_type_source(
+            load_model(Path(args.model)),
+            load_semantic_diff(Path(args.semantic_diff)),
+        )
+        output = Path(args.output).expanduser().resolve()
+        report["output"] = str(output)
+        write_route_type_source_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "unclassified-procedure-cards-audit":
