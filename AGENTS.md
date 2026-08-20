@@ -141,6 +141,13 @@
 - r356 实际运行：目标额外 `J=432`、`V=56`；按航路名/序号唯一匹配 `238` 条，`250` 条无法匹配；`23` 个来源字段组合中 `3` 个同时对应多个目标类型，状态 `insufficient_for_adapter_rule`。因此仍不得猜测 `routeType`。
 - 代码与回归：`src/fenix_default_navdata/route_type_source_audit.py`、`tests/test_route_type_source_audit.py`；真实证据：`diagnostics/r359-route-type-source-audit.json`。针对性测试 `42 passed`，候选仍 `0/29`、`deployable=false`。
 
+### r361 机场范围来源审计（2026-08-20）
+
+- 新增只读、可复用 CLI `airport-scope-source-audit`，只读取 424 `AD_HP.csv`、`Terminal` 目录、顶层 CSV、候选 XML，以及可选的参考 `ContentHistory.json` 元数据；不读取参考 BGL 记录，不修改模型、adapter 或候选。
+- r356 实际结果：424、NavModel、候选 XML 均为 `275` 个机场；参考 `ContentHistory` 为 `279` 个。参考独有 `ZBSH/ZGFS/ZL02/ZL03/ZSLT/ZW01/ZW02` 均无 424 直接机场来源；候选独有 `ZBAR/ZGUH/ZGYJ` 均有 `AD_HP.csv`、`Terminal` 和 CSV 证据。
+- 结论：参考范围超出当前 424 输入边界，不能复制参考记录回填；候选独有机场也不能仅因参考范围缺少而删除。当前仍为 `0/29`、`deployable=false`，未部署、未实机验证。
+- 代码、测试和证据：`src/fenix_default_navdata/airport_scope_source_audit.py`、`tests/test_airport_scope_source_audit.py`、`diagnostics/r361-airport-scope-source-audit.json`。
+
 ## 已确认的通用契约
 
 - 官方包必须保留全球基线，区域覆盖独立生成。

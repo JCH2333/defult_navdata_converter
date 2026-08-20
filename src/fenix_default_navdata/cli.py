@@ -89,6 +89,10 @@ from .airport_source_inventory import (
     build_airport_source_inventory,
     write_airport_source_inventory,
 )
+from .airport_scope_source_audit import (
+    audit_airport_scope_sources,
+    write_airport_scope_source_audit,
+)
 from .source_model_completeness_audit import (
     audit_source_model_completeness,
     write_source_model_completeness_audit,
@@ -597,6 +601,15 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help="本地机场来源对象库存 JSON 输出路径",
     )
+    airport_scope = sub.add_parser(
+        "airport-scope-source-audit",
+        help="审计 424 机场范围、候选机场和 ContentHistory 的来源边界",
+    )
+    airport_scope.add_argument("--raw-root", required=True)
+    airport_scope.add_argument("--model", required=True)
+    airport_scope.add_argument("--candidate-xml")
+    airport_scope.add_argument("--reference-content-history")
+    airport_scope.add_argument("--output", required=True)
     source_model_completeness = sub.add_parser(
         "source-model-completeness-audit",
         help="只读盘点已解析 424 字段组与 NavModel 消费边界",
@@ -1933,6 +1946,18 @@ def main(argv: list[str] | None = None) -> int:
         output = Path(args.output).expanduser().resolve()
         report["output"] = str(output)
         write_airport_source_inventory(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "airport-scope-source-audit":
+        output = Path(args.output).expanduser().resolve()
+        report = audit_airport_scope_sources(
+            Path(args.raw_root),
+            load_model(Path(args.model)),
+            candidate_xml=_path(args.candidate_xml),
+            reference_content_history=_path(args.reference_content_history),
+        )
+        report["output"] = str(output)
+        write_airport_scope_source_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "source-model-completeness-audit":
