@@ -7,6 +7,7 @@ from fenix_default_navdata.bgl_format import BglFormatError
 from fenix_default_navdata.bgl_record_layout import (
     audit_bgl_record_layouts,
     decode_bgl_record_layout,
+    write_bgl_record_layout_audit,
 )
 
 
@@ -95,3 +96,21 @@ def test_record_layout_audit_detects_record_order_difference(tmp_path: Path) -> 
     assert comparison["matching_position_count"] == 0
     assert comparison["first_different_record_index"] == 0
     assert report["summary"]["equal_ordered_sections"] == 0
+
+
+def test_record_layout_audit_file_is_independent_of_output_path(
+    tmp_path: Path,
+) -> None:
+    candidate = tmp_path / "candidate.bgl"
+    reference = tmp_path / "reference.bgl"
+    candidate.write_bytes(_bgl(((0x03, 1, b"AAAA"),)))
+    reference.write_bytes(_bgl(((0x03, 1, b"BBBB"),)))
+
+    report = audit_bgl_record_layouts(candidate, reference)
+    first = tmp_path / "one" / "audit.json"
+    second = tmp_path / "two" / "audit.json"
+    write_bgl_record_layout_audit(first, report)
+    write_bgl_record_layout_audit(second, report)
+
+    assert first.read_bytes() == second.read_bytes()
+    assert "output" not in first.read_text(encoding="utf-8")

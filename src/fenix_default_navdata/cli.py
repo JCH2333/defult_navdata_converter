@@ -1709,9 +1709,10 @@ def main(argv: list[str] | None = None) -> int:
             Path(args.candidate),
             Path(args.reference),
         )
-        report["output"] = str(output)
         write_bgl_record_layout_audit(output, report)
-        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        console_report = dict(report)
+        console_report["output"] = str(output)
+        print(json.dumps(console_report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "reference-template-source-audit":
         output = Path(args.output).expanduser().resolve()
