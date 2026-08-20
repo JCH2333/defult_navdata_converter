@@ -80,6 +80,13 @@
 - 因无 424 直接映射证据，本轮不修改 `NavModel`、`_route_type` 或 BGL adapter；当前候选 `airway=5044`、参考 `4620`，字节一致仍为 `0/29`。
 - 证据：`diagnostics/r348-airway-type-source-audit-20260820.json`、`diagnostics/route-type-hint-probe-r71-20260817/probe-report.json`、`diagnostics/route-type-name-fixed-probe-r71-20260817/probe-report.json`。状态：`blocked`，等待同周期 424 直接类别字段或官方转换规则。
 
+### r349 设施区域冲突审计（2026-08-21）
+
+- 回查 r347 的 6 个 VOR 区域差异（ALS/BDA/ETL/MSN/PAN/WUH）及 4 个 NDB 字段差异（DM/DS/SB/RG）的 424 坐标、频率、`SERVICED_AIRPORT` 和 `CODE_FIR`。
+- 4 个 NDB 与官方读取索引的 `ZU` 记录在坐标/频率上对应；6 个 VOR 无法在已验证索引中建立同坐标同频的一一身份映射，不能把参考区域倒推成来源规则。
+- 不修改 `navaid_country()`，保留有效服务机场优先、单一 FIR 回退、多 FIR 拒绝；状态 `blocked`。下一步须取得同周期官方转换规则或可复核的目标记录身份映射。
+- 证据：`diagnostics/r347-semantic-diff.json`、官方设施索引元数据及本轮只读审计；模型、候选和部署状态不变。
+
 ## 已确认的通用契约
 
 - 官方包必须保留全球基线，区域覆盖独立生成。
@@ -122,7 +129,7 @@
 - r328：`onlyAddIfReplace` 隔离探针和相同输入重放门禁；不改变 adapter。
 - r329-r335：贡献度、ZJ Section、运行时触发和来源缺口只读审计；参考差异未授权投影，waypoint/airway 缺口 `1013/1186` 保持拒绝。
 - r338-r343：GeneralDoc 边界修复、全量 BGL 结构审计、SDK 作用域探针和根级终端航点实验；候选仍 `0/29` 字节一致、未部署。
-- r347-r348：设施索引修复、机场终端航点作用域恢复、航路类型来源审计；候选仍 `0/29`，航路类型映射保持阻断。
+- r347-r349：设施索引修复、机场终端航点作用域恢复、航路类型与设施区域来源审计；候选仍 `0/29`，未授权修改映射或部署。
 
 ## 维护协议
 
