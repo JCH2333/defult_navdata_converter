@@ -3272,3 +3272,13 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
   - 维持数据源纯洁性：未引用任何外部非 424 派生数据，未修改候选包。
 - 结论：CLI 工具链提供了高度标准化的脚本与 CI/CD 自动化集成界面，具备极强的工程可观测性与复用能力。
 - r284 全量回归 `471 passed in 4.85s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
+
+## 2026-08-20 r285 端到端全量流水线主审计门禁 (pipeline-master-audit) 复验
+
+- r285 重新运行端到端流水线主审计门禁 `pipeline-master-audit`，对数据源盘点、`NavModel` 实体抽取及 11 个 BGL 投影结构进行统一全量校验：
+  - 来源到模型：33 个 424 CSV 100% 盘点完成（0 未分类），5 大核心实体及 10409 程序段/53268 航段 100% 正确映射；
+  - 模型到 BGL 投影：10 个区域机场 BGL（ZB 37, ZG 29, ZH 13, ZJ 4, ZL 24, ZP 15, ZS 52, ZU 44, ZW 29, ZY 28 共 275 机场）与 `00_enroute.bgl`（2741 航点, 438 导航台, 4446 航路段）结构全部校验通过；
+  - 核心裁决结果：`pipeline_master_verified=True`，`disposition='pipeline_master_verified'`，`model_or_adapter_change_authorized=False`；
+  - 维持数据源纯洁性：未引用任何外部非 424 派生数据，未修改候选包。
+- 结论：全流程主门禁判定完全一致且稳定复现，数据转换管线状态完好。
+- r285 全量回归 `471 passed in 4.37s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
