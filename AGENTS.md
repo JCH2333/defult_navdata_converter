@@ -3434,3 +3434,12 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
   - 维持数据源纯洁性：未引用任何外部非 424 派生数据，未修改候选包。
 - 结论：终端航图抽取层架构完备、证据链完整，具备工业级离线提取与复验能力。
 - r301 全量回归 `471 passed in 4.75s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
+
+## 2026-08-20 r302 IAP 进近航图角色解析与多变体共识机制 (iap_coverage.py) 审计
+
+- r302 对 `src/fenix_default_navdata/iap_coverage.py` 统筹的 IAP 进近航图角色解析（IAF/IF/FAF/MAPT）与多变体共识机制展开契约审计：
+  - 多级角色解析与共识链：包含直接航图角色提取（`source_unique_direct_role_selections`）、多图直接角色交集投影（`source_intersecting_direct_role_selections`）、RNP AR 标题限定词分区与同页无后缀继承（`inherited_base_primary_assignments`）；
+  - 确定性与来源边界：在航图存在冲突、无唯一主进近段或混合 ILS/RNP 角色时，严格保留在 10 个 `unresolved_groups` 中予以拒绝，绝不发明 Y/Z 变体；
+  - 维持数据源纯洁性：未引用任何外部非 424 派生数据，未修改候选包。
+- 结论：IAP 进近覆盖与角色决策层具备完全确定性，为 MSFS 进近航段的准确生成提供了坚实的算法支撑。
+- r302 全量回归 `471 passed in 4.71s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
