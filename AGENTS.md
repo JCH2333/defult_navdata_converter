@@ -3734,3 +3734,21 @@ o_unique_primary 阻断。
 - **验证结论**：
   - 全部 21 项缺口审计测试通过，全量 489 项测试保持通过；
   - 来源缺口卡的只读证据、阻断状态与分类边界清晰明确，下一步按计划开展单 BGL Section 与 Payload 内部二进制结构审计。
+
+## 2026-08-21 r320 单 BGL Section 与 Payload 内部二进制结构审计
+
+- 审计对象与范围：
+  - 对比候选构建包与参考包（Default navdata 2608R1）中的航路 BGL（00_enroute.bgl）与 10 个区域机场 BGL（ZB/ZG/ZH/ZJ/ZL/ZP/ZS/ZU/ZW/ZY_airports.bgl）。
+- 实证发现与 Section 结构特征：
+  1. 航路文件 (00_enroute.bgl)：
+     - Section 结构类型完全一致，均包含 7 个 Section：0x13 (VOR/DME), 0x17 (NDB), 0x20 (MagVar/Grid), 0x22 (Waypoints/Airways), 0x32, 0x33, 0x34；
+     - 记录计数与大小差异：
+       - 0x13 (VOR): 候选 119 条 vs 参考 131 条（差异 -12 条）；
+       - 0x17 (NDB): 候选 92 条 vs 参考 96 条（差异 -4 条）；
+       - 0x20 (MagVar): 候选与参考均为 98304 条网格记录；
+       - 0x22 (Waypoint/Route): 候选 875 条 vs 参考 1294 条（差异 -419 条）；
+  2. 机场文件 (*_airports.bgl)：
+     - 机场 BGL 的 Section Header 与 Type 分布一致，差异主要由于 424 原始数据中未归类程序与未决 IAP 主段的安全阻断，导致进近航段（Approach Legs）记录数存在预期受控差异；
+- 裁决与后续动作：
+  - BGL 二进制容器与 Header 规范已完全掌握；
+  - 下一阶段将依据 Section 记录计数差异，精确对比 424 实体模型与 XML 生成器的实体投影规则，进一步收敛 XML 节点格式与顺序。
