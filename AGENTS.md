@@ -3474,3 +3474,19 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
 - 下一准入条件：先取得新的、可复跑且与当前变量隔离的来源/加载契约/SDK 证据，或明确
   证明一个 XML 表达变量对应上述 Section 变化；随后才允许单变量探针、双构建和文件
   收敛审计。禁止仅因 Section 缺失、文件大小接近或读取器输出差异而改写投影。
+
+## 2026-08-20 r305 官方导航模板 Section 族群盘点
+
+- 只读扫描官方模板 `F:\games\community\Community\navigraph-nav-base` 与
+  `F:\games\community\Community\navigraph-nav-jepp` 的 BGL 头部，未读取导航记录，
+  未修改候选或 Community。
+- `navigraph-nav-base` 共 469 个 BGL：468 个普通文件使用 `0x03/0x35` 两类 Section；
+  唯一的 `Maintenance.bgl` 另含 `0x03/0x13/0x17/0x22/0x34`。
+- `navigraph-nav-jepp` 共 1747 个 BGL，其中 `0x17` 出现在 381 个文件、`0x33` 出现在
+  381 个文件、`0x35` 出现在 468 个文件；因此候选区域 BGL 的 `0x35` 属于官方可见
+  Section 族群，而参考中国覆盖包中稳定出现的 `0x17/0x33` 更接近 Jepp 导航 BGL 族群。
+- 结论：模板盘点证明 Section 类型在官方包中有稳定来源边界，但不能仅凭类型共现反推
+  记录语义、对象数量或应写入的 424 内容。当前仍没有新的可接入 XML 表达规则，保持
+  `model_or_adapter_change_authorized=false`、参考 `0/29` 和 `deployable=false`。
+- 下一步只允许取得能复现 Jepp 族 Section 的真实生成/加载契约，或基于 424 直接事实和
+  最小 XML 正反例证明该表达；不得把官方模板 BGL payload 复制为候选内容。
