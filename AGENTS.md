@@ -3012,6 +3012,19 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
 - 结论：`master_pipeline_verified=true`，可复用的 424 原始数据到规范中间模型（NavModel）的全量证据审计与数据门禁已成功构建并通过极限校验。
 - r267 新增独立 CLI、自动化测试与最小 fixture，全量回归 `469 passed in 3.96s`，`git diff --check` 通过。游戏未运行，未触碰候选，参考一致仍为 `0/29`，`deployable=false`。
 
-### r268 唯一后续任务
 
-基于已完成的全量来源模型主审计门禁，结合 BGL 编码层的 section 基数审计，进一步校验并固化导航模型到默认 BGL 的完整投影管线。
+## 2026-08-20 r268 模型到 BGL 投影主审计管线门禁固化
+
+- r268 只读关系命令行为：
+  `bgl-projection-master-audit --model <r187-model> --output <report>`。
+  它对模型到默认通用 BGL 的区域分区（10 大区域 `Z*_airports.bgl`）与 `00_enroute.bgl` 投影结构进行完整审计与编译器可用性校验。
+- 实际报告为 `diagnostics/r268-bgl-projection-master-audit-20260820.json`，SHA-256：`3061e9f82b0fc26c2d491e16dc254fdd0ebc91542d8d3b852d8477381ef81467`。
+  - 编译器：PackageTool 可用（`C:\MSFS 2024 SDK\Tools\bin\fspackagetool.exe`）。
+  - 区域机场 BGL：10 个区域（ZB 37、ZG 29、ZH 13、ZJ 4、ZL 24、ZP 15、ZS 52、ZU 44、ZW 29、ZY 28，共 275 个机场、640 条跑道、10409 个程序段、430 个 ILS 设施）。
+  - 航路空域 BGL：`00_enroute.bgl` 包含 2741 个航路点、438 个导航台及 4446 条航路段（覆盖 1354 条唯一航路代号）。
+- 结论：`projection_schema_verified=true`，BGL 投影管线结构完整性固化完成，`model_or_adapter_change_authorized=false`。
+- r268 新增独立 CLI、自动化测试与最小 fixture，全量回归 `470 passed in 4.03s`，`git diff --check` 通过。游戏未运行，未触碰候选，参考一致仍为 `0/29`，`deployable=false`。
+
+### r269 唯一后续任务
+
+结合 r267 来源模型主审计与 r268 BGL 投影主审计成果，对总体转换管线的端到端权威门禁建立集成校验，确保未来多机模与多 AIRAC 周期扩展的可复用性与质量闭环。
