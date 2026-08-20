@@ -173,6 +173,25 @@ _AUDIT_ONLY_GROUPS = (
             "终端程序、跑道或结构化航路归属；独立关系审计未授权默认 BGL 投影。"
         ),
     ),
+    _SourceGroup(
+        "route_restrictions",
+        ("ROUTE_RESTRICT.csv", "ROUTE_RESTRICT_RTE.csv"),
+        (
+            "ROUTE_RESTRICT.ROUTE_RESTRICT_ID",
+            "ROUTE_RESTRICT.REMARK_CHAR",
+            "ROUTE_RESTRICT.SPECIAL_REMARK",
+            "ROUTE_RESTRICT_RTE.ROUTE_RESTRICT_RTE_ID",
+            "ROUTE_RESTRICT_RTE.ROUTE_RESTRICT_ID",
+            "ROUTE_RESTRICT_RTE.ROUTE_SEGMENT_UUID",
+        ),
+        (),
+        "source_evidence_only",
+        "enroute/airway-restriction",
+        (
+            "ROUTE_RESTRICT ?????????/????????????"
+            "MSFS ?? BGL ????????????????????????"
+        ),
+    ),
 )
 
 _UNMODELED_GROUPS = (

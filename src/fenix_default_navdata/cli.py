@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import argparse
 import json
+from .route_restrict_source_audit import (
+    audit_route_restrict_source,
+    write_route_restrict_source_audit,
+)
 from pathlib import Path
 
 from .ad219_ndb import (
@@ -449,6 +453,25 @@ def build_parser() -> argparse.ArgumentParser:
         "--output",
         required=True,
         help="本地来源完整性库存 JSON 输出路径",
+    )
+    route_restrict_source = sub.add_parser(
+        "route-restrict-source-audit",
+        help="???? 424 ROUTE_RESTRICT ? ROUTE_RESTRICT_RTE ???????",
+    )
+    route_restrict_source.add_argument(
+        "--raw-root",
+        required=True,
+        help="2608 ?? CSV/PDF ??",
+    )
+    route_restrict_source.add_argument(
+        "--model",
+        required=True,
+        help="??? NavModel ???JSON ? JSON.GZ?",
+    )
+    route_restrict_source.add_argument(
+        "--output",
+        required=True,
+        help="?? ROUTE_RESTRICT ???? JSON ????",
     )
     route_holding_source = sub.add_parser(
         "route-holding-source-audit",
@@ -1464,6 +1487,16 @@ def main(argv: list[str] | None = None) -> int:
         output = Path(args.output).expanduser().resolve()
         report["output"] = str(output)
         write_source_model_completeness_audit(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "route-restrict-source-audit":
+        report = audit_route_restrict_source(
+            Path(args.raw_root),
+            load_model(Path(args.model)),
+        )
+        output = Path(args.output).expanduser().resolve()
+        report["output"] = str(output)
+        write_route_restrict_source_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "route-holding-source-audit":
