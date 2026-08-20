@@ -37,7 +37,7 @@
 - 冻结模型：`output/intermediate-2608-r187-navaid-label-replay.json.gz`
 - 模型 SHA-256：`7cec24bd4a57545d39aab037abe4125c763ad12f364bd5f8f0073b0e050fdb4b`
 - 当前有效参考候选：`output/candidate-2608-default-r188-doviv-replay`，自重放 `29/29`
-- 最新实验候选：`output/candidate-2608-default-r347-airport-terminal-waypoints`
+- 最新有效实验候选：`output/candidate-2608-default-r362-sdk153`；r363 SDK 1.6.9 构建失败，不计入候选
 - r338 模型计数与冻结模型一致；V111/V162 四条端点区域恢复
 - 与参考默认数据字节一致：`0/29`
 - `deployable=false`
