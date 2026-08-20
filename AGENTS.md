@@ -3263,3 +3263,12 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
   - 维持数据源纯洁性：未引用任何外部非 424 派生数据，未修改候选包。
 - 结论：自动更新模块遵循严格的安全哈希校验，完全适配 GitHub Releases 发布工作流。
 - r283 全量回归 `471 passed in 4.43s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
+
+## 2026-08-20 r284 CLI 命令行审计子命令与全量调度契约 (cli.py) 审计
+
+- r284 对 `src/fenix_default_navdata/cli.py` 的 50+ 个子命令调度与参数解析展开完整契约审计：
+  - 核心工作流子命令：`build`、`export-model`、`validate`、`deploy`、`restore`、`detect` 完备覆盖全流程生命周期；
+  - 门禁与审计子命令：`pipeline-master-audit`、`source-model-master-audit`、`bgl-projection-master-audit` 等主门禁及 40+ 细粒度审计命令均输出严格结构化 JSON 报告与确定性退出码；
+  - 维持数据源纯洁性：未引用任何外部非 424 派生数据，未修改候选包。
+- 结论：CLI 工具链提供了高度标准化的脚本与 CI/CD 自动化集成界面，具备极强的工程可观测性与复用能力。
+- r284 全量回归 `471 passed in 4.85s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
