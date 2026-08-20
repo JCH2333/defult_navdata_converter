@@ -3312,3 +3312,13 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
   - 维持数据源纯洁性：未引用任何外部非 424 派生数据，未修改候选包。
 - 结论：BGL 二进制解析与收敛审计链路结构严谨，为后续逐字节对齐提供了严格的代码判定标准。
 - r288 全量回归 `471 passed in 4.28s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
+
+## 2026-08-20 r289 包派生元数据审计契约 (package_metadata_audit.py) 审计
+
+- r289 对 `src/fenix_default_navdata/package_metadata_audit.py` 的包派生元数据对比分析机制展开契约审计：
+  - 核心元数据文件覆盖：`manifest.json`、`layout.json`、`bglIndex.bout` 及 `contenthistory.json`；
+  - 关键字段形状与时间戳解析：对比 `package_version`、`minimum_game_version` 等 7 大清单字段，并精准识别 Windows `FILETIME` 时间戳序列化特征；
+  - 差分分类与归因：将元数据差异清晰定性为时间戳扰动或结构性差异，辅助排除伪差异；
+  - 维持数据源纯洁性：未引用任何外部非 424 派生数据，未修改候选包。
+- 结论：元数据审计模块具备高度确定性，为包级构建产物的完整性与时间一致性提供了可信的审计工具。
+- r289 全量回归 `471 passed in 4.24s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
