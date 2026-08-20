@@ -3282,3 +3282,13 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
   - 维持数据源纯洁性：未引用任何外部非 424 派生数据，未修改候选包。
 - 结论：全流程主门禁判定完全一致且稳定复现，数据转换管线状态完好。
 - r285 全量回归 `471 passed in 4.37s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
+
+## 2026-08-20 r286 底层 SQLite 语义差分与可复现性契约 (semantic_diff.py) 审计
+
+- r286 对 `src/fenix_default_navdata/semantic_diff.py` 的底层语义差分逻辑展开契约审计：
+  - 核心实体表支持：覆盖 `vor` (16 语义字段)、`ndb` (11 语义字段)、`waypoint` (12 语义字段)、`airway` (16 语义字段) 4 大关键表；
+  - 逻辑主键与指纹机制：通过复合逻辑键（如 `airway_name`, `airway_type`, `sequence_no` 等）与浮点精度归一化（6 位小数），构建多重集指纹（multiset fingerprint），精确排查字段级差异；
+  - 可复现性验证：`semantic_reproducibility_audit` 确保 Navdatareader 在离线内存重读中的输出一致性；
+  - 维持数据源纯洁性：未引用任何外部非 424 派生数据，未修改候选包。
+- 结论：语义差分模块具备极高的离线诊断精度，为 BGL 字段级微调提供了坚实的取证工具。
+- r286 全量回归 `471 passed in 4.18s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
