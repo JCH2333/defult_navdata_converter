@@ -3789,3 +3789,22 @@ o_unique_primary 阻断。
 - **验证结论**：
   - 核心模型映射与完整性测试全量通过（489 passed）；
   - 中间模型解耦度与可复用管线标准已固化，为未来拓展其他机模转换提供了规范化底座。
+
+## 2026-08-21 r323 多机模适配器与通用契约验证规范审计
+
+- **审计对象与范围**：
+  - 审查 alidation.py、semantic_diff.py 与 
+untime_contract_audit.py 中多机模契约验证机制、语义差分、物理行序及发布安全门禁。
+- **确立的多机模验证与安全门禁规范**：
+  1. **严格的层级部署与发布门禁（Deployment & Release Gates）**：
+     - 未达到 29/29 逐字节完全匹配时：deployable=false，严禁向 Community 目录部署；
+     - 即使完成测试构建，在未经过真实机模航电与连飞全流程验证前：仅允许标记为测试版，严禁发布正式 Release；
+  2. **运行时加载契约验证（Runtime Loading Contract）**：
+     - DFDv2 SQLite（iniBuilds/ToLiss/PMDG）：强制校验 Schema、外键约束、NOT NULL 字段、物理插入顺序（如跑道按 airport_identifier, runway_identifier 排序以满足只向前游标）；
+     - TFDI JSON：强制校验 Terminals 与 ProcedureLegs 的 ID 映射闭合与 FAF/MAP 边界；
+     - MSFS 默认 BGL：强制校验 Section Headers、Section 计数、QMID 网格及 Package Layout 完整性；
+  3. **差分审计与敏感证据保护**：
+     - 语义差分工具自动隐藏参考包字段明文值，仅输出字段名结构与统计特征，防止专有数据外泄。
+- **验证结论**：
+  - 20 项契约验证与语义差分测试全量通过，489 项全量回归测试保持通过；
+  - 确立了通用的多机模适配器质量门禁标准，确保后续各机模输出的安全与合规。
