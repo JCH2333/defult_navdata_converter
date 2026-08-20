@@ -77,6 +77,10 @@ from .sdk_section_provenance_audit import (
     audit_sdk_section_provenance,
     write_sdk_section_provenance_audit,
 )
+from .reference_template_source_audit import (
+    audit_reference_template_sources,
+    write_reference_template_source_audit,
+)
 from .airport_source_inventory import (
     build_airport_source_inventory,
     write_airport_source_inventory,
@@ -367,6 +371,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="受控 BGL 相对路径，可重复传入",
     )
     bgl_binary_diff.add_argument("--output", required=True, help="差分 JSON 输出路径")
+    reference_template = sub.add_parser(
+        "reference-template-source-audit",
+        help="只读审计参考包与官方模板的文件元数据来源，不读取导航记录",
+    )
+    reference_template.add_argument("--reference", required=True, help="参考包根目录")
+    reference_template.add_argument(
+        "--template-base",
+        required=True,
+        help="官方 navigraph-nav-base 根目录",
+    )
+    reference_template.add_argument(
+        "--template-jepp",
+        required=True,
+        help="官方 navigraph-nav-jepp 根目录",
+    )
+    reference_template.add_argument("--output", required=True, help="审计 JSON 输出路径")
     convergence = sub.add_parser(
         "file-convergence-audit",
         help="只读建立候选、重复候选与参考包的逐文件收敛看板，不导出导航记录",
@@ -1614,6 +1634,19 @@ def main(argv: list[str] | None = None) -> int:
         )
         report["output"] = str(output)
         write_bgl_binary_diff_audit(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "reference-template-source-audit":
+        output = Path(args.output).expanduser().resolve()
+        report = audit_reference_template_sources(
+            Path(args.reference),
+            {
+                "navigraph-nav-base": Path(args.template_base),
+                "navigraph-nav-jepp": Path(args.template_jepp),
+            },
+        )
+        report["output"] = str(output)
+        write_reference_template_source_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "file-convergence-audit":

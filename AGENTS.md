@@ -3571,3 +3571,18 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
 - 审计器新增按 Section 类型聚合的机器可读摘要，供未来其他目标格式探针复用。
   当前参考一致性仍为 `0/29`、`deployable=false`，下一阶段回到来源缺口和真实
   加载契约，禁止根据 Section 类型反向补写内容。
+
+## 2026-08-20 r312 参考包与官方模板文件来源边界审计
+
+- 新增只读 `reference-template-source-audit`，比较 `Default navdata 2608R1`
+  参考包与 `navigraph-nav-base`、`navigraph-nav-jepp` 的相对路径、文件角色、大小
+  和 SHA-256；不解析 BGL、不读取或导出导航记录和 payload。
+- 真实报告为 `diagnostics\r312-reference-template-source-audit-20260820.json`：
+  参考包受控文件共 29 个，其中 21 个导航 BGL 没有任何官方模板整文件哈希匹配；
+  另外 8 个仅为同名但内容不同的包装/派生元数据文件，整文件可直接复用数为 `0`。
+- 结论为 `metadata_source_boundary_only`、`content_projection_authorized=false`：
+  文件名、角色、大小或哈希匹配只能用于区分派生文件和来源边界，不能授权复制
+  参考 BGL 或任何参考 payload。该审计为未来 AIRAC 和其他目标格式提供可复用的
+  文件级来源登记接口，但不改变 `NavModel`、BGL adapter、候选或 Community。
+- 本轮最小测试通过 `25 passed`；全量回归、提交和推送完成后，参考一致性仍应以
+  可复跑产物核对，当前基线为 `0/29`、`deployable=false`。
