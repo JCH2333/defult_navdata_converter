@@ -86,7 +86,7 @@ SHA-256：
 
 - 新增 `source-gap-audit --table waypoint|airway` 只读探针；默认全量行为不变，允许对完整的单表语义差分进行区域/目标隔离审计，避免用不完整历史差分绕过完整性门禁。
 - 使用完整的 `r74-vs-reference-single-ZJ-semantic-diff.json` 仅审计 `waypoint`：203 个参考缺失身份中，当前 424 `NavModel` 可证明机场作用域来源 102 个，另 101 个不在 `DESIGNATED_POINT.csv` 或 `RTE_SEG.csv` 端点集合；未取得直接来源前不得补写。
-- `r333-zj-source-inventory-20260821.json` 仅保存 424 源文件哈希、计数、模型集合哈希和授权结论；无参考导航 payload。ZJ 四机场终端航点为 `193`（ZJHK 85、ZJQH 33、ZJSY 61、ZJYX 14），全局 ZJ 航点为 `51`。
+- `r333-zj-source-inventory-20260820.json` 仅保存 424 源文件哈希、计数、模型集合哈希和授权结论；无参考导航 payload。ZJ 四机场终端航点为 `193`（ZJHK 85、ZJQH 33、ZJSY 61、ZJYX 14），全局 ZJ 航点为 `51`。
 - r136 全量差分和 r77 ZJ 差分因 waypoint 样本截断被门禁拒绝；r74 因缺少 airway 表仅可用于 waypoint 单表探针。模型/adapter 仍未授权修改。
 
 ### r334 ZJ 终端坐标与 GeneralDoc 来源复核
