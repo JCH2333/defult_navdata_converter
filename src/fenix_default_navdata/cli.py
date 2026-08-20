@@ -69,6 +69,10 @@ from .sdk_bgl_expression_matrix import (
     write_sdk_bgl_expression_matrix,
 )
 from .sdk_toolchain_audit import audit_sdk_toolchains, write_sdk_toolchain_audit
+from .sdk_toolchain_pair_audit import (
+    audit_sdk_toolchain_pair,
+    write_sdk_toolchain_pair_audit,
+)
 from .airport_source_inventory import (
     build_airport_source_inventory,
     write_airport_source_inventory,
@@ -1360,6 +1364,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_READER_TIMEOUT_SECONDS,
         help="读取器超时秒数",
     )
+    sdk_toolchain_pair = sub.add_parser(
+        "sdk-toolchain-pair-audit",
+        help="compare one airway probe under two SDK Package Tools",
+    )
+    sdk_toolchain_pair.add_argument("--first-report", required=True)
+    sdk_toolchain_pair.add_argument("--second-report", required=True)
+    sdk_toolchain_pair.add_argument("--output", required=True)
     coordinate_precision_audit = sub.add_parser(
         "airway-coordinate-precision-audit",
         help="只读审计 424 DMS 航路坐标在 SDK float32 前是否被 6 位格式化改变",
@@ -2212,6 +2223,14 @@ def main(argv: list[str] | None = None) -> int:
             build_timeout_seconds=args.build_timeout,
             reader_timeout_seconds=args.reader_timeout,
         )
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "sdk-toolchain-pair-audit":
+        report = audit_sdk_toolchain_pair(
+            Path(args.first_report),
+            Path(args.second_report),
+        )
+        write_sdk_toolchain_pair_audit(Path(args.output), report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "airway-coordinate-precision-audit":

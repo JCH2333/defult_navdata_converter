@@ -3521,3 +3521,14 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
 - 当前参考一致性仍为 `0/29`，`deployable=false`；下一步必须取得可复现的真实
   生成/加载契约或基于 424 直接事实的最小 XML 正反例，不能仅因 SDK 版本不同而重开
   已否决的投影方向。
+## 2026-08-20 r308 SDK 配对探针复核与读取器不稳定性隔离
+
+- 同一 `sdk_airway_route_child_order` XML 分别使用 SDK 1.5.3 与 1.6.9 构建，两个
+  `00_enroute.bgl` 的大小均为 `2360742`，SHA-256 均为
+  `fe6e397355bf596bbac6d3c01d7d9c2e2f0d834080ec7f4483cdca56e9a4018a`。
+- Navdatareader 对相同 BGL 的 8 条航路结果出现 fragment 分配差异。由于编译字节
+  完全相同，该差异归类为读取器或运行环境不稳定性，不是 SDK 目标表达证据。
+- 新增 `sdk-toolchain-pair-audit` 和报告
+  `diagnostics\r308-sdk-toolchain-pair-audit-20260820.json`；当前裁决为
+  `compiled_output_equal_reader_rows_differ`，仍禁止修改 adapter、替换二进制或部署
+  Community。参考一致性仍为 `0/29`，`deployable=false`。
