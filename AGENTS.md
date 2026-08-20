@@ -2727,3 +2727,29 @@ Package Tool 构建、验证和部署门禁已具备。它不能与来源闭合�
   （`docs: reconcile r257 conversion plan`）。2026-08-19 的普通 `git push` 失败：
   `Failed to connect to 127.0.0.1 port 7897 after 2110 ms`。未强推、未重写历史；网络恢复后从
   当前 `main` 普通推送，并执行 `git ls-remote --heads origin main` 复核远端提交。
+
+## 2026-08-19 r258 已安装 SDK 1.5.3 对照取证
+
+- r258 的准入变量是当前磁盘仍存在的 `F:\games\MSF tools\MSFS2024_SDK_Core_Installer_1.5.3\SDK`。
+  该安装的 `version.txt` 为 `1.5.3`，`fspackagetool.exe` SHA-256 为
+  `34c4d1d8ba46ed9b1f60bc4626649ad9fe582d026c3023bad884be0a85a93970`，与当前 1.6.9 工具
+  `eda75a7d187fb45ede71b59dd3189e614880f44642294600aa1aebdd781a6f51` 不同。r250 的
+  “仅发现 1.6.9”仅适用于当时搜索的用户目录和安装登记，不能再作为“本机不存在替代工具链”的结论。
+- 为避免模型、内容、项目结构和探针脚本同时变化，本轮复用 r195 的最小 ZPPP/04R 基线 XML：
+  `diagnostics\r195-zppp-r04r-threshold-baseline-20260819\inputs\china-navdata.xml`，输入大小
+  `1377` 字节、SHA-256 `db6ccdec72d26146be4f86aaeefc6a9af5b1739bbb61434b8c3cfa949878e0e8`。
+  r258 使用相同脚本哈希，唯一构建变量为 Package Tool 路径；未读取参考导航 payload、未修改
+  `NavModel`、正式 adapter、候选或 Community。
+- 实测报告为
+  `diagnostics\r258-sdk153-zppp-r04r-baseline-20260819\probe-report.json`。SDK 1.5.3 启动并完成
+  一次隔离 Package Tool 构建；输出 BGL 为 `846` 字节、SHA-256
+  `208c3af833be1b7d3c3a78f8bf0bddcb0d0915d4bf1e4322af56000b4ce85fd1`，与 r195 中 SDK 1.6.9
+  对同一输入的 BGL 完全一致，固定头和节表也同为 `0x3/0x13/0x32/0x35`、每节计数 `1`。
+  本轮未重复调用离线读取器；r195 对同一 BGL 身份已有 `bgl_file_rows=1`、`ils=2` 的完整读取记录。
+- `bglIndex.bout` 和 `layout.json` 的哈希随新构建时间变化，不能作为工具链语义差异；BGL 完全相同才是
+  本实验的判据。结论为 `alternate_sdk_1_5_3_rejected_for_current_profile`：两份本机已知 Package
+  Tool 均不能解释当前机场 BGL 的字节差异，参考验收仍为 `0/29`，且
+  `model_or_adapter_change_authorized=false`。
+- 后续不得仅因 1.5.3 仍在磁盘上重复该实验或切换正式构建器。下一项只允许获取新的同周期 424
+  直接来源、真实默认数据加载 SQL/错误文本，或此前未审计且可恢复、可哈希的第三份工具链/模板变量；
+  否则保持 r258 冻结结论、不可部署状态和既有字节收敛计划。
