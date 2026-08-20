@@ -540,6 +540,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="可选的候选 BGL XML；仅用于区分源航路段未投影和片段连通性差异",
     )
     source_gap.add_argument("--output", help="可选的本地来源缺口审计 JSON 输出路径")
+    source_gap.add_argument(
+        "--table",
+        action="append",
+        choices=("waypoint", "airway"),
+        help="可选的单表来源探针；重复传入可同时选择 waypoint 和 airway",
+    )
     endpoint_audit = sub.add_parser(
         "airway-endpoint-audit",
         help="只读审计因来源区域未决而无法投影的航路端点",
@@ -1838,6 +1844,7 @@ def main(argv: list[str] | None = None) -> int:
             load_naip(raw, include_terminal_documents=False),
             load_semantic_diff(Path(args.semantic_diff)),
             candidate_xml=_path(args.candidate_xml),
+            tables=tuple(args.table) if args.table else None,
         )
         if args.output:
             output = Path(args.output).expanduser().resolve()

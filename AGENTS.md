@@ -82,6 +82,13 @@ SHA-256：
 - 三份报告：`diagnostics/r331-zj-source-baseline-probe-20260820.json`、`diagnostics/r331-zj-drop-root-ndb-probe-20260820.json`、`diagnostics/r331-zj-drop-root-vor-probe-20260820.json`；SHA-256 依次为 `02607b0f6617eb2dbbf760d48fa6ffa8258f4733cd1cd6d49d8dfe3d01f87a54`、`ea57f0a17cbb17cc2bb7b0ef2dc69ec7308a0de8a0a9351eb3e1df81f69bf98e`、`b7f0795df45abbdbb2f1f06b9fe7a8959491b675cc420ea3aa24488e48870631`。
 - Package Tool 三次均生成 BGL；探针 Navdatareader 均未登记 BGL 来源，因此运行时语义仍为“未验证”。未修改 `NavModel`、正式 adapter 或候选。
 
+### r333 ZJ 来源缺口单表审计
+
+- 新增 `source-gap-audit --table waypoint|airway` 只读探针；默认全量行为不变，允许对完整的单表语义差分进行区域/目标隔离审计，避免用不完整历史差分绕过完整性门禁。
+- 使用完整的 `r74-vs-reference-single-ZJ-semantic-diff.json` 仅审计 `waypoint`：203 个参考缺失身份中，当前 424 `NavModel` 可证明机场作用域来源 102 个，另 101 个不在 `DESIGNATED_POINT.csv` 或 `RTE_SEG.csv` 端点集合；未取得直接来源前不得补写。
+- `r333-zj-source-inventory-20260821.json` 仅保存 424 源文件哈希、计数、模型集合哈希和授权结论；无参考导航 payload。ZJ 四机场终端航点为 `193`（ZJHK 85、ZJQH 33、ZJSY 61、ZJYX 14），全局 ZJ 航点为 `51`。
+- r136 全量差分和 r77 ZJ 差分因 waypoint 样本截断被门禁拒绝；r74 因缺少 airway 表仅可用于 waypoint 单表探针。模型/adapter 仍未授权修改。
+
 ## 已确认的通用契约
 
 - 官方包必须保留全球基线，区域覆盖独立生成。
@@ -125,6 +132,7 @@ SHA-256：
 - r329：424 到投影贡献度矩阵；当前最新阶段。
 - r330：`ZJ_airports.bgl` 脱敏记录边界审计和诊断报告确定性修复；确认 Section 差异不足以授权投影变更。
 - r331：ZJ 仅来源投影的根 `Vor/Ndb` 单变量 SDK 探针；确认 Section 触发关系，未授权正式投影。
+- r333：来源缺口审计增加单表探针；ZJ waypoint 203 条缺口中仅 102 条有当前 424 机场作用域来源，未授权模型或 adapter 修改。
 
 ## 维护协议
 

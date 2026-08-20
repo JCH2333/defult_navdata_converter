@@ -131,6 +131,23 @@ def test_source_gap_audit_rejects_partial_reader_scan(tmp_path: Path) -> None:
         audit_source_gaps(_model(tmp_path), report)
 
 
+def test_source_gap_audit_can_probe_only_a_complete_table(tmp_path: Path) -> None:
+    report = _semantic_report(
+        waypoint_samples=[
+            {"logical_key": {"ident": "DIRECT", "region": "ZB", "airport_ident": None}},
+        ],
+        airway_samples=[],
+    )
+    report["tables"]["airway"]["reference_only_samples_omitted"] = 1
+
+    result = audit_source_gaps(_model(tmp_path), report, tables=("waypoint",))
+
+    assert result["selected_tables"] == ["waypoint"]
+    assert result["waypoint_reference_only_total"] == 1
+    assert "airway_reference_only_total" not in result
+    assert "flight_airline_point_evidence" not in result
+
+
 def test_source_gap_audit_distinguishes_projected_source_pairs(
     tmp_path: Path,
 ) -> None:

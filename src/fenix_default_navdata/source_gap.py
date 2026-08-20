@@ -849,6 +849,8 @@ def audit_source_gaps(
     model: NavModel,
     semantic_report: Mapping[str, object],
     candidate_xml: Path | None = None,
+    *,
+    tables: tuple[str, ...] | None = None,
 ) -> dict[str, object]:
     """Classify redacted reference gaps using only normalized 424 records.
 
@@ -857,49 +859,78 @@ def audit_source_gaps(
     without becoming a reference-field backfill channel.
     """
     _require_complete_reader_output(semantic_report)
-    waypoint_keys = _reference_only_keys(
-        semantic_report, "waypoint", _WAYPOINT_FIELDS
-    )
-    airway_keys = _reference_only_keys(semantic_report, "airway", _AIRWAY_FIELDS)
-    waypoint_categories = _waypoint_categories(model, waypoint_keys)
+    selected_tables = tuple(tables or ("waypoint", "airway"))
+    allowed_tables = {"waypoint", "airway"}
+    if (
+        not selected_tables
+        or any(table not in allowed_tables for table in selected_tables)
+        or len(set(selected_tables)) != len(selected_tables)
+    ):
+        raise SourceGapAuditError("source-gap-audit 只支持不重复的 waypoint 和 airway 表")
+    waypoint_keys: tuple[dict[str, object], ...] = ()
+    airway_keys: tuple[dict[str, object], ...] = ()
+    waypoint_categories: dict[str, int] = {}
+    if "waypoint" in selected_tables:
+        waypoint_keys = _reference_only_keys(
+            semantic_report, "waypoint", _WAYPOINT_FIELDS
+        )
+        waypoint_categories = _waypoint_categories(model, waypoint_keys)
     candidate_pairs: set[tuple[str, str, str, str, str]] | None = None
     candidate_projection: dict[str, object] = {"available": False}
-    if candidate_xml is not None:
+    if "airway" in selected_tables and candidate_xml is not None:
         candidate_pairs, projection_report = _candidate_airway_pairs(candidate_xml)
         candidate_projection = {"available": True, **projection_report}
-    airway_categories = _airway_categories(
-        model,
-        airway_keys,
-        candidate_pairs=candidate_pairs,
-    )
-    airway_field_delta_coverage = _airway_field_delta_coverage(
-        model,
-        semantic_report,
-        candidate_pairs=candidate_pairs,
-    )
-    if sum(waypoint_categories.values()) != len(waypoint_keys):
+    airway_categories: dict[str, int] = {}
+    airway_field_delta_coverage: dict[str, object] = {}
+    if "airway" in selected_tables:
+        airway_keys = _reference_only_keys(
+            semantic_report, "airway", _AIRWAY_FIELDS
+        )
+        airway_categories = _airway_categories(
+            model,
+            airway_keys,
+            candidate_pairs=candidate_pairs,
+        )
+        airway_field_delta_coverage = _airway_field_delta_coverage(
+            model,
+            semantic_report,
+            candidate_pairs=candidate_pairs,
+        )
+    if "waypoint" in selected_tables and sum(waypoint_categories.values()) != len(waypoint_keys):
         raise SourceGapAuditError("航点来源分类未覆盖全部参考缺失逻辑身份")
-    if sum(airway_categories.values()) != len(airway_keys):
+    if "airway" in selected_tables and sum(airway_categories.values()) != len(airway_keys):
         raise SourceGapAuditError("航路来源分类未覆盖全部参考缺失逻辑身份")
-    return {
+    report: dict[str, object] = {
         "diagnostic": "source-gap-audit-v5",
         "read_only": True,
         "reference_values_redacted": True,
+        "selected_tables": list(selected_tables),
         "source": {
             "designated_points": len(model.waypoints),
             "airway_legs": len(model.airway_legs),
         },
-        "waypoint_reference_only_total": len(waypoint_keys),
-        "waypoint_source_categories": waypoint_categories,
-        "airway_reference_only_total": len(airway_keys),
-        "airway_source_categories": airway_categories,
-        "airway_field_delta_coverage": airway_field_delta_coverage,
         "candidate_airway_projection": candidate_projection,
-        "flight_airline_point_evidence": _flight_airline_point_evidence(
-            model, airway_keys
-        ),
-        "route_holding_evidence": _route_holding_evidence(model),
     }
+    if "waypoint" in selected_tables:
+        report.update(
+            {
+                "waypoint_reference_only_total": len(waypoint_keys),
+                "waypoint_source_categories": waypoint_categories,
+            }
+        )
+    if "airway" in selected_tables:
+        report.update(
+            {
+                "airway_reference_only_total": len(airway_keys),
+                "airway_source_categories": airway_categories,
+                "airway_field_delta_coverage": airway_field_delta_coverage,
+                "flight_airline_point_evidence": _flight_airline_point_evidence(
+                    model, airway_keys
+                ),
+                "route_holding_evidence": _route_holding_evidence(model),
+            }
+        )
+    return report
 
 
 def load_semantic_diff(path: Path) -> dict[str, object]:
