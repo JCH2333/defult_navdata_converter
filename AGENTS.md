@@ -89,6 +89,12 @@ SHA-256：
 - `r333-zj-source-inventory-20260821.json` 仅保存 424 源文件哈希、计数、模型集合哈希和授权结论；无参考导航 payload。ZJ 四机场终端航点为 `193`（ZJHK 85、ZJQH 33、ZJSY 61、ZJYX 14），全局 ZJ 航点为 `51`。
 - r136 全量差分和 r77 ZJ 差分因 waypoint 样本截断被门禁拒绝；r74 因缺少 airway 表仅可用于 waypoint 单表探针。模型/adapter 仍未授权修改。
 
+### r334 ZJ 终端坐标与 GeneralDoc 来源复核
+
+- 使用完整 r74 ZJ waypoint 差分和同周期 GeneralDoc ENR 4.4 缓存复核 203 条缺口：`general_doc_ident_absent=101`，`airport_scoped=102`，没有可直接投影的 GeneralDoc 关键点来源。报告：`r334-general-doc-keypoint-r74-zj-20260820.json`。
+- 使用同周期终端坐标页缓存复核：3 条机场作用域身份在坐标页出现，但均为 `terminal_single_airport`；99 条机场作用域身份不在坐标页；98 条全局身份不在坐标页。带 `--check-retention` 后 3 条均为 `airport_terminal_coordinate_not_retained`，仍只是调查信号，不授权提升或补写。报告：`r334-terminal-coordinate-r74-zj-20260820.json`、`r334-terminal-coordinate-r74-zj-retention-20260820.json`。
+- r334 未修改 `NavModel`、BGL adapter、候选或部署；ZJ 来源侧当前没有可安全提升的新增记录。
+
 ## 已确认的通用契约
 
 - 官方包必须保留全球基线，区域覆盖独立生成。
@@ -133,6 +139,7 @@ SHA-256：
 - r330：`ZJ_airports.bgl` 脱敏记录边界审计和诊断报告确定性修复；确认 Section 差异不足以授权投影变更。
 - r331：ZJ 仅来源投影的根 `Vor/Ndb` 单变量 SDK 探针；确认 Section 触发关系，未授权正式投影。
 - r333：来源缺口审计增加单表探针；ZJ waypoint 203 条缺口中仅 102 条有当前 424 机场作用域来源，未授权模型或 adapter 修改。
+- r334：ZJ GeneralDoc 与终端坐标页复核未发现可安全提升的来源；3 条坐标页命中均为单机场且当前未保留，未授权模型或 adapter 修改。
 
 ## 维护协议
 
