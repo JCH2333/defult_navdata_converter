@@ -3398,3 +3398,12 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
   - 维持数据源纯洁性：未引用任何外部非 424 派生数据，未修改候选包。
 - 结论：未分类程序拒绝边界严谨明晰，杜绝向默认 BGL 投影不兼容的专有程序变体。
 - r297 全量回归 `471 passed in 4.70s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
+
+## 2026-08-20 r298 10 个未决 IAP 进近主段源证据链与拒绝门禁 (iap_primary_source_audit.py) 复验
+
+- r298 对 `src/fenix_default_navdata/iap_primary_source_audit.py` 统筹的 10 个未决 IAP 进近程序展开证据链全量复验：
+  - 10 个缺口项定性：包含 2 个仅有过渡与复飞而无主进近程序（`ZBAD:R29R`, `ZYTL:R10`，定性为 `rejected_transition_and_missed_without_primary`），以及 8 个缺乏唯一主进近直接证据程序（`ZJSY:I08-X`, `ZSNJ:I25`, `ZSOF:R15`, `ZSOF:R33`, `ZSWY:I03`, `ZUAL:I15`, `ZYDD:R01`, `ZYDD:R01-Y`，定性为 `unresolved_direct_database_evidence_inconclusive`）；
+  - 严格拒绝原则：因当前 424 原始数据库或图表无法唯一解构出主进近航段，全部 10 项均被严格拒绝投影，杜绝任何推测性字段引入；
+  - 维持数据源纯洁性：未引用任何外部非 424 派生数据，未修改候选包。
+- 结论：IAP 进近缺口项审计闭环且边界清晰，证据链客观完备。
+- r298 全量回归 `471 passed in 4.43s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
