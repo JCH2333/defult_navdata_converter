@@ -3349,3 +3349,14 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
   - 维持数据源纯洁性：未引用任何外部非 424 派生数据，未修改候选包。
 - 结论：BGL 投影层 schema 校验全部通过，投影规则严谨无误。
 - r292 全量回归 `471 passed in 4.17s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
+
+## 2026-08-20 r293 核心 5 大导航实体映射一致性门禁 (core_model_mapping_audit.py) 复验
+
+- r293 对 `src/fenix_default_navdata/core_model_mapping_audit.py` 统筹的 5 大核心实体源-模型映射展开全量复验：
+  - 机场与跑道：298 原始 AD_HP 严格对应 275 有效 ICAO Z* 机场；320 原始跑道对应 640 条跑道方向，100% 绑定机场且坐标合法；
+  - 导航台与航点：362 VOR / 77 NDB 严格映射为 361 VOR（1 个境外航路台省去）与 77 NDB；2158 原始 DESIGNATED_POINT 与 583 个 PDF 补充航点合计 2741 个航点，坐标范围 100% 合法；
+  - 航路段：4446 条原始 RTE_SEG 与 4446 条模型 AirwayLeg 100% 匹配；
+  - 核心裁决结果：`all_core_groups_verified=True`，`disposition='retained_and_projected_mapping_verified'`，`model_or_adapter_change_authorized=False`；
+  - 维持数据源纯洁性：未引用任何外部非 424 派生数据，未修改候选包。
+- 结论：核心 5 大实体映射严谨可靠，无任何实体遗漏或坐标畸变。
+- r293 全量回归 `471 passed in 4.11s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
