@@ -2753,3 +2753,129 @@ Package Tool 构建、验证和部署门禁已具备。它不能与来源闭合�
 - 后续不得仅因 1.5.3 仍在磁盘上重复该实验或切换正式构建器。下一项只允许获取新的同周期 424
   直接来源、真实默认数据加载 SQL/错误文本，或此前未审计且可恢复、可哈希的第三份工具链/模板变量；
   否则保持 r258 冻结结论、不可部署状态和既有字节收敛计划。
+
+## 2026-08-20 r259 权威项目状态、进度统计与可复用转换计划
+
+本节从 r259 起是默认通用数据项目唯一的当前执行入口，优先于本文此前的状态数字、下一项任务和
+后续计划。每次开始、恢复和结束工作时，必须实际核对本节、工作区根 `AGENTS.md`、Git、冻结模型、
+r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游戏进程。文字与可复跑产物冲突时，以
+当前命令、标准 JSON 重读、模型/工具哈希和测试结果为准，并在同一轮同步修正两份说明。
+
+### 1. 当前可复核状态
+
+- 内容边界不变：只有 `424源数据\2608\2608` 的同周期 CSV/PDF 可以提供导航内容。官方
+  `navigraph-nav-base` 与 `navigraph-nav-jepp` 只提供目标模板和加载契约；`Default navdata
+  2608R1` 只读用于受控验收；Fenix、参考 BGL/SQLite、参考坐标、哈希、索引、文件大小与包元数据
+  禁止作为内容输入。
+- 冻结 `NavModel` 为 `output\intermediate-2608-r187-navaid-label-replay.json.gz`，SHA-256：
+  `7cec24bd4a57545d39aab037abe4125c763ad12f364bd5f8f0073b0e050fdb4b`。r188/r189 在相同
+  冻结模型下自重放为 `29/29`；受控参考字节验收仍为 `0/29`，`deployable=false`。
+- IAP 来源卡已闭合 `32/40`；剩余 `8` 张均无可唯一投影的主进近直接来源，保持
+  `projection_allowed=false`。已完成的 PDF、OCR 和 SDK 否决实验不得重复，除非出现新的同周期
+  直接来源、真实加载证据或可哈希工具链变量。
+- r259 真实只读报告为
+  `diagnostics\r259-full-root-csv-source-model-completeness-20260820.json`，SHA-256：
+  `2f45a63174f344666b9bcfa49629f3933f87916a828ab69f8925a597c4a71499`。Python 标准库
+  `json.loads` 已成功重读。2608 根目录有 `33` 个 CSV，现有声明组实际覆盖 `16` 个文件、`8/8`
+  组均完成来源审计；剩余 `17` 个 CSV 已被明确列为未分类，不能再被静默视为不在来源范围。
+- r259 只扩展了来源完整性审计及其测试：报告不读取参考导航 payload、Fenix、OCR 缓存、候选或 SDK
+  产物，且 `model_or_adapter_change_authorized=false`。它不改变冻结模型、BGL adapter、候选、
+  Community、部署或参考 `0/29` 状态。
+- 当前未发现 `FlightSimulator2024.exe`，但游戏关闭不构成部署授权。Git 必须每轮现场读取；本轮
+  开始时 `main` 比 `origin/main` 领先 `82` 个提交，普通推送仍受本机代理
+  `127.0.0.1:7897` 未监听阻塞。
+
+### 2. 分层进度统计
+
+下表是独立门槛，不得相加为“总体完成百分比”：
+
+| 轨道 | 当前量化状态 | 下一阶段出口 |
+| --- | --- | --- |
+| 工程与可复用管线 | 约 `45%`；已有 `NavModel`、profile/adapter/validator/deployer、CLI/GUI、冻结/重放和来源审计骨架 | 所有根 CSV 有明确处置，新增目标可复用相同输入锁定、审计和验证接口 |
+| 根 CSV 来源清单 | `16/33` 已声明；`17/33` 待分类；声明组 `8/8` 已审计 | 每个根 CSV 都记录表头、行数、关系键、内容语义、目标范围、处置及复审条件 |
+| IAP 来源卡 | `32/40` 已闭合；`8/40` 保守拒绝 | 仅新增直接同周期证据才可重新打开对应卡；不是以“卡数清零”为目标 |
+| 候选确定性 | r188/r189 自重放 `29/29` | 每次获准变更后双全新目录仍保持 `29/29` |
+| 参考字节收敛 | `0/29` | 只有实际增加参考一致文件数才算推进，最终必须 `29/29` |
+| 恢复、部署、实机、Release | 均为 `0%` | 依次完成备份恢复演练、受控部署、用户实机验证；实机通过前禁止正式 Release |
+
+### 3. r260 起的工作队列和准入规则
+
+#### 阶段 0：完整根 CSV 分类审计
+
+1. 将 r259 的 `17` 个未分类表纳入一个可复用的表级注册表；每项必须输出 CSV 表头、编码、行数、
+   主键/外键或关系键、与 `NavModel` 的候选关系、可表达的目标对象、来源证据等级、处置、拒绝原因
+   和重新审计门槛。审计只读 424 与冻结模型，禁止读取参考 payload、Fenix、候选和 OCR。
+2. 稳定优先顺序是：
+   `ROUTE_HOLDING.csv`；
+   `ROUTE_RESTRICT.csv` 与 `ROUTE_RESTRICT_RTE.csv`；
+   `GENERAL_DOC.csv`；
+   `CONTROLLED/RESTRICTED/SPECIAL_AIRSPACE` 及各自 `*_BORDER_VERTEX.csv`、`*_CLASS.csv`；
+   `AIRSPACE_CLASS.csv`；
+   `FLIGHT_AIRLINE.csv`、`FLIGHT_AIRLINE_POINT.csv`；
+   `SYSTEMSETTING.csv`。
+   前三类可能与已有 `Holding`、航路约束或文档证据能力相关，必须先建立关系证据；空域类先确认目标
+   BGL 是否有已证实的表达与加载契约；航班/系统类预计超出导航目标，但仍须以字段和用途给出明确拒绝。
+3. 每张表只允许形成以下之一：`retained_and_projected`、`source_evidence_only`、
+   `rejected_by_target_scope`、`rejected_by_source_ambiguity` 或
+   `source_complete_current_target_rejected`。没有唯一对象身份、坐标/单位、目标表达或加载契约时，必须
+   拒绝或只保留证据，禁止“先接入模型再观察 BGL”。
+4. r260 的唯一任务是 `ROUTE_HOLDING.csv` 的只读关系审计。它必须证明每条保持记录与机场、程序、
+   航点/航路、跑道或终端页的精确关系，并盘点现有 `NavModel.Holding` 与 SDK 表达能力；未完成前不改
+   模型、不构建候选、不重复 OCR，也不覆盖 Community。
+
+#### 阶段 A：获准来源进入模型
+
+1. 只有阶段 0 得到 `projection_allowed=true` 的来源规则才可开始代码变更。先新增最小正反 fixture，
+   覆盖身份、单位、空值、排序、引用完整性和拒绝路径；再同时实现来源审计、规范化、模型审计、目标
+   adapter 和 validator。不可无损表达的字段必须有显式降级与计数。
+2. 每次模型变化都须生成版本化模型和输入 manifest，运行严格模型重放审计。白名单按对象身份、来源
+   行/页、字段路径、降级计数和预期文件角色登记；任何未白名单变化、空引用、字符串溢出或
+   NULL/default 违规均阻止构建。
+3. 参考文件只能在阶段 C 的验收中比较 SHA-256 和结构摘要，不能反向指导源对象、坐标、程序、航路
+   或 BGL 内容。
+
+#### 阶段 B：目标表达与真实加载契约
+
+1. 优先补充默认数据真实加载路径、WASM/DLL SQL、错误文本或可审计日志。它们仅说明模板、覆盖和读取
+   契约，绝不提供中国内容。
+2. 仅对阶段 A 授权对象，或发现新的可恢复且可哈希工具链变量时，建立纯 ASCII 的最小单变量 SDK
+   探针。固定输入、模板、项目定义、Package Tool 和等待策略；一次只改一个 XML 表达。
+3. 每个探针必须保存输入与工具哈希、XSD/构建结果、BGL 固定头/节表、标准 JSON 重读、影响文件角色、
+   自重放和参考 `x/29`。参考一致数未增加即永久登记为当前 profile 否决，不能接入正式 adapter。
+
+#### 阶段 C：候选、收敛与字节级验收
+
+1. 获准变更先在隔离目录生成基线/变更候选，运行完整 `validate`、来源卡、模型审计、JSON 重读、
+   BGL/包元数据审计和 `file-convergence-audit`。变化必须只影响阶段 0 预登记的文件角色。
+2. 对同一冻结模型使用两个全新 ASCII 路径独立构建。先要求自重放 `29/29`，再对两个候选分别进行
+   参考比较；只有参考一致数从 `0/29` 实际增长才记为字节收敛推进。
+3. `layout.json`、`bglIndex.bout`、`manifest.json` 和 `ContentHistory.json` 只能由正常构建链派生。
+   禁止手工改写时间、文件大小、索引或包元数据来追逐参考哈希。
+
+#### 阶段 D：部署与实机验证
+
+1. 只有参考 `29/29`、两次干净构建均 `29/29`、完整验证通过且生成完整树 SHA-256 清单后，才可进入
+   部署预演。
+2. 先确认游戏退出；为 Community 内两个覆盖包、布局、清单、索引和 ContentHistory 建立时间戳备份；
+   在非 Community 位置完成恢复演练并验证恢复哈希，才允许 GUI/CLI 共用 deployer 覆盖。
+3. 部署后重新校验树哈希与 validator。用户实机验证 `ZBCF`、`ZUNZ`、`ZUUU` 的机场输入、跑道、
+   SID、STAR、IAP、航路/航点及退出飞行/模拟器稳定性。通过前只能测试版，禁止正式 GitHub Release。
+
+### 4. 面向未来 AIRAC 与目标格式的固定管线
+
+固定主链：
+
+`lock-inputs -> ingest-424 -> evidence-audit -> normalize-model -> model-audit -> project-target -> build-target -> validate-target -> diff-and-audit -> stage-backup-deploy`
+
+1. `lock-inputs` 冻结每期 CSV/PDF、官方模板、工具链和 OCR 运行时的版本与 SHA-256；
+   `ingest-424` 首先执行根 CSV 分类注册表，`normalize-model` 只输出带 `SourceRef` 的版本化
+   `NavModel`，不得掺入目标专用猜测。
+2. 每个新目标格式都必须独立实现 `profile/adapter/validator/deployer`，登记官方基线、真实加载路径/
+   SQL、schema 或文件契约、字段单位、NULL/default、物理排序、周期元数据、降级、最小 fixture、
+   运行时模拟器、GUI/CLI 参数、备份恢复和实机清单。
+3. 适配器只消费 `NavModel` 与目标模板契约。默认 BGL 的探针结论、未闭合假设和参考差异不迁移到
+   PMDG、iFly、TFDI、FSL/FSLabs 或其他目标；每个 profile 必须独立取证和验收。
+4. 每轮结束同步两份 `AGENTS.md`：唯一假设/变量、读写边界、输入和工具哈希、审计/测试、模型和候选
+   差异、来源卡、重放、参考 `x/29`、部署状态、否决结论、下一项唯一任务及 Git 推送结果。每次代码或
+   仓库文档改动后运行 `pytest -q`、`git diff --check`、精确暂存、单主题提交和普通 `git push`；
+   网络不可用时保留本地提交，恢复后用 `git ls-remote --heads origin main` 复核，禁止强推。

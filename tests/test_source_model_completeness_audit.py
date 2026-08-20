@@ -43,6 +43,7 @@ def test_audit_keeps_source_boundaries_and_marks_historically_rejected_displacem
         "RWY_ID,TXT_DESIG,VAL_TRUE_BRG,VAL_ELEV,VAL_THR_DISPLACE\n"
         "R1,18,180,10,300\n",
     )
+    _write(root / "UNCLASSIFIED.csv", "CODE_ID\ncandidate-after-review\n")
 
     report = audit_source_model_completeness(root, _model(root))
 
@@ -70,6 +71,9 @@ def test_audit_keeps_source_boundaries_and_marks_historically_rejected_displacem
     assert report["summary"]["source_complete_current_target_rejections"] == [
         "runway_threshold_displacement",
     ]
+    assert report["summary"]["root_csv_file_total"] == 4
+    assert report["summary"]["unclassified_csv_files"] == ["UNCLASSIFIED.csv"]
+    assert report["summary"]["unclassified_csv_file_total"] == 1
     assert report["summary"]["model_or_adapter_change_authorized"] is False
 
 

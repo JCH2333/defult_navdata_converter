@@ -316,7 +316,9 @@ def audit_source_model_completeness(
     The audit deliberately does not inspect reference navigation payloads,
     Fenix data, OCR caches, candidates, or SDK output.  Its result can only
     identify a source-complete group for a later isolated contract probe; it
-    never authorizes a model or adapter change by itself.
+    never authorizes a model or adapter change by itself. Root CSV files that
+    are not assigned to a declared group are reported explicitly rather than
+    being silently treated as absent content.
     """
 
     root = raw_root.expanduser().resolve()
@@ -324,6 +326,8 @@ def audit_source_model_completeness(
         raise SourceModelCompletenessAuditError(f"424 原始目录不存在: {root}")
     groups = _RETAINED_GROUPS + _AUDIT_ONLY_GROUPS + _UNMODELED_GROUPS
     filenames = sorted({filename for group in groups for filename in group.source_files})
+    root_csv_files = sorted(path.name for path in root.glob("*.csv"))
+    unclassified_csv_files = sorted(set(root_csv_files) - set(filenames))
     source_rows = {
         filename: _rows(root / filename)
         for filename in filenames
@@ -368,12 +372,16 @@ def audit_source_model_completeness(
             "raw_root": str(root),
             "model_root": str(model.root),
             "csv_files_checked": filenames,
+            "root_csv_files": root_csv_files,
         },
         "summary": {
             "declared_source_group_total": len(groups),
             "source_complete_group_total": sum(
                 bool(item["source_complete"]) for item in reports.values()
             ),
+            "root_csv_file_total": len(root_csv_files),
+            "unclassified_csv_files": unclassified_csv_files,
+            "unclassified_csv_file_total": len(unclassified_csv_files),
             "dispositions": dict(sorted(disposition_counts.items())),
             "source_complete_sdk_probe_candidates": source_complete_candidates,
             "source_complete_current_target_rejections": source_complete_rejections,
