@@ -3360,3 +3360,14 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
   - 维持数据源纯洁性：未引用任何外部非 424 派生数据，未修改候选包。
 - 结论：核心 5 大实体映射严谨可靠，无任何实体遗漏或坐标畸变。
 - r293 全量回归 `471 passed in 4.11s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
+
+## 2026-08-20 r294 终端程序与图表映射审计门禁 (procedure_source_audit.py) 复验
+
+- r294 对 `src/fenix_default_navdata/procedure_source_audit.py` 统筹的终端程序段与图表对应关系展开全量复验：
+  - 核心航段与程序分布：10409 个程序段涵盖进场 3530、离场 3949、进近 1505、复飞 721 与过渡 691，共覆盖 268 个机场；
+  - 航段类型统计：53268 条航段中 TF 35525、IF 7596、DF 3621、CF 2955、RF 2085、CA 1430 等；
+  - 来源缺口程序裁决：严格拒绝 10 个缺乏唯一主进近的图表程序（`ZBAD:R29R`, `ZJSY:I08-X`, `ZSNJ:I25`, `ZSOF:R15`, `ZSOF:R33`, `ZSWY:I03`, `ZUAL:I15`, `ZYDD:R01`, `ZYDD:R01-Y`, `ZYTL:R10`），杜绝无依据伪造；
+  - 核心裁决结果：`disposition='terminal_procedures_evidence_verified'`，`model_or_adapter_change_authorized=False`；
+  - 维持数据源纯洁性：未引用任何外部非 424 派生数据，未修改候选包。
+- 结论：终端程序映射与图表对应关系完全闭环，拒绝边界严密合规。
+- r294 全量回归 `471 passed in 4.69s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
