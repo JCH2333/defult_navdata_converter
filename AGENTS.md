@@ -41,7 +41,7 @@
 - r338 模型计数与冻结模型一致；V111/V162 四条端点区域恢复
 - 与参考默认数据字节一致：`0/29`
 - `deployable=false`
-- 当前完整回归：`500 passed`
+- 当前完整回归：`502 passed`
 - 当前未部署 Community、未实机验证、未创建 Release。
 
 ### r338-r343 阶段结论
@@ -113,6 +113,13 @@
 - 冻结 r187 模型实际运行：13 张卡、`target_mapping_allowed_total=0`、13 条均为 `rejected_missing_direct_label_anchor`；未读取参考记录/Fenix，未修改模型或投影。
 - 新增回归后全量测试为 `502 passed`。该管线只改善来源审计复用性，不授权 `RNP/CC/EO` 标签映射，不改变候选或 `0/29` 字节状态。
 - 证据：`diagnostics/r353-unclassified-procedure-cards.json`；代码：`src/fenix_default_navdata/unclassified_procedure_card_audit.py`、`src/fenix_default_navdata/cli.py`。
+
+### r354-r356 原始数据重导出与模型重放（2026-08-20）
+
+- 使用 `424源数据\2608\2608` 重导出；首次未传通用文档缓存导致模型少 489 个航点、138 条航路设施证据和 434 条拒绝记录，已通过正确的 `general-doc-ocr-cache-2608r1` 根目录重跑纠正。
+- r356 模型计数与冻结 r187 完全一致；模型重放仅有 33 个 `RTE_SEG.csv` 端点区域字段差异，均为当前来源侧恢复的 `ZB/ZH/ZU`，不修改投影逻辑。证据：`diagnostics/r354-model-replay-audit.json`、`diagnostics/r356-model-replay-audit.json`。
+- r356 候选通过本地验证；与 r347 候选相比参考范围 `29` 个文件中 `28` 个字节相同，仅 `00_enroute.bgl` 受上述 33 条区域差异影响。对 `Default navdata 2608R1` 仍为 `0/29`，`deployable=false`，未部署、未实机验证、不得 Release。证据：`diagnostics/r356-vs-r347-file-convergence.json`。
+- 可复用重放命令：`export-model --raw ... --general-doc-cache ...`，随后 `build --model ... --baseline-db ...`、`validate`、`file-convergence-audit`。中间模型仍是跨目标格式唯一内容边界，缓存和参考包只作证据输入。
 
 ## 已确认的通用契约
 
