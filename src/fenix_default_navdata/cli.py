@@ -68,6 +68,7 @@ from .sdk_bgl_expression_matrix import (
     audit_sdk_bgl_expression_matrix,
     write_sdk_bgl_expression_matrix,
 )
+from .sdk_toolchain_audit import audit_sdk_toolchains, write_sdk_toolchain_audit
 from .airport_source_inventory import (
     build_airport_source_inventory,
     write_airport_source_inventory,
@@ -822,6 +823,18 @@ def build_parser() -> argparse.ArgumentParser:
     sdk_matrix.add_argument("--connection-probe", required=True)
     sdk_matrix.add_argument("--child-order-probe", required=True)
     sdk_matrix.add_argument("--output", required=True)
+    sdk_toolchain = sub.add_parser(
+        "sdk-toolchain-audit",
+        help="只读比较 SDK Package Tool 指纹与历史探针摘要",
+    )
+    sdk_toolchain.add_argument(
+        "--sdk-root",
+        action="append",
+        required=True,
+        help="SDK 根目录，可重复指定",
+    )
+    sdk_toolchain.add_argument("--historical-evidence")
+    sdk_toolchain.add_argument("--output", required=True)
     terminal_coordinate = sub.add_parser(
         "terminal-coordinate-audit",
         help="只读分类参考缺失航点在 424 终端坐标页中的来源覆盖",
@@ -1879,6 +1892,16 @@ def main(argv: list[str] | None = None) -> int:
         output = Path(args.output).expanduser().resolve()
         report["output"] = str(output)
         write_sdk_bgl_expression_matrix(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "sdk-toolchain-audit":
+        report = audit_sdk_toolchains(
+            [Path(value) for value in args.sdk_root],
+            historical_evidence=_path(args.historical_evidence),
+        )
+        output = Path(args.output).expanduser().resolve()
+        report["output"] = str(output)
+        write_sdk_toolchain_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "terminal-coordinate-audit":

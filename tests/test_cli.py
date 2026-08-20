@@ -126,6 +126,41 @@ def test_ocr_runtime_probe_writes_read_only_report(tmp_path: Path, monkeypatch) 
     }
 
 
+def test_sdk_toolchain_audit_writes_requested_report(tmp_path: Path, monkeypatch) -> None:
+    received: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        cli,
+        "audit_sdk_toolchains",
+        lambda roots, **kwargs: received.update(roots=roots, **kwargs)
+        or {"diagnostic": "sdk-toolchain-audit-v1"},
+    )
+    monkeypatch.setattr(
+        cli,
+        "write_sdk_toolchain_audit",
+        lambda path, report: received.update(output=path, report=report),
+    )
+
+    result = cli.main([
+        "sdk-toolchain-audit",
+        "--sdk-root", "sdk-a",
+        "--sdk-root", "sdk-b",
+        "--historical-evidence", "historical.json",
+        "--output", str(tmp_path / "toolchain.json"),
+    ])
+
+    assert result == 0
+    assert received == {
+        "roots": [Path("sdk-a"), Path("sdk-b")],
+        "historical_evidence": Path("historical.json"),
+        "output": (tmp_path / "toolchain.json").resolve(),
+        "report": {
+            "diagnostic": "sdk-toolchain-audit-v1",
+            "output": str((tmp_path / "toolchain.json").resolve()),
+        },
+    }
+
+
 def test_route_fragment_probe_passes_sdk_and_reader_options(monkeypatch) -> None:
     received: dict[str, object] = {}
     compiler = CompilerInfo(Path("fspackagetool.exe"), "PackageTool", "test")

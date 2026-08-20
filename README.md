@@ -106,6 +106,11 @@ python -m fenix_default_navdata.cli airway-coordinate-precision-probe `
 python -m fenix_default_navdata.cli airway-coordinate-precision-audit `
   --raw "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
   --output diagnostics\airway-coordinate-precision-audit.json
+python -m fenix_default_navdata.cli sdk-toolchain-audit `
+  --sdk-root "C:\MSFS 2024 SDK" `
+  --sdk-root "F:\games\MSF tools\MSFS2024_SDK_Core_Installer_1.5.3\SDK" `
+  --historical-evidence diagnostics\r246-historical-sdk-probe-evidence-20260819.json `
+  --output diagnostics\sdk-toolchain-audit.json
 python -m fenix_default_navdata.cli source-gap-audit `
   --raw "F:\我的世界动画\AI项目\导航数据\424源数据\2608\2608" `
   --semantic-diff diagnostics\navdatareader\semantic-diff.json `

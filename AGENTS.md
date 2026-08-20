@@ -3502,3 +3502,22 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
   官方模板文件即可达到字节一致”的路径。
 - 当前字节验收仍为 `0/29`，`deployable=false`。下一步需要参考生成链、真实加载契约
   或可复现的目标表达证据；在此之前不修改 BGL adapter，不手工替换二进制文件。
+
+## 2026-08-20 r307 SDK 工具链指纹与历史探针标准化
+
+- 新增只读 `sdk-toolchain-audit`，记录 SDK `version.txt`、`fspackagetool.exe`
+  大小与 SHA-256，并摘要已保存的历史 SDK 探针；不读取参考 BGL 导航记录，不修改
+  `NavModel`、adapter、候选或 Community。报告：
+  `diagnostics\r307-sdk-toolchain-audit-20260820.json`。
+- 当前本机可复核两套工具链：SDK `1.6.9` 的 Package Tool SHA-256 为
+  `EDA75A7D187FB45EDE71B59DD3189E614880F44642294600AA1AEBDD781A6F51`；
+  SDK `1.5.3` 的 Package Tool SHA-256 为
+  `34C4D1D8BA46ED9B1F60BC4626649AD9FE582D026C3023BAD884BE0A85A93970`。
+- 工具链哈希不同不等于目标 BGL 表达契约不同。r194/r195/r215 历史探针均完整读取，
+  但只证明跑道表面、阈值位移或 `DeleteAirport` 的尺寸/覆盖契约影响，未证明可由
+  424 来源稳定产生参考机场缺失的 `0x17/0x33` 节。审计裁决为
+  `toolchain_difference_without_target_expression_evidence`，
+  `adapter_change_authorized=false`。
+- 当前参考一致性仍为 `0/29`，`deployable=false`；下一步必须取得可复现的真实
+  生成/加载契约或基于 424 直接事实的最小 XML 正反例，不能仅因 SDK 版本不同而重开
+  已否决的投影方向。
