@@ -2717,3 +2717,13 @@ Package Tool 构建、验证和部署门禁已具备。它不能与来源闭合�
 当前下一项不是新的内容修改或重复 SDK 探针。r258 仅在发现阶段 0 所列三类新证据之一后启动：
 若是新 424 直接来源，走阶段 A；若是真实加载契约，走阶段 B；若是可恢复工具链变量，先建立
 工具链清单后再走阶段 B。未满足准入条件时保持 r257 冻结结论和不可部署状态。
+
+### 6. r257 验证与仓库状态
+
+- r257 的针对性回归为 `7 passed`，完整回归为 `460 passed in 4.09s`，`git diff --check` 通过；
+  本轮未生成候选、未修改冻结模型、未读取参考导航 payload、未覆盖 Community，且未发现
+  `FlightSimulator2024.exe` 进程。
+- 审计代码、回归测试和本文件的计划更新已提交为 `d7e9170`
+  （`docs: reconcile r257 conversion plan`）。2026-08-19 的普通 `git push` 失败：
+  `Failed to connect to 127.0.0.1 port 7897 after 2110 ms`。未强推、未重写历史；网络恢复后从
+  当前 `main` 普通推送，并执行 `git ls-remote --heads origin main` 复核远端提交。
