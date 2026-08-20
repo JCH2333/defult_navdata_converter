@@ -52,6 +52,13 @@
 - r343 将终端航点移到 `FSData` 根级，并按区域/标识/坐标确定性去重；48 个 BGL 测试、500 个全量测试通过。收敛审计仍为参考 `0/29`，21 个目标 BGL 全部不同；该实验不能授权复制参考 Section 或 payload。
 - 证据：`diagnostics/r338-*`、`diagnostics/r341-*`、`diagnostics/r342-probe-zjhk-*`、`diagnostics/r343-file-convergence.json`、`diagnostics/r343-bgl-binary-diff.json`。原始运行日志不入本文档。
 
+### r344 当前结论
+
+- r343 后复核确认：参考 BGL 的 `0x13/0x17/0x22` Section 数量是 SDK 空间分桶/布局统计，不能当作机场或导航记录数量；不得据此复制参考记录或扩大模型范围。
+- r339 的 40 张默认缺口卡仍全部为 `blocked/rejected`：航路端点区域 12、航点区域 5、IAP 主进近 10、未分类程序 13；本轮没有新的 424 直接证据授权投影。
+- 当前冻结模型与候选仍保持 `0/29` 字节一致、`deployable=false`。下一阶段只接受新增的同周期 424 直接证据，并继续使用“来源缺口审计 -> 最小测试 -> 双构建 -> 差分”的复用管线。
+- 证据：`diagnostics/r339-default-gap-cards-20260820.json`、`diagnostics/r340-source-model-completeness-20260820.json`、`diagnostics/r343-bgl-binary-diff.json`。本结论不改变模型、adapter 或候选。
+
 ## 已确认的通用契约
 
 - 官方包必须保留全球基线，区域覆盖独立生成。
