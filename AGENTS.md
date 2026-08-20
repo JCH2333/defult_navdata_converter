@@ -3602,3 +3602,21 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
 - 裁决为 `runtime_contract_evidence_only`、`default_bgl_projection_authorized=false`：
   其他机模的 SQLite/JSON 加载契约只能进入各自 profile 和未来复用证据层，不能
   反推默认 BGL 记录或授权复制参考数据。默认 BGL 参考一致性仍为 `0/29`。
+
+## 2026-08-20 r314 MSFS 核心包类型与覆盖链复核
+
+- 只读检查 `F:\SteamLibrary\steamapps\common\MSFS2024`：未发现独立的默认导航
+  编译器、索引生成器或额外导航生成工具；主程序
+  `FlightSimulator2024.exe`（SHA-256：
+  `83b35917434528f03c1e01fec00c8be9bc4997f761da46602e93f333ef1a2b20`）
+  只暴露 BGL 编译/读取组件和包类型字符串。
+- MSFS 核心明确包含 `GENERIC_NAVDATA`、`CUSTOM_NAVDATA_PATCH`、
+  `CUSTOM_AIRPORT_PATCH` 等包类型。当前候选与 `Default navdata 2608R1`
+  参考包的中国覆盖链均使用 `CUSTOM_NAVDATA_PATCH` -> `CUSTOM_AIRPORT_PATCH`，
+  依赖顺序和版本一致。
+- `diagnostics\r314-package-order-contract-audit-20260820.json` 的包级复核显示，
+  当前差异集中在 BGL、`bglIndex.bout` 和 ContentHistory 内容；包覆盖顺序不是
+  当前字节阻塞。审计不能把这些差异反推为导航内容或改写投影规则。
+- 裁决：`package_order_contract_verified`、`adapter_change_authorized=false`；
+  参考一致性仍为 `0/29`、`deployable=false`。下一准入条件仍是取得精确的
+  默认 BGL 生成表达/来源证据，而不是继续调整 manifest 顺序。
