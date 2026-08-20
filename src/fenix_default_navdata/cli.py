@@ -6,6 +6,10 @@ from .route_restrict_source_audit import (
     audit_route_restrict_source,
     write_route_restrict_source_audit,
 )
+from .procedure_source_audit import (
+    audit_procedure_source_model,
+    write_procedure_source_audit,
+)
 from .core_model_mapping_audit import (
     audit_core_model_mapping,
     write_core_model_mapping_audit,
@@ -469,6 +473,20 @@ def build_parser() -> argparse.ArgumentParser:
         "--output",
         required=True,
         help="本地来源完整性库存 JSON 输出路径",
+    )
+    proc_source = sub.add_parser(
+        "procedure-source-audit",
+        help="只读复核 424 终端程序来源数据库与图表映射关系",
+    )
+    proc_source.add_argument(
+        "--model",
+        required=True,
+        help="可复用 NavModel 快照（JSON 或 JSON.GZ）",
+    )
+    proc_source.add_argument(
+        "--output",
+        required=True,
+        help="本地终端程序来源审计 JSON 输出路径",
     )
     core_mapping = sub.add_parser(
         "core-model-mapping-audit",
@@ -1579,6 +1597,15 @@ def main(argv: list[str] | None = None) -> int:
         output = Path(args.output).expanduser().resolve()
         report["output"] = str(output)
         write_source_model_completeness_audit(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "procedure-source-audit":
+        report = audit_procedure_source_model(
+            load_model(Path(args.model)),
+        )
+        output = Path(args.output).expanduser().resolve()
+        report["output"] = str(output)
+        write_procedure_source_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "core-model-mapping-audit":
