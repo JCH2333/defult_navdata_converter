@@ -3772,3 +3772,20 @@ o_unique_primary 阻断。
 - **验证结论**：
   - 56 项 BGL 序列化与投影测试全部通过，全量 489 项测试保持通过；
   - 短期计划（r318 ~ r321）全部三个阶段执行完毕，确立了航路端点推导、未分类程序阻断、单 BGL 二进制差异以及 XML 序列化规范，为后续达成字节级一致与跨格式转换奠定了坚实可复用的管线基础。
+
+## 2026-08-21 r322 统一中间模型 (NavModel) 解耦与可复用管线审计
+
+- **审计对象与范围**：
+  - 审查 enix_default_navdata/model.py、source.py 与 model_io.py 中规范化中间模型定义、序列化/反序列化（JSON/GZIP）及跨格式适配解耦度。
+- **确立的统一中间模型架构与复用准则**：
+  1. **实体解耦与独立性**：
+     - NavModel 作为统一中间层，完整覆盖机场（Airport/Runway）、导航台（VOR/NDB）、航路点（Waypoint）、航路（AirwayLeg）、终端程序（ProcedureSegment/ProcedureChart）等核心实体；
+     - NavModel 不绑定任何特定机模（如 Fenix/PMDG/ToLiss）或输出文件格式（BGL/SQLite/JSON），仅保存标准化的物理与逻辑导航语义；
+  2. **可重复构建与模型重放（Model Replay）机制**：
+     - 支持标准 JSON 与 GZIP 压缩的模型持久化与精确比对，确保同一 424 输入产生完全一致的中间模型散列值；
+  3. **面向未来多机模扩展的转换管线标准**：
+     - 固定转换流水线：424 Ingest -> Normalize to NavModel -> Validate Model -> Target Adapter Projection -> Target Format Compiler -> Contract Validation；
+     - 各目标机模适配器仅依赖 NavModel 进行目标格式投影，不在适配器内部重复解析 424 原始 CSV 或 BGL 二进制。
+- **验证结论**：
+  - 核心模型映射与完整性测试全量通过（489 passed）；
+  - 中间模型解耦度与可复用管线标准已固化，为未来拓展其他机模转换提供了规范化底座。
