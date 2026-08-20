@@ -3331,3 +3331,12 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
   - 维持数据源纯洁性：严格遵循单向证据链，未引入任何外部推测数据，未修改候选包。
 - 结论：424 原始数据抽取层架构健壮，具备完全的工程确定性与跨机模复用能力。
 - r290 全量回归 `471 passed in 4.16s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
+
+## 2026-08-20 r291 424 来源-模型综合主门禁 (source_model_master_audit.py) 审计
+
+- r291 对 `src/fenix_default_navdata/source_model_master_audit.py` 统筹的 8 个子审计逻辑（完整性、航路保持/限制、通用文档、空域、航司系统、核心实体、终端程序）展开编排契约审计：
+  - 模块化聚合：将 33 个 CSV 分类（0 未分类）、5 大核心实体映射（机场 275、跑道 640、导航台 438、航点 2741、航路 4446）及 10409 程序段/53268 航段进行多维度协同校验；
+  - 核心裁决结果：`master_pipeline_verified=True`，`disposition='source_model_master_pipeline_verified'`，`model_or_adapter_change_authorized=False`；
+  - 维持数据源纯洁性：未引用任何外部非 424 派生数据，未修改候选包。
+- 结论：来源到中间模型的综合门禁架构清晰、校验严谨，确保了底层数据的绝对可靠性。
+- r291 全量回归 `471 passed in 4.06s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
