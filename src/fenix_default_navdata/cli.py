@@ -6,6 +6,10 @@ from .route_restrict_source_audit import (
     audit_route_restrict_source,
     write_route_restrict_source_audit,
 )
+from .airspace_source_audit import (
+    audit_airspace_source,
+    write_airspace_source_audit,
+)
 from .general_doc_source_audit import (
     audit_general_doc_source,
     write_general_doc_source_audit,
@@ -457,6 +461,25 @@ def build_parser() -> argparse.ArgumentParser:
         "--output",
         required=True,
         help="本地来源完整性库存 JSON 输出路径",
+    )
+    airspace_source = sub.add_parser(
+        "airspace-source-audit",
+        help="只读复核 424 管制区、限制区与特别空域关系",
+    )
+    airspace_source.add_argument(
+        "--raw-root",
+        required=True,
+        help="2608 原始 CSV/PDF 目录",
+    )
+    airspace_source.add_argument(
+        "--model",
+        required=True,
+        help="可复用 NavModel 快照（JSON 或 JSON.GZ）",
+    )
+    airspace_source.add_argument(
+        "--output",
+        required=True,
+        help="本地空域关系审计 JSON 输出路径",
     )
     general_doc_source = sub.add_parser(
         "general-doc-source-audit",
@@ -1510,6 +1533,16 @@ def main(argv: list[str] | None = None) -> int:
         output = Path(args.output).expanduser().resolve()
         report["output"] = str(output)
         write_source_model_completeness_audit(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "airspace-source-audit":
+        report = audit_airspace_source(
+            Path(args.raw_root),
+            load_model(Path(args.model)),
+        )
+        output = Path(args.output).expanduser().resolve()
+        report["output"] = str(output)
+        write_airspace_source_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "general-doc-source-audit":

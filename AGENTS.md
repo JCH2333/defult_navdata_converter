@@ -2943,7 +2943,20 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
   声明组由 10 增至 11（11/11 组完整），33 个根 CSV 待分类数由 14 降为 13。
 - r262 新增可复用 CLI、审计器和最小 fixture；全量回归 `464 passed in 4.29s`，`git diff --check` 通过。游戏未运行，未构建候选，参考一致仍为 `0/29`，`deployable=false`。
 
-### r263 唯一任务
+## 2026-08-20 r263 空域与管制区类根 CSV 关系审计
 
-只读审计空域与管制区类根 CSV（`CONTROLLED.csv`、`CONTROLLED_BORDER_VERTEX.csv`、`CONTROLLED_CLASS.csv` 等）：
-冻结表结构、行数、主外键关系，检查是否仅用于管制区多边形/级别定义，评估 MSFS 默认 BGL 是否有对应的独立结构化空域对象，并判定 disposition。
+- r263 只读审计命令为：
+  `airspace-source-audit --raw-root <424-2608-root> --model <r187-model> --output <report>`。
+  它只读取 424 空域类 10 个 CSV（`AIRSPACE*.csv`、`CONTROLLED*.csv`、`RESTRICTED*.csv`、`SPECIAL_AIRSPACE*.csv`）和冻结 `NavModel`，不读取参考导航 payload、Fenix、OCR、候选或 SDK；不修改模型、adapter、候选或 Community。
+- 实际报告为 `diagnostics/r263-airspace-source-audit-20260820.json`，SHA-256：`acc9c10bd134a2b57b7b2bb51941b36b3ec6b026ab959ace823f5b63cb844f18`。
+  424 空域类表共 744 条主空域记录（FIR 9、CONTROLLED 673、RESTRICTED 59、SPECIAL 3），6492 条多边形顶点，744 条垂直级别；全部子表与主表 `AIRSPACE_ID` 100% 完整关联。
+- 结论定性为 `source_evidence_only`、`projection_allowed=false`；除 FIR 多边形用于航路点区域消歧外，MSFS 默认 BGL 航路/空域目前无对应独立结构化对象，仅作源级证据保留。
+- `source-model-completeness-audit` 已登记 `controlled_airspaces`、`restricted_airspaces`、`special_airspaces` 组，并将 `AIRSPACE_CLASS.csv` 纳入 `fir_geometry`。
+  更新报告为 `diagnostics/r263-source-model-completeness-20260820.json`，SHA-256：`41e5d47003df27a9a7c42abda72236f5cf809f9321e490bb4236b7defe66e540`；
+  声明组由 11 增至 14（14/14 组完整），33 个根 CSV 待分类数由 13 降为 3（仅剩 `FLIGHT_AIRLINE.csv`、`FLIGHT_AIRLINE_POINT.csv` 与 `SYSTEMSETTING.csv`）。
+- r263 新增可复用 CLI、审计器和最小 fixture；全量回归 `465 passed in 4.03s`，`git diff --check` 通过。游戏未运行，未构建候选，参考一致仍为 `0/29`，`deployable=false`。
+
+### r264 唯一任务
+
+只读审计剩余根 CSV（`FLIGHT_AIRLINE.csv`、`FLIGHT_AIRLINE_POINT.csv` 与 `SYSTEMSETTING.csv`）：
+冻结表结构、行数、航线/航段关联与系统配置字段，完成全部 33 个根 CSV 的 100% 完整分类清零盘点，并更新完整性清单。

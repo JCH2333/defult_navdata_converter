@@ -133,7 +133,7 @@ _RETAINED_GROUPS = (
 _AUDIT_ONLY_GROUPS = (
     _SourceGroup(
         "fir_geometry",
-        ("AIRSPACE.csv", "AIRSPACE_BORDER_VERTEX.csv"),
+        ("AIRSPACE.csv", "AIRSPACE_BORDER_VERTEX.csv", "AIRSPACE_CLASS.csv"),
         (
             "AIRSPACE.CODE_TYPE",
             "AIRSPACE.CODE_ID",
@@ -208,6 +208,72 @@ _AUDIT_ONLY_GROUPS = (
             "GENERAL_DOC.csv 是 424 GeneralDoc 航行资料/章节 PDF 的元数据目录索引；"
             "内容已由 GeneralDoc PDF 与经校验的 OCR 缓存管线按需审计消费，"
             "CSV 本身不直接提供新的独立结构化导航实体。"
+        ),
+    ),
+    _SourceGroup(
+        "controlled_airspaces",
+        ("CONTROLLED.csv", "CONTROLLED_BORDER_VERTEX.csv", "CONTROLLED_CLASS.csv"),
+        (
+            "CONTROLLED.AIRSPACE_ID",
+            "CONTROLLED.CODE_TYPE",
+            "CONTROLLED.CODE_ID",
+            "CONTROLLED.TXT_NAME",
+            "CONTROLLED_BORDER_VERTEX.AIRSPACE_ID",
+            "CONTROLLED_BORDER_VERTEX.NO_SEQ",
+            "CONTROLLED_BORDER_VERTEX.GEO_LAT",
+            "CONTROLLED_BORDER_VERTEX.GEO_LONG",
+            "CONTROLLED_CLASS.AIRSPACE_ID",
+        ),
+        (),
+        "source_evidence_only",
+        "airspace/controlled",
+        (
+            "CONTROLLED 管制区及其多边形顶点与垂直高度级别表与 AIRSPACE_ID 完整关联；"
+            "MSFS 默认 BGL 目前无对应独立结构化管制区对象，仅作来源证据保留。"
+        ),
+    ),
+    _SourceGroup(
+        "restricted_airspaces",
+        ("RESTRICTED.csv", "RESTRICTED_BORDER_VERTEX.csv", "RESTRICTED_CLASS.csv"),
+        (
+            "RESTRICTED.AIRSPACE_ID",
+            "RESTRICTED.CODE_TYPE",
+            "RESTRICTED.CODE_ID",
+            "RESTRICTED.TXT_NAME",
+            "RESTRICTED_BORDER_VERTEX.AIRSPACE_ID",
+            "RESTRICTED_BORDER_VERTEX.NO_SEQ",
+            "RESTRICTED_BORDER_VERTEX.GEO_LAT",
+            "RESTRICTED_BORDER_VERTEX.GEO_LONG",
+            "RESTRICTED_CLASS.AIRSPACE_ID",
+        ),
+        (),
+        "source_evidence_only",
+        "airspace/restricted",
+        (
+            "RESTRICTED 限制区/禁区/危险区多边形顶点与垂直高度级别表与 AIRSPACE_ID 完整关联；"
+            "MSFS 默认 BGL 目前无对应独立结构化限制区对象，仅作来源证据保留。"
+        ),
+    ),
+    _SourceGroup(
+        "special_airspaces",
+        ("SPECIAL_AIRSPACE.csv", "SPECIAL_AIRSPACE_BORDER_VERTEX.csv", "SPECIAL_AIRSPACE_CLASS.csv"),
+        (
+            "SPECIAL_AIRSPACE.AIRSPACE_ID",
+            "SPECIAL_AIRSPACE.CODE_TYPE",
+            "SPECIAL_AIRSPACE.CODE_ID",
+            "SPECIAL_AIRSPACE.TXT_NAME",
+            "SPECIAL_AIRSPACE_BORDER_VERTEX.AIRSPACE_ID",
+            "SPECIAL_AIRSPACE_BORDER_VERTEX.NO_SEQ",
+            "SPECIAL_AIRSPACE_BORDER_VERTEX.GEO_LAT",
+            "SPECIAL_AIRSPACE_BORDER_VERTEX.GEO_LONG",
+            "SPECIAL_AIRSPACE_CLASS.AIRSPACE_ID",
+        ),
+        (),
+        "source_evidence_only",
+        "airspace/special",
+        (
+            "SPECIAL_AIRSPACE 特别空域多边形顶点与垂直高度级别表与 AIRSPACE_ID 完整关联；"
+            "MSFS 默认 BGL 目前无对应独立结构化特别空域对象，仅作来源证据保留。"
         ),
     ),
 )
