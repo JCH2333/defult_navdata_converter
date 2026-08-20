@@ -192,6 +192,24 @@ _AUDIT_ONLY_GROUPS = (
             "MSFS ?? BGL ????????????????????????"
         ),
     ),
+    _SourceGroup(
+        "general_docs",
+        ("GENERAL_DOC.csv",),
+        (
+            "GENERAL_DOC.ID",
+            "GENERAL_DOC.ParentId",
+            "GENERAL_DOC.Title",
+            "GENERAL_DOC.PdfName",
+        ),
+        (),
+        "source_evidence_only",
+        "general-doc-index",
+        (
+            "GENERAL_DOC.csv 是 424 GeneralDoc 航行资料/章节 PDF 的元数据目录索引；"
+            "内容已由 GeneralDoc PDF 与经校验的 OCR 缓存管线按需审计消费，"
+            "CSV 本身不直接提供新的独立结构化导航实体。"
+        ),
+    ),
 )
 
 _UNMODELED_GROUPS = (

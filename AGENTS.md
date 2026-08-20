@@ -2918,10 +2918,32 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
   `462 passed in 4.03s`，`git diff --check` 通过。游戏未运行，未构建候选，参考一致仍为
   `0/29`，`deployable=false`。
 
-### r261 唯一任务
+## 2026-08-20 r261 ROUTE_RESTRICT 来源关系审计
 
-只读审计 `ROUTE_RESTRICT.csv` 与 `ROUTE_RESTRICT_RTE.csv`：冻结两表表头、行数、主键/外键、
-`ROUTE_SEGMENT_UUID`/`AIRWAY_POINT_UUID` 的真实关系，检查是否能无歧义回链到同周期
-`RTE_SEG.csv`/`DESIGNATED_POINT.csv` 的航路或航点约束，并判断默认 BGL 是否有已证实的目标对象。
-必须先完成来源证据和目标作用域审计，不能因为字段名像限制条件就修改 `NavModel`、航路投影、
-BGL 或候选；若无法建立唯一关系，登记 `source_evidence_only` 或明确拒绝。
+- r261 只读审计命令为：
+  `route-restrict-source-audit --raw-root <424-2608-root> --model <r187-model> --output <report>`。
+  它只读取 424 `ROUTE_RESTRICT.csv`、`ROUTE_RESTRICT_RTE.csv` 和冻结 `NavModel`，不读取参考导航 payload、Fenix、OCR、候选或 SDK；不修改模型、adapter、候选或 Community。
+- 实际报告为 `diagnostics/r261-route-restrict-source-audit-20260820.json`，SHA-256：`6ca1a5a04e57827827e85c276332ecfbe092cfca0fa08cf70ca9ddaf0d4ae60e`。
+  `ROUTE_RESTRICT.csv` 共 48 条，`ROUTE_RESTRICT_RTE.csv` 共 309 条。
+- 309 条子表记录中，309 条均能唯一回链到父表 48 个 `ROUTE_RESTRICT_ID`；293 条匹配航路段（`ROUTE_SEGMENT_UUID`），13 条匹配固定点（`AIRWAY_POINT_UUID`）。
+- 结论定性为 `source_evidence_only`、`projection_allowed=false`；MSFS 默认 BGL 航路无对应限制节点字段，仅作源级证据保留。
+- 自动化测试：`test_route_restrict_source_audit`；全量回归 463 passed。
+
+## 2026-08-20 r262 GENERAL_DOC 来源关系审计
+
+- r262 只读审计命令为：
+  `general-doc-source-audit --raw-root <424-2608-root> --model <r187-model> --output <report>`。
+  它只读取 424 `GENERAL_DOC.csv`、`GeneralDoc` 目录和冻结 `NavModel`，不读取参考导航 payload、Fenix、OCR、候选或 SDK；不修改模型、adapter、候选或 Community。
+- 实际报告为 `diagnostics/r262-general-doc-source-audit-20260820.json`，SHA-256：`2d8efb7bc112de092ab0561bb921bf2b489a08e7c10375641e77f2acc1cec74e`。
+  `GENERAL_DOC.csv` 共 166 行，其中 132 行为具体的 `PdfName` 引用，34 行为目录章节层级结构；
+  `GeneralDoc/` 目录下实际存在的 132 个 `.pdf` 文件与 `PdfName + .pdf` 精确吻合（132/132）。
+- 结论定性为 `source_evidence_only`、`projection_allowed=false`；该表为 GeneralDoc 目录索引，内容已由 GeneralDoc PDF/OCR 管线按需审计消费，CSV 本身不直接提供新的独立结构化导航实体。
+- `source-model-completeness-audit` 已将 `GENERAL_DOC.csv` 登记为 `general_docs`、`source_evidence_only` 组。
+  更新报告为 `diagnostics/r262-source-model-completeness-20260820.json`，SHA-256：`e1b2701fcf0dc68f30281387e9fc402649b1e51b46c7b1b2bb76a0a06b5150ea`；
+  声明组由 10 增至 11（11/11 组完整），33 个根 CSV 待分类数由 14 降为 13。
+- r262 新增可复用 CLI、审计器和最小 fixture；全量回归 `464 passed in 4.29s`，`git diff --check` 通过。游戏未运行，未构建候选，参考一致仍为 `0/29`，`deployable=false`。
+
+### r263 唯一任务
+
+只读审计空域与管制区类根 CSV（`CONTROLLED.csv`、`CONTROLLED_BORDER_VERTEX.csv`、`CONTROLLED_CLASS.csv` 等）：
+冻结表结构、行数、主外键关系，检查是否仅用于管制区多边形/级别定义，评估 MSFS 默认 BGL 是否有对应的独立结构化空域对象，并判定 disposition。
