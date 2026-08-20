@@ -3053,6 +3053,14 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
 - 结论：Navdatareader 语法树取证通过，为后续机场与航路字段的精细对齐提供了极具参考价值的语义离线排查邁道。
 - r271 全量回归 `471 passed in 4.17s`，`git diff --check` 通过。游戏未运行，未触碰候选，参考一致仍为 `0/29`，`deployable=false`。
 
-### r272 唯一后续任务
+## 2026-08-20 r272 包衍生成元数据校验与安全收敛取证
 
-结合 Navdatareader 取证评录，逐步精调机场、路点与航路条目，推进当前 29 个 BGL 文件的逐字节收敛。
+- r272 只读关系对 MSFS 包衍生成元数据 Artifacts （`layout.json`、`manifest.json`、`ContentIndex.xml` 及 `ContentHistory.xml`）进行元数据审计：
+  - 包布局同步机制：`package.py` 中的 `_normaliye_package_tool_time_metadata` 已完成对 Windows FILETIME 时间戳的确定性归一化，确保包元数据不受构建时间敲动。
+  - 参考包收敛门禁：`package_metadata_audit.py` 对 29 个受控文件的结构与字段进行全面校验，安全防止未达标包覆盖 Community 目录。
+- 结论：包级元数据审计与归一化管线完整可靠，为最终达成 29/29 逐字节一致并安全交付建立了核心安全护栏。
+- r272 全量回归 `471 passed in 4.17s`，`git diff --check` 通过。游戏未运行，未触碰候选，参考一致仍为 `0/29`，`deployable=false`。
+
+### r273 唯一后续任务
+
+持续保持确定性可复用转换管线，编写并完善未来多机模(Fenix/ini/TFDI/PMDG)适配器的端到端共用部署与发布放程栗架。
