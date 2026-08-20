@@ -6,6 +6,10 @@ from .route_restrict_source_audit import (
     audit_route_restrict_source,
     write_route_restrict_source_audit,
 )
+from .source_model_master_audit import (
+    audit_source_model_master,
+    write_source_model_master_audit,
+)
 from .procedure_source_audit import (
     audit_procedure_source_model,
     write_procedure_source_audit,
@@ -473,6 +477,25 @@ def build_parser() -> argparse.ArgumentParser:
         "--output",
         required=True,
         help="本地来源完整性库存 JSON 输出路径",
+    )
+    master_source = sub.add_parser(
+        "source-model-master-audit",
+        help="只读运行 424 来源-模型全量综合主审计管线",
+    )
+    master_source.add_argument(
+        "--raw-root",
+        required=True,
+        help="2608 原始 CSV/PDF 目录",
+    )
+    master_source.add_argument(
+        "--model",
+        required=True,
+        help="可复用 NavModel 快照（JSON 或 JSON.GZ）",
+    )
+    master_source.add_argument(
+        "--output",
+        required=True,
+        help="本地来源-模型主审计 JSON 输出路径",
     )
     proc_source = sub.add_parser(
         "procedure-source-audit",
@@ -1597,6 +1620,16 @@ def main(argv: list[str] | None = None) -> int:
         output = Path(args.output).expanduser().resolve()
         report["output"] = str(output)
         write_source_model_completeness_audit(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "source-model-master-audit":
+        report = audit_source_model_master(
+            Path(args.raw_root),
+            load_model(Path(args.model)),
+        )
+        output = Path(args.output).expanduser().resolve()
+        report["output"] = str(output)
+        write_source_model_master_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "procedure-source-audit":
