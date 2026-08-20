@@ -452,7 +452,7 @@ def test_airport_projection_filters_prefix_and_emits_ils_and_procedure(tmp_path:
     assert leg_attributes["flyOver"] == "FALSE"
     assert leg_attributes["turnDirection"] == "E"
     assert len(root.findall("Waypoint")) == 1
-    assert projection.waypoints == 2
+    assert projection.waypoints == 1
 
 
 def test_airport_projection_maps_raw_chinese_procedure_kinds_and_iap_sections(
@@ -1500,7 +1500,7 @@ def test_reciprocal_runway_ends_become_one_physical_runway(tmp_path: Path):
     ] == [("IPRI", "PRIMARY"), ("ISEC", "SECONDARY")]
 
 
-def test_root_terminal_waypoints_are_deduplicated_across_airports(tmp_path: Path):
+def test_terminal_waypoints_are_root_scoped_and_globally_unique(tmp_path: Path):
     model = NavModel(Path("source"))
     source = SourceRef("fixture", 1)
     model.airports["one"] = Airport(
@@ -1525,9 +1525,9 @@ def test_root_terminal_waypoints_are_deduplicated_across_airports(tmp_path: Path
     )
 
     root = ET.parse(output).getroot()
-    assert len(root.findall("Waypoint")) == 1
-    assert len(root.findall("Airport/Waypoint")) == 2
-    assert projection.waypoints == 3
+    assert len(root.findall("Waypoint")) == 2
+    assert root.findall("Airport/Waypoint") == []
+    assert projection.waypoints == 2
 
 
 def test_airport_terminal_waypoint_collisions_are_renamed_with_all_references(tmp_path: Path):
@@ -1567,7 +1567,7 @@ def test_airport_terminal_waypoint_collisions_are_renamed_with_all_references(tm
 
     root = ET.parse(output).getroot()
     point_idents = [
-        point.attrib["waypointIdent"] for point in root.findall("Airport/Waypoint")
+        point.attrib["waypointIdent"] for point in root.findall("Waypoint")
     ]
     assert point_idents == ["DUP", "DUP001"]
     departure_legs = root.findall("Airport/Departure/CommonRouteLegs/Leg")

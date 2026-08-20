@@ -37,19 +37,20 @@
 - 冻结模型：`output/intermediate-2608-r187-navaid-label-replay.json.gz`
 - 模型 SHA-256：`7cec24bd4a57545d39aab037abe4125c763ad12f364bd5f8f0073b0e050fdb4b`
 - 当前有效参考候选：`output/candidate-2608-default-r188-doviv-replay`，自重放 `29/29`
-- 最新实验候选：`output/candidate-2608-default-r338-general-doc-boundary`
+- 最新实验候选：`output/candidate-2608-default-r343-root-terminal-waypoints`
 - r338 模型计数与冻结模型一致；V111/V162 四条端点区域恢复
 - 与参考默认数据字节一致：`0/29`
 - `deployable=false`
 - 当前完整回归：`500 passed`
 - 当前未部署 Community、未实机验证、未创建 Release。
 
-### r338-r342 阶段结论
+### r338-r343 阶段结论
 
 - r338 修复 GeneralDoc 航点污染直接 `RTE_SEG.csv` 端点区域证据；V111/V162 四条端点恢复，模型计数未变。
 - r341 全量 BGL 结构审计：29/29 文件不一致；机场候选缺少参考中的 `0x17`，且 `0x13/0x22` 规模明显更小。
 - r342 SDK 作用域探针触发 `DUPLICATE WAYPOINT`，未获得可授权的 `Waypoint` 结构映射；禁止据参考 Section 反推对象或修改正式 adapter。
-- 证据：`diagnostics/r338-*`、`diagnostics/r341-*`、`diagnostics/r342-probe-zjhk-*`。原始运行日志不入本文档。
+- r343 将终端航点移到 `FSData` 根级，并按区域/标识/坐标确定性去重；48 个 BGL 测试、500 个全量测试通过。收敛审计仍为参考 `0/29`，21 个目标 BGL 全部不同；该实验不能授权复制参考 Section 或 payload。
+- 证据：`diagnostics/r338-*`、`diagnostics/r341-*`、`diagnostics/r342-probe-zjhk-*`、`diagnostics/r343-file-convergence.json`、`diagnostics/r343-bgl-binary-diff.json`。原始运行日志不入本文档。
 
 ## 已确认的通用契约
 
@@ -92,7 +93,7 @@
 - r327：脱敏 Section 记录序列审计，确认数量/序列未收敛。
 - r328：`onlyAddIfReplace` 隔离探针和相同输入重放门禁；不改变 adapter。
 - r329-r335：贡献度、ZJ Section、运行时触发和来源缺口只读审计；参考差异未授权投影，waypoint/airway 缺口 `1013/1186` 保持拒绝。
-- r338-r342：GeneralDoc 边界修复、全量 BGL 结构审计和 SDK 作用域探针；候选仍 `0/29` 字节一致、未部署。
+- r338-r343：GeneralDoc 边界修复、全量 BGL 结构审计、SDK 作用域探针和根级终端航点实验；候选仍 `0/29` 字节一致、未部署。
 
 ## 维护协议
 
