@@ -1360,6 +1360,70 @@ def test_load_naip_adds_only_unambiguous_general_document_waypoints(
     ]
 
 
+def test_load_naip_general_document_waypoint_does_not_ambiguate_direct_airway_endpoint(
+    tmp_path: Path,
+) -> None:
+    root = _minimal_naip_root(tmp_path, "ASP")
+    _write_csv(root, "AIRSPACE.csv", "\n".join((
+        "AIRSPACE_ID,CODE_TYPE,CODE_ID",
+        "beijing,FIR,ZBPE",
+        "guangzhou,FIR,ZGZU",
+    )))
+    _write_csv(root, "AIRSPACE_BORDER_VERTEX.csv", "\n".join((
+        "VERTEX_ID,AIRSPACE_ID,NO_SEQ,GEO_LAT,GEO_LONG",
+        "1,guangzhou,1,N340000,E1040000",
+        "2,guangzhou,2,N340000,E1060000",
+        "3,guangzhou,3,N360000,E1060000",
+        "4,guangzhou,4,N360000,E1040000",
+    )))
+    _write_csv(root, "DESIGNATED_POINT.csv", "\n".join((
+        "SIGNIFICANT_POINT_ID,CODE_ID,TXT_NAME,GEO_LAT_ACCURACY,GEO_LONG_ACCURACY,CODE_FIR",
+        "direct,TOGOG,DIRECT,N350000,E1050000,北京情报区",
+    )))
+    _write_csv(root, "RTE_SEG.csv", "\n".join((
+        "TXT_DESIG,VAL_SORT,CODE_POINT_START,CODE_POINT_END,GEO_LAT_START_ACCURACY,GEO_LONG_START_ACCURACY,GEO_LAT_END_ACCURACY,GEO_LONG_END_ACCURACY,CODE_FIR_START,CODE_FIR_END,CODE_DIR,CODE_TYPE,CODE_TYPE_START,CODE_TYPE_END",
+        "V1,1,TOGOG,TOGOG,N350000,E1050000,N350000,E1050000,,,B,L,DESIGNATED_POINT,DESIGNATED_POINT",
+    )))
+    source_pdf = root / ENROUTE_KEY_POINT_DOCUMENT
+    source_pdf.parent.mkdir(parents=True)
+    source_pdf.write_bytes(b"general-document")
+    cache = tmp_path / "general-doc-cache" / "enr-4.4"
+    cache.mkdir(parents=True)
+    (cache / "manifest.json").write_text(json.dumps({
+        "schema_version": 1,
+        "source_file": ENROUTE_KEY_POINT_DOCUMENT,
+        "source_sha256": hashlib.sha256(source_pdf.read_bytes()).hexdigest(),
+        "page_count": 1,
+    }), encoding="utf-8")
+    (cache / "page-0001.json").write_text(json.dumps({
+        "ok": True,
+        "data": {
+            "documents": [{
+                "markdown": "TOGOGN35\u00b000\u203200\u2033E105\u00b000\u203200\u2033",
+            }],
+        },
+    }), encoding="utf-8")
+
+    model = load_naip(
+        root,
+        general_doc_cache=cache.parent,
+        include_terminal_documents=False,
+    )
+
+    assert [
+        (point.ident, point.country, point.source.file)
+        for point in model.waypoints
+    ] == [
+        ("TOGOG", "ZB", "DESIGNATED_POINT.csv"),
+        ("TOGOG", "ZG", ENROUTE_KEY_POINT_DOCUMENT),
+    ]
+    assert [
+        (leg.start_country, leg.end_country)
+        for leg in model.airway_legs
+    ] == [("ZB", "ZB")]
+    assert model.general_document_evidence["waypoints"]["accepted"] == 1
+
+
 def test_load_naip_keeps_verified_general_document_navaids_as_audit_evidence(
     tmp_path: Path,
 ) -> None:

@@ -1058,7 +1058,6 @@ def _load_general_document_waypoints(
     model: NavModel,
     cache_root: Path | None,
     fir_polygons: tuple[_FirPolygon, ...],
-    airway_endpoint_countries: dict[tuple[str, str, float, float], set[str]],
     *,
     cache_directory: str = ENROUTE_KEY_POINT_CACHE_DIRECTORY,
 ) -> None:
@@ -1141,14 +1140,6 @@ def _load_general_document_waypoints(
         )
         model.waypoints.append(point)
         by_identity.setdefault(identity, []).append(point)
-        _register_airway_endpoint_country(
-            airway_endpoint_countries,
-            "DESIGNATED_POINT",
-            point.ident,
-            point.latitude,
-            point.longitude,
-            point.country,
-        )
         counts["accepted"] += 1
 
     model.general_document_evidence = {
@@ -1739,7 +1730,6 @@ def load_naip(
         model,
         general_doc_cache,
         fir_polygons,
-        airway_endpoint_countries,
         cache_directory=general_doc_key_point_cache_directory,
     )
     model.source_fir_region_resolution = SourceFirRegionResolution(
