@@ -2879,3 +2879,13 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
    差异、来源卡、重放、参考 `x/29`、部署状态、否决结论、下一项唯一任务及 Git 推送结果。每次代码或
    仓库文档改动后运行 `pytest -q`、`git diff --check`、精确暂存、单主题提交和普通 `git push`；
    网络不可用时保留本地提交，恢复后用 `git ls-remote --heads origin main` 复核，禁止强推。
+
+### 5. r259 验证与仓库状态
+
+- r259 定向回归为 `2 passed`，完整 `pytest -q` 为 `460 passed in 4.43s`，`git diff --check` 通过；
+  诊断文件经 Python `json.loads` 重读为有效 JSON。报告、候选、数据库、日志和备份均保持忽略，未被
+  暂存或提交。
+- 审计代码、回归测试和本节计划首次提交为 `3e5aa61`
+  （`feat: audit complete 424 CSV inventory`）。2026-08-20 的普通 `git push` 失败：
+  `Failed to connect to 127.0.0.1 port 7897 after 2103 ms`。未强推、未重写历史、未覆盖 Community；
+  网络恢复后只从当前 `main` 普通推送，并用 `git ls-remote --heads origin main` 核验。
