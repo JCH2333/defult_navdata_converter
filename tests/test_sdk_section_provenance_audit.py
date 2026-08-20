@@ -50,6 +50,9 @@ def test_section_provenance_reports_xml_and_section_deltas_without_payload(
     assert report["diagnostic"] == "sdk-section-provenance-audit-v1"
     assert report["navigation_records_read"] is False
     assert report["decision"]["section_type_semantics_inferred"] is False
+    assert report["summary"]["case_count"] == 1
+    assert report["summary"]["variant_count"] == 1
+    assert "0x17" in report["summary"]["section_effects"]
     variant = report["cases"][0]["variants"][0]
     assert variant["same_xml_as_baseline"] is False
     delta = variant["section_delta"]
@@ -92,3 +95,4 @@ def test_section_provenance_accepts_utf8_bom_manifest(tmp_path: Path) -> None:
     report = audit_sdk_section_provenance(manifest)
 
     assert report["cases"][0]["variants"][0]["same_xml_as_baseline"] is True
+    assert report["summary"]["same_input_replay_count"] == 1

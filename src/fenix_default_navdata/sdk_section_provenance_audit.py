@@ -170,12 +170,53 @@ def audit_sdk_section_provenance(manifest_path: Path) -> dict[str, object]:
             },
             "variants": variant_rows,
         })
+    section_effects: dict[int, dict[str, list[str]]] = {}
+    same_input_replays = 0
+    for case in case_rows:
+        baseline_bgl = case["baseline"]["bgl"]
+        for variant in case["variants"]:
+            delta = variant["section_delta"]
+            if (
+                variant["same_xml_as_baseline"]
+                and delta["section_table_equal"]
+                and variant["bgl"]["sha256"] == baseline_bgl["sha256"]
+            ):
+                same_input_replays += 1
+            for row in delta["by_type"]:
+                section_type = int(row["type"])
+                effect = section_effects.setdefault(
+                    section_type,
+                    {"added_or_increased": [], "removed_or_decreased": []},
+                )
+                baseline_counts = row["baseline_counts"]
+                variant_counts = row["variant_counts"]
+                if baseline_counts != variant_counts:
+                    if sum(variant_counts) > sum(baseline_counts):
+                        effect["added_or_increased"].append(
+                            f"{case['name']}:{variant['name']}"
+                        )
+                    else:
+                        effect["removed_or_decreased"].append(
+                            f"{case['name']}:{variant['name']}"
+                        )
     return {
         "diagnostic": "sdk-section-provenance-audit-v1",
         "read_only": True,
         "navigation_records_read": False,
         "reference_payload_read": False,
         "manifest": str(manifest_path),
+        "summary": {
+            "case_count": len(case_rows),
+            "variant_count": sum(len(case["variants"]) for case in case_rows),
+            "same_input_replay_count": same_input_replays,
+            "section_effects": {
+                f"{section_type:#x}": {
+                    key: sorted(values)
+                    for key, values in sorted(effect.items())
+                }
+                for section_type, effect in sorted(section_effects.items())
+            },
+        },
         "cases": case_rows,
         "decision": {
             "section_type_semantics_inferred": False,

@@ -3556,3 +3556,18 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
   `tests/test_sdk_section_provenance_audit.py` 和 `tests/test_cli.py`。
 - 本轮新增测试通过，随后必须执行全量回归；参考一致性仍为 `0/29`，
   `deployable=false`，不修改 adapter、不替换二进制、不覆盖 Community。
+
+## 2026-08-20 r311 SDK Section 影响矩阵与投影授权裁决
+
+- 使用 `sdk-section-provenance-audit` 汇总 r140-r149 的真实隔离探针，形成
+  `diagnostics\r311-sdk-section-matrix-audit-20260820.json`：2 个案例、7 个
+  变体、1 个相同输入重放。
+- 矩阵确认：VOR/DME 输入稳定增加 `0x13`；NDB 输入稳定增加 `0x17/0x33`，
+  两瓦片探针的 Section 计数也随输入数量变化。该结果是可复用的 SDK 表达证据，
+  但不是目标语义证明。
+- 结合 424 来源审计，机场关联 NDB 只有 39 条，远低于参考机场分区的数千级
+  Section 记录；且机场关联字段不等于机场子对象作用域。因此本轮明确裁决
+  `model_or_adapter_change_authorized=false`，不接入 NDB/VOR 机场子对象投影。
+- 审计器新增按 Section 类型聚合的机器可读摘要，供未来其他目标格式探针复用。
+  当前参考一致性仍为 `0/29`、`deployable=false`，下一阶段回到来源缺口和真实
+  加载契约，禁止根据 Section 类型反向补写内容。

@@ -303,7 +303,7 @@ python -m fenix_default_navdata.cli build `
 - `airway-endpoint-card-audit` 以 `DESIGNATED_POINT.csv` 的 UUID 精确关联 `RTE_SEG.csv`，并列指定点自身 FIR/服务机场、关联航段端点 FIR、ACC 名称、可直接映射的 FIR/ACC 和模型侧已来源化的邻接地区。它只输出一个端点的可复核拒绝或来源不足结论，不读取参考/Fenix，不改模型或候选。
 - `non-designated-airway-endpoint-card-audit` 面向地名点等不能进入指定点身份目录的航路端点。它校验单一内部 UUID/坐标、检查该 UUID 不在 `DESIGNATED_POINT`、VOR、NDB 命名身份目录中，并记录单侧邻接；禁止跨类型伪造指定点或以邻接补写地区。
 - `scripts/airport_subset_probe.py` 的隔离构建会在本次诊断目录写入 `probe-report.json`，记录完整输入选择、每个探针 BGL 的文件大小、头部版本、QMID、节表类型/计数/尺寸和读取器状态。它只用于验证 SDK 输入对象如何影响编译布局，不读取参考 BGL 的内容。
-- `sdk-section-provenance-audit` 消费 `sdk-section-provenance-manifest-v1`，将同一探针的基线 XML/BGL 与一个或多个变体 XML/BGL 绑定，比较 XML SHA-256、BGL 文件哈希、头部和 Section 表。它只读取 BGL 头，不读取导航记录或 payload 语义；Section 差异只能证明 SDK 表达效果，不能授权修改正式 adapter。manifest 同时接受 UTF-8 和 Windows UTF-8 BOM。
+- `sdk-section-provenance-audit` 消费 `sdk-section-provenance-manifest-v1`，将同一探针的基线 XML/BGL 与一个或多个变体 XML/BGL 绑定，比较 XML SHA-256、BGL 文件哈希、头部和 Section 表，并输出按 Section 类型聚合的影响摘要。它只读取 BGL 头，不读取导航记录或 payload 语义；Section 差异只能证明 SDK 表达效果，不能授权修改正式 adapter。manifest 同时接受 UTF-8 和 Windows UTF-8 BOM。
 - 该探针的 `--set-airport-attribute name=value` 仅为隔离编译实验设置 XML 属性，绝不写入 `NavModel` 或正式候选。
 - `--append-airport-child "TAG;NAME=VALUE;..."` 可在每个被选机场末尾追加属性型 SDK 子对象，用于可复现的单变量布局实验；它同样永远不写入 `NavModel` 或正式候选。
 - `--keep-runway-number` 可将机场探针缩小到既有的物理跑道子集；`--append-runway-child` 只向 `--runway-number` 指定的既有跑道插入 SDK 子对象，并维护 `OffsetThreshold`、`BlastPad`、`Overrun` 位于 `Ils`/`IlsReference` 之前的 XSD 顺序。它们同样只用于诊断，不能绕过正式适配器的来源和字节收敛门禁。
