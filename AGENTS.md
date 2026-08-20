@@ -2956,7 +2956,21 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
   声明组由 11 增至 14（14/14 组完整），33 个根 CSV 待分类数由 13 降为 3（仅剩 `FLIGHT_AIRLINE.csv`、`FLIGHT_AIRLINE_POINT.csv` 与 `SYSTEMSETTING.csv`）。
 - r263 新增可复用 CLI、审计器和最小 fixture；全量回归 `465 passed in 4.03s`，`git diff --check` 通过。游戏未运行，未构建候选，参考一致仍为 `0/29`，`deployable=false`。
 
-### r264 唯一任务
+## 2026-08-20 r264 航司网络与系统配置元数据关系审计（33 根 CSV 全部分类盘点清零）
 
-只读审计剩余根 CSV（`FLIGHT_AIRLINE.csv`、`FLIGHT_AIRLINE_POINT.csv` 与 `SYSTEMSETTING.csv`）：
-冻结表结构、行数、航线/航段关联与系统配置字段，完成全部 33 个根 CSV 的 100% 完整分类清零盘点，并更新完整性清单。
+- r264 只读关系命令行为：
+  `airline-system-source-audit --raw-root <424-2608-root> --model <r187-model> --output <report>`。
+  它只读取 424 `FLIGHT_AIRLINE.csv`、`FLIGHT_AIRLINE_POINT.csv`、`SYSTEMSETTING.csv` 和冻结
+  `NavModel`，不读取参考成品 payload、Fenix、OCR、候选或 SDK，不修改模型、adapter、候选或 Community。
+- 实际报告为 `diagnostics/r264-airline-system-source-audit-20260820.json`，SHA-256：`da22415bacef97149f0c9ab25de9b0d5e3264439c965c8b7eddfdba49dd89571`。
+  `FLIGHT_AIRLINE.csv` 共 13907 行（13907 个唯一 ID），`FLIGHT_AIRLINE_POINT.csv` 共 390659 行，
+  390659 个航线点 100% 精确匹配父级 13907 条航线；`SYSTEMSETTING.csv` 共 6 行元数据（`DataVersion=2026-08.V1` 等）。
+- 结论定性为 `source_evidence_only`，`projection_allowed=false`。两者均为航司/公司业务航线网络与 424 原始包配置元数据，非 MSFS 默认通用核心导航数据（机场/跑道/台/点/航路/程序），仅作来源证据与元数据保留，不授权 BGL 投影。
+- `source-model-completeness-audit` 已登记 `flight_airlines` 与 `system_settings` 组。
+  更新报告为 `diagnostics/r264-source-model-completeness-20260820.json`，SHA-256：`1554d5ca98155d390137a27215538dae3eb666138f395839246eb097f4c7b170`。
+  声明组由 14 增至 16，16/16 全部源完整；33 个根 CSV 待分类数正式清零（`unclassified_csv_file_total=0`）。
+- r264 新增独立 CLI、自动化测试与最小 fixture，全量回归 `466 passed in 4.23s`，`git diff --check` 通过。游戏未运行，未触碰候选，参考一致仍为 `0/29`，`deployable=false`。
+
+### r265 唯一后续任务
+
+基于已完成的 33 个根 CSV 100% 分类盘点与定性基线，对已建模的 5 大核心导航组（机场、跑道、导航台、航路点、航路）及相关字段建立精细化来源-模型映射一致性与边界校验审计，固化可复用的多源数据转换管线与质量门禁。

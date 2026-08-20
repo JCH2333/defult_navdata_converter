@@ -6,6 +6,10 @@ from .route_restrict_source_audit import (
     audit_route_restrict_source,
     write_route_restrict_source_audit,
 )
+from .airline_system_source_audit import (
+    audit_airline_system_source,
+    write_airline_system_source_audit,
+)
 from .airspace_source_audit import (
     audit_airspace_source,
     write_airspace_source_audit,
@@ -461,6 +465,25 @@ def build_parser() -> argparse.ArgumentParser:
         "--output",
         required=True,
         help="本地来源完整性库存 JSON 输出路径",
+    )
+    airline_source = sub.add_parser(
+        "airline-system-source-audit",
+        help="只读复核 424 航司航线网络与系统配置元数据关系",
+    )
+    airline_source.add_argument(
+        "--raw-root",
+        required=True,
+        help="2608 原始 CSV/PDF 目录",
+    )
+    airline_source.add_argument(
+        "--model",
+        required=True,
+        help="可复用 NavModel 快照（JSON 或 JSON.GZ）",
+    )
+    airline_source.add_argument(
+        "--output",
+        required=True,
+        help="本地航线系统关系审计 JSON 输出路径",
     )
     airspace_source = sub.add_parser(
         "airspace-source-audit",
@@ -1533,6 +1556,16 @@ def main(argv: list[str] | None = None) -> int:
         output = Path(args.output).expanduser().resolve()
         report["output"] = str(output)
         write_source_model_completeness_audit(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "airline-system-source-audit":
+        report = audit_airline_system_source(
+            Path(args.raw_root),
+            load_model(Path(args.model)),
+        )
+        output = Path(args.output).expanduser().resolve()
+        report["output"] = str(output)
+        write_airline_system_source_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "airspace-source-audit":

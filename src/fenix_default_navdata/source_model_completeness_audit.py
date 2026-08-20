@@ -276,6 +276,46 @@ _AUDIT_ONLY_GROUPS = (
             "MSFS 默认 BGL 目前无对应独立结构化特别空域对象，仅作来源证据保留。"
         ),
     ),
+    _SourceGroup(
+        "flight_airlines",
+        ("FLIGHT_AIRLINE.csv", "FLIGHT_AIRLINE_POINT.csv"),
+        (
+            "FLIGHT_AIRLINE.FLIGHT_AIRLINE_ID",
+            "FLIGHT_AIRLINE.name",
+            "FLIGHT_AIRLINE.LineType",
+            "FLIGHT_AIRLINE.StartAirportID",
+            "FLIGHT_AIRLINE.EndAirportID",
+            "FLIGHT_AIRLINE_POINT.FLIGHT_AIRLINE_POINT_ID",
+            "FLIGHT_AIRLINE_POINT.FLIGHT_AIRLINE_ID",
+            "FLIGHT_AIRLINE_POINT.Sequnce",
+            "FLIGHT_AIRLINE_POINT.AirwayName",
+            "FLIGHT_AIRLINE_POINT.StartPointID",
+            "FLIGHT_AIRLINE_POINT.EndPointID",
+        ),
+        (),
+        "source_evidence_only",
+        "airline/network",
+        (
+            "FLIGHT_AIRLINE 与 FLIGHT_AIRLINE_POINT 为航司/城市对航线网络，"
+            "390659 个航线点记录 100% 匹配父级 13907 条航线；"
+            "不属于 MSFS 默认通用核心导航数据，仅作来源证据保留。"
+        ),
+    ),
+    _SourceGroup(
+        "system_settings",
+        ("SYSTEMSETTING.csv",),
+        (
+            "SYSTEMSETTING.KEYNAME",
+            "SYSTEMSETTING.KEYVALUE",
+        ),
+        (),
+        "source_evidence_only",
+        "system/setting",
+        (
+            "SYSTEMSETTING 为 424 原始库元数据版本与生效期设置，"
+            "非 MSFS 默认 BGL 几何或导航对象，仅作来源元数据保留。"
+        ),
+    ),
 )
 
 _UNMODELED_GROUPS = (
