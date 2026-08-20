@@ -44,20 +44,12 @@
 - 当前完整回归：`500 passed`
 - 当前未部署 Community、未实机验证、未创建 Release。
 
-### r329-r335 阶段审计索引（已压缩）
+### r338-r342 阶段结论
 
-- 贡献度、ZJ Section 边界、根导航台触发和来源缺口均完成只读审计；均未使用参考 payload，也未授权复制 Section 或修改正式 adapter。
-- 关键结论：参考 Section 数量/边界不能反推语义；完整来源缺口为 waypoint `1013`、airway `1186`，无来源授权的记录保持拒绝。
-- 证据文件：`diagnostics/r329-*`、`r330-*`、`r331-*`、`r333-*`、`r334-*`、`r335-source-gap-r162-full-20260820.json`。
-
-### r338 GeneralDoc 来源边界修复
-
-- 根因：GeneralDoc 新增航点被加入 `airway_endpoint_countries`，同标识同坐标的不同区域会污染直接 `DESIGNATED_POINT.csv` 端点证据。
-- 修复：GeneralDoc 航点仍可保留并计入审计，但不再参与 `RTE_SEG.csv` 端点区域恢复。
-- 回归：新增 `test_load_naip_general_document_waypoint_does_not_ambiguate_direct_airway_endpoint`；完整测试 `500 passed`。
-- 模型：`output/intermediate-2608-r338-general-doc-boundary.json.gz`；计数与冻结模型一致，V111/V162 四条端点恢复。
-- 候选：`output/candidate-2608-default-r338-general-doc-boundary`；`validate` 通过，来源审计 `diagnostics/r338-source-gap-r162-with-candidate-20260820.json`。
-- 字节验收：两个包共 `29` 个文件均不一致，仍为 `deployable=false`；未部署、未实机验证、未 Release。
+- r338 修复 GeneralDoc 航点污染直接 `RTE_SEG.csv` 端点区域证据；V111/V162 四条端点恢复，模型计数未变。
+- r341 全量 BGL 结构审计：29/29 文件不一致；机场候选缺少参考中的 `0x17`，且 `0x13/0x22` 规模明显更小。
+- r342 SDK 作用域探针触发 `DUPLICATE WAYPOINT`，未获得可授权的 `Waypoint` 结构映射；禁止据参考 Section 反推对象或修改正式 adapter。
+- 证据：`diagnostics/r338-*`、`diagnostics/r341-*`、`diagnostics/r342-probe-zjhk-*`。原始运行日志不入本文档。
 
 ## 已确认的通用契约
 
@@ -99,9 +91,8 @@
 - r326：权威快照和 `ZJ_airports.bgl` 记录布局基线。
 - r327：脱敏 Section 记录序列审计，确认数量/序列未收敛。
 - r328：`onlyAddIfReplace` 隔离探针和相同输入重放门禁；不改变 adapter。
-- r329：424 到投影贡献度矩阵；当前最新阶段。
-- r330-r335：ZJ Section/运行时触发与全量来源缺口只读审计；参考 Section 差异不足以授权投影，waypoint/airway 缺口 `1013/1186` 均未获独立来源授权。详细报告保留在 `diagnostics/`。
-- r338：GeneralDoc 航点不再污染直接航路端点区域证据；新增回归后完整测试 `500 passed`，V111/V162 四条端点恢复。候选仍 `0/29` 字节一致、未部署。
+- r329-r335：贡献度、ZJ Section、运行时触发和来源缺口只读审计；参考差异未授权投影，waypoint/airway 缺口 `1013/1186` 保持拒绝。
+- r338-r342：GeneralDoc 边界修复、全量 BGL 结构审计和 SDK 作用域探针；候选仍 `0/29` 字节一致、未部署。
 
 ## 维护协议
 
