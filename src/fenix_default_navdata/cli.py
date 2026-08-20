@@ -6,6 +6,10 @@ from .route_restrict_source_audit import (
     audit_route_restrict_source,
     write_route_restrict_source_audit,
 )
+from .pipeline_master_audit import (
+    audit_pipeline_master,
+    write_pipeline_master_audit,
+)
 from .bgl_projection_master_audit import (
     audit_bgl_projection_master,
     write_bgl_projection_master_audit,
@@ -481,6 +485,25 @@ def build_parser() -> argparse.ArgumentParser:
         "--output",
         required=True,
         help="本地来源完整性库存 JSON 输出路径",
+    )
+    pipe_master = sub.add_parser(
+        "pipeline-master-audit",
+        help="只读运行 424 来源-模型-BGL 端到端全量流水线主审计门禁",
+    )
+    pipe_master.add_argument(
+        "--raw-root",
+        required=True,
+        help="2608 原始 CSV/PDF 目录",
+    )
+    pipe_master.add_argument(
+        "--model",
+        required=True,
+        help="可复用 NavModel 快照（JSON 或 JSON.GZ）",
+    )
+    pipe_master.add_argument(
+        "--output",
+        required=True,
+        help="本地端到端流水线主审计 JSON 输出路径",
     )
     bgl_master = sub.add_parser(
         "bgl-projection-master-audit",
@@ -1640,6 +1663,16 @@ def main(argv: list[str] | None = None) -> int:
         write_source_model_completeness_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
+    if args.command == "pipeline-master-audit":
+        report = audit_pipeline_master(
+            Path(args.raw_root),
+            load_model(Path(args.model)),
+        )
+        output = Path(args.output).expanduser().resolve()
+        report["output"] = str(output)
+        write_pipeline_master_audit(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0 if report["summary"]["pipeline_master_verified"] else 1
     if args.command == "bgl-projection-master-audit":
         report = audit_bgl_projection_master(
             load_model(Path(args.model)),

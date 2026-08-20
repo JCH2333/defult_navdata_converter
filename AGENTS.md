@@ -3025,6 +3025,18 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
 - 结论：`projection_schema_verified=true`，BGL 投影管线结构完整性固化完成，`model_or_adapter_change_authorized=false`。
 - r268 新增独立 CLI、自动化测试与最小 fixture，全量回归 `470 passed in 4.03s`，`git diff --check` 通过。游戏未运行，未触碰候选，参考一致仍为 `0/29`，`deployable=false`。
 
-### r269 唯一后续任务
+## 2026-08-20 r269 424 来源-模型-BGL 端到端全量转换流水线主门禁固化
 
-结合 r267 来源模型主审计与 r268 BGL 投影主审计成果，对总体转换管线的端到端权威门禁建立集成校验，确保未来多机模与多 AIRAC 周期扩展的可复用性与质量闭环。
+- r269 只读关系命令行为：
+  `pipeline-master-audit --raw-root <424-2608-root> --model <r187-model> --output <report>`。
+  它将来源-模型全量细合主审计（`source-model-master-audit`）与模型-BGL投影主审计（`bgl-projection-master-audit`）串联为端到端统一门禁。
+- 实际报告为 `diagnostics/r269-pipeline-master-audit-20260820.json`，SHA-256：`bd43726deae019de0cf00b42bd4707f04fc9668d70e99b4537d728c57157386a`。
+  - 来源-模型主门禁：33 个 CSV 100% 审计完成，无未分类文件，5 大核心实体 100% 映射一致，10409 个程序段与 53268 条航段映射固化，10 个不可靠进近安全拒绝。
+  - 模型-BGL 投影门禁：10 大区域机场 BGL 与 `00_enroute.bgl` 投影结构完整，编译器 PackageTool 可用。
+  - 端到端细合判定：`pipeline_master_verified=true`，`disposition="pipeline_master_verified"`，`model_or_adapter_change_authorized=false`。
+- 结论：424 原始数据到 MSFS 默认通用数据转换的端到端质量门禁已全部构建并通过自动化校验，为未来 AIRAC 周期迭代与多机模（Fenix, ini, TFDI, PMDG 等）适配器复用奠定了标准中株流水线。
+- r269 新增独立 CLI、自动化测试与最小 fixture，全量回归 `471 passed in 4.17s`，`git diff --check` 通过。游戏未运行，未触碰候选，参考一致仍为 `0/29`，`deployable=false`。
+
+### r270 唯一后续任务
+
+基于已固化的端到端转换主门禁，推进阶段 2 的 BGL 二进制编码微调与语法树一致性比对，探索受控 29 个 BGL 文件的逐字节对齐路径。
