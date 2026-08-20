@@ -51,6 +51,10 @@ from .airway_diff_audit import (
     load_source_audit,
     write_airway_diff_audit,
 )
+from .airway_source_field_audit import (
+    audit_airway_source_fields,
+    write_airway_source_field_audit,
+)
 from .airway_endpoint_audit import (
     audit_unresolved_airway_endpoints,
     write_unresolved_airway_endpoint_audit,
@@ -953,6 +957,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="最多输出多少条哈希化关联样本（默认 100）",
     )
     airway_diff.add_argument("--output", help="可选的本地航路差异审计 JSON 输出路径")
+    airway_source_field = sub.add_parser(
+        "airway-source-field-audit",
+        help="只读比较 424 VAL_MTCA 与读取器航路最低高度的可复用证据审计",
+    )
+    airway_source_field.add_argument("--model", required=True)
+    airway_source_field.add_argument("--semantic-diff", required=True)
+    airway_source_field.add_argument("--candidate-database", required=True)
+    airway_source_field.add_argument("--reference-database", required=True)
+    airway_source_field.add_argument("--output", required=True)
     route_type_source = sub.add_parser(
         "route-type-source-audit",
         help="只读审计目标 J/V 航路类型与 NavModel 来源字段的唯一性",
@@ -2153,6 +2166,18 @@ def main(argv: list[str] | None = None) -> int:
         output = Path(args.output).expanduser().resolve()
         report["output"] = str(output)
         write_sdk_bgl_expression_matrix(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "airway-source-field-audit":
+        report = audit_airway_source_fields(
+            load_model(Path(args.model)),
+            load_semantic_diff(Path(args.semantic_diff)),
+            Path(args.candidate_database),
+            Path(args.reference_database),
+        )
+        output = Path(args.output).expanduser().resolve()
+        report["output"] = str(output)
+        write_airway_source_field_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "route-type-source-audit":

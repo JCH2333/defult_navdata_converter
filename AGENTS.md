@@ -41,7 +41,7 @@
 - r338 模型计数与冻结模型一致；V111/V162 四条端点区域恢复
 - 与参考默认数据字节一致：`0/29`
 - `deployable=false`
-- 当前完整回归：`506 passed`（2026-08-20）
+- 当前完整回归：`509 passed`（2026-08-20）
 - 当前未部署 Community、未实机验证、未创建 Release。
 
 ### r338-r343 阶段结论
@@ -156,6 +156,13 @@
 - 结论：SDK 1.5.3 已排除为当前完整 BGL 差异的原因；SDK 1.6.9 是失败工具链，不修改 adapter 迎合其失败。继续按来源缺口和 BGL 投影契约审计。
 - 证据：`diagnostics/r362-validate-sdk153.json`、`diagnostics/r363-validate-sdk169.json`、`diagnostics/r362-file-convergence-sdk153.json`、`diagnostics/r363-file-convergence-sdk169.json`、本地 `sdk-builds` 隔离诊断。
 
+### r364 航路最低高度来源审计（2026-08-20）
+
+- 新增可复用 CLI `airway-source-field-audit`：只读比较 424 `RTE_SEG -> SEGMENT/EN_ROUTE_RTE.VAL_MTCA` 与候选/参考读取器 `airway.minimum_altitude`；输出仅计数、变换命中数、冲突类别、哈希和状态，不输出参考字段值或航路标识。
+- r356 实际结果：参考读取器 `4614` 条航路、非零最低高度 `41` 条；其中 `41` 条均能关联到 424 原始字段，但原值、米转英尺 floor/round/ceil 均 `0` 条命中。完整语义差分中的最低高度差异为 `30` 条，故当前 `VAL_MTCA` 不能解释目标值，状态 `no_source_transform_match`。
+- 结论：保持 `minimum_altitude_ft` 和候选不变，`adapter_change_authorized=false`；等待同周期字段单位/优先级的直接证据或真实 SQL。证据：`diagnostics/r364-airway-source-field-audit.json`、`diagnostics/r356-00-enroute-semantic-diff-full.json`。
+- 代码与回归：`src/fenix_default_navdata/airway_source_field_audit.py`、`tests/test_airway_source_field_audit.py`；全量 `509 passed`。候选仍 `0/29`、`deployable=false`，未部署、未实机验证。
+
 ## 已确认的通用契约
 
 - 官方包必须保留全球基线，区域覆盖独立生成。
@@ -201,6 +208,7 @@
 - r347-r353：设施索引修复、机场终端航点作用域恢复、航路类型/设施区域/NDB 作用域、未分类程序/VOR 来源审计及批量审计管线；候选仍 `0/29`，未授权修改映射或部署。
 - r354-r361：424 重导出、`00_enroute`/来源缺口/航路类型/机场范围只读审计；候选仍 `0/29`。
 - r362-r363：SDK 1.5.3/1.6.9 完整模型对照；1.5.3 与 r356 完全一致，1.6.9 构建失败；未修改 adapter、未部署。
+- r364：`VAL_MTCA` 与读取器最低高度只读审计；无简单单位变换命中，保持阻断，未修改 adapter、未部署。
 
 ## 维护协议
 
