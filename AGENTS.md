@@ -80,7 +80,7 @@
 - 因无 424 直接映射证据，本轮不修改 `NavModel`、`_route_type` 或 BGL adapter；当前候选 `airway=5044`、参考 `4620`，字节一致仍为 `0/29`。
 - 证据：`diagnostics/r348-airway-type-source-audit-20260820.json`、`diagnostics/route-type-hint-probe-r71-20260817/probe-report.json`、`diagnostics/route-type-name-fixed-probe-r71-20260817/probe-report.json`。状态：`blocked`，等待同周期 424 直接类别字段或官方转换规则。
 
-### r349 设施区域冲突审计（2026-08-21）
+### r349 设施区域冲突审计（2026-08-20）
 
 - 回查 r347 的 6 个 VOR 区域差异（ALS/BDA/ETL/MSN/PAN/WUH）及 4 个 NDB 字段差异（DM/DS/SB/RG）的 424 坐标、频率、`SERVICED_AIRPORT` 和 `CODE_FIR`。
 - 4 个 NDB 与官方读取索引的 `ZU` 记录在坐标/频率上对应；6 个 VOR 无法在已验证索引中建立同坐标同频的一一身份映射，不能把参考区域倒推成来源规则。
