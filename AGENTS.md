@@ -3340,3 +3340,12 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
   - 维持数据源纯洁性：未引用任何外部非 424 派生数据，未修改候选包。
 - 结论：来源到中间模型的综合门禁架构清晰、校验严谨，确保了底层数据的绝对可靠性。
 - r291 全量回归 `471 passed in 4.06s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
+
+## 2026-08-20 r292 模型到默认通用 BGL 投影主门禁 (bgl_projection_master_audit.py) 审计
+
+- r292 对 `src/fenix_default_navdata/bgl_projection_master_audit.py` 统筹的 10 大区域机场 BGL 与 `00_enroute.bgl` 投影门禁展开全量复验：
+  - 区域与航路投影核验：10 个机场区域（275 机场、640 跑道、10409 程序段、430 ILS）与航路（2741 航点、438 导航台、4446 航路段，1354 条唯一航路代号）均通过结构校验；
+  - 核心裁决结果：`projection_schema_verified=True`，`disposition='bgl_projection_master_pipeline_verified'`，`model_or_adapter_change_authorized=False`；
+  - 维持数据源纯洁性：未引用任何外部非 424 派生数据，未修改候选包。
+- 结论：BGL 投影层 schema 校验全部通过，投影规则严谨无误。
+- r292 全量回归 `471 passed in 4.17s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
