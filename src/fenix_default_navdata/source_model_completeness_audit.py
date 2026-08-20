@@ -156,9 +156,12 @@ _UNMODELED_GROUPS = (
         ("RWY.csv", "RWY_DIRECTION.csv"),
         ("RWY.AD_HP_ID", "RWY_DIRECTION.RWY_ID", "RWY_DIRECTION.VAL_THR_DISPLACE"),
         (),
-        "source_complete_target_contract_unverified",
+        "source_complete_current_target_rejected",
         "airport/runway",
-        "字段与 SDK OffsetThreshold 的位移语义直接对应，但尚未验证两端映射和二进制影响。",
+        (
+            "字段可合法编码为 SDK OffsetThreshold，但 r195/r246 已在当前默认 BGL "
+            "profile 验证其不改变节类型或节计数，且未提高参考一致文件数。"
+        ),
     ),
     _SourceGroup(
         "approach_sector_radios",
@@ -286,8 +289,14 @@ def _source_group_report(
         result["positive_displacement_record_total"] = _positive_displacement_rows(
             source_rows,
         )
-        result["next_gate"] = (
-            "仅可建立最小正反 SDK fixture；不得直接修改 NavModel、候选包或部署状态。"
+        result["target_profile"] = "default-bgl-msfs2024-sdk-1.6.9"
+        result["historical_probe_evidence"] = {
+            "probe": "r195-offset-threshold",
+            "consolidated_audit": "r246-historical-sdk-probe-evidence-v1",
+            "result": "no_section_cardinality_effect",
+        }
+        result["reconsideration_gate"] = (
+            "仅当目标格式、可哈希 SDK 或真实加载契约发生可复核变化时，才可建立新的隔离探针。"
         )
     if group.key == "approach_sector_radios":
         result["radio_file_row_total"] = sum(
@@ -343,6 +352,12 @@ def audit_source_model_completeness(
         and item["source_complete"]
         and int(item.get("positive_displacement_record_total", 0)) > 0
     ]
+    source_complete_rejections = [
+        key
+        for key, item in reports.items()
+        if item["disposition"] == "source_complete_current_target_rejected"
+        and item["source_complete"]
+    ]
     return {
         "diagnostic": "source-model-completeness-audit-v1",
         "read_only": True,
@@ -361,6 +376,7 @@ def audit_source_model_completeness(
             ),
             "dispositions": dict(sorted(disposition_counts.items())),
             "source_complete_sdk_probe_candidates": source_complete_candidates,
+            "source_complete_current_target_rejections": source_complete_rejections,
             "model_or_adapter_change_authorized": False,
         },
         "groups": reports,

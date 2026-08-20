@@ -2600,3 +2600,120 @@ Package Tool 构建、验证和部署门禁已具备。它不能与来源闭合�
 - r256 功能提交为 `9172218`（`feat: audit 424 model source completeness`）。同日普通 `git push`
   失败：`Failed to connect to 127.0.0.1 port 7897 after 2116 ms`；未强推、未改写历史，远端未变更。
   网络恢复后只可从当前 `main` 普通推送，并用 `git ls-remote --heads origin main` 复核。
+
+## 2026-08-19 r257 权威进度、经验与字节收敛执行计划
+
+### 1. 当前可复核状态与进度口径
+
+- 冻结内容模型为 `output\intermediate-2608-r187-navaid-label-replay.json.gz`，SHA-256 为
+  `7cec24bd4a57545d39aab037abe4125c763ad12f364bd5f8f0073b0e050fdb4b`。同模型的 r188/r189
+  候选自重放为 `29/29`，证明当前构建链在受控输入下可重复；它不表示与参考一致。
+- 受控参考验收仍为 `0/29`。这是唯一的字节收敛指标；测试通过、BGL 节表接近、文件大小接近、
+  派生元数据接近和候选自重放均不得替代它。工程与可复用管线约为 `45%`，但字节验收、恢复演练、
+  Community 部署、实机验证和正式 Release 均为 `0%`，各轨道不得合并为单一百分比。
+- IAP 来源卡已形成可重放结论 `32/40`，余下 8 张主进近卡均为
+  `unresolved_direct_database_evidence_inconclusive` 且 `projection_allowed=false`。r255 已完成
+  42 份未缓存同周期 PDF 的程序化直接文本分类并登记
+  `no_unread_direct_424_evidence=true`；不得以重复 OCR、同跑道、标题相似或变体继承继续修改投影。
+- r257 实测报告为 `diagnostics\r257-source-model-completeness-reconciled-20260819.json`，SHA-256 为
+  `68bd91c6cef65967da3c8ff7c26453f04410f338fc99500d46922cfccd59d965`。8 个声明的结构化来源组
+  均已审计：机场 275、跑道 640、导航台 438、指定点 2741、航路腿 4446 已进入 `NavModel`；
+  FIR 几何只作为同源区域恢复证据；扇区通信因来源作用域和基数不成立而拒绝投影。
+- r256 的“阈值位移可进入新 SDK 探针”状态已被纠正。`RWY_DIRECTION.VAL_THR_DISPLACE` 有 33 条
+  正值且可合法编码为 `OffsetThreshold`，但 r195 的 ZPPP/04R 单变量实验和 r246 的机器可读归档
+  已确认它不改变 BGL 节类型、节计数或节大小结构，也没有提高参考一致文件数。因此 r257 将其标为
+  `source_complete_current_target_rejected`；`source_complete_sdk_probe_candidates=[]`，
+  `model_or_adapter_change_authorized=false`。
+- 当前不得覆盖 `F:\games\community\Community`。未经参考 `29/29`、双干净构建、完整验证和恢复
+  演练的产物只能是不可部署测试候选；游戏关闭状态不构成部署授权。
+
+### 2. 已确认经验与不可回退边界
+
+1. `NavModel` 是唯一可被未来 AIRAC 和未来目标格式复用的内容边界。内容只能由同周期 424
+   CSV/PDF 解析、带 `SourceRef` 和明确降级原因进入模型；Fenix、参考成品、参考 BGL/SQLite、
+   坐标、哈希、文件大小、索引及派生包元数据永远不能成为内容输入。
+2. OCR 或本地多模态程序只能消歧已经被同周期结构化来源唯一绑定的对象，且必须保存 PDF
+   SHA-256、页码、运行时、参数、重复结果和正反例。它不能创造机场、导航台、坐标、主进近、
+   航段类型或图页归属。
+3. r244 已闭合现有航路模型到 XML 的序列化；r246 已把跑道表面、阈值位移和
+   `DeleteAirport` 的单变量结果标准化。前两项不能修复当前字节差异，`DeleteAirport` 仅是覆盖
+   契约。除非目标格式、可哈希 SDK 或真实加载契约发生可复核变化，不得重复这些探针。
+4. r247/r248 已证明 Package Tool 的 FILETIME 只影响 `layout.json` 和 `bglIndex.bout` 等派生
+   文件，未提高参考一致数。禁止手工回写 FILETIME、包大小、清单、ContentHistory 或索引二进制。
+5. BGL 节类型、计数、大小和读取器局限只能定位差异，不能反推应生成的导航实体。只有“来源完整 +
+   目标表达或加载契约明确 + 最小正反验证”同时成立时，才允许改变模型或 adapter。
+
+### 3. 后续详细执行计划
+
+#### 阶段 0：每轮状态刷新与任务准入
+
+1. 为每轮分配连续 `rNNN`，先记录唯一假设、唯一变量、允许读取范围、禁止读取范围、冻结模型、
+   输入/工具 SHA-256、预期影响的文件角色、成功条件和可证伪条件。
+2. 开始和结束均复核两份 `AGENTS.md`、`git status --short --branch`、游戏进程、最新模型/候选/
+   来源卡/收敛报告。Git 领先数必须现场读取，不能复制历史数值。
+3. 只有以下三类新证据可创建新实验：新的同周期 424 直接来源、真实加载 SQL 或错误文本、可恢复且
+   可哈希的 SDK/模板/目标格式变化。三者都不存在时，登记“当前无可验证单变量”，不得为了推进
+   编号而重复已否决试验或修改正式投影。
+
+#### 阶段 A：来源与模型闭合
+
+1. 新同周期 424 CSV/PDF 出现后，先以只读审计冻结文件清单、SHA-256、表头、行数、`SourceRef`
+   和直接文本证据；再判定其是新内容、已有内容的可验证补充，还是不能投影的运行资料。
+2. 只有 `projection_allowed=true` 的规则才能进入最小正反 fixture。实现必须同时增加来源审计、
+   模型规范化、目标投影和拒绝回归；不可表达字段必须明确降级并计数。
+3. 新模型须生成版本化快照和输入 manifest，运行严格重放审计。白名单以对象身份、来源行/页、
+   字段路径、预期文件角色和降级计数逐项登记；未白名单差异、引用断裂、字符串溢出或
+   NULL/default 违规均阻止候选构建。
+
+#### 阶段 B：真实加载契约与 SDK 表达取证
+
+1. 优先获取默认数据实际加载路径、WASM/DLL 的 SQL、错误文本或可审计日志；这类证据只定义读取/
+   覆盖契约，不可提供中国导航内容。
+2. 只有阶段 A 授权的新对象，或阶段 0 发现的可恢复工具链变量，才能建立纯 ASCII 的最小单变量
+   SDK 探针。固定模型、官方双基线、项目定义和构建等待策略；一次只改变一个 XML 表达。
+3. 每个探针必须输出 XML/XSD 校验、Package Tool 产物、BGL 固定头/节表、标准 JSON 重读、影响
+   文件角色、自重放和参考 `x/29`。参考一致数不增长即否决，不得接入正式 adapter。
+
+#### 阶段 C：候选收敛与字节验收
+
+1. 对每项获准改变分别构建基线和变更候选，完成完整 `validate`、JSON 重读、来源缺口审计、
+   BGL/派生元数据审计与 `file-convergence-audit`。变更必须只落在预登记的文件角色。
+2. 使用同一冻结模型在两个全新 ASCII 隔离目录独立构建。两次均先达到自重放 `29/29`，再分别对
+   参考验收；仅当参考相等文件从 `0/29` 实际增加时，才登记“字节收敛推进”。
+3. 优先解决由合法内容或已证实编译表达造成的 BGL 差异；`layout.json`、`bglIndex.bout`、
+   `manifest.json` 和 `ContentHistory.json` 必须由正常构建链派生，禁止独立手工收敛。
+
+#### 阶段 D：干净验收、恢复、部署和实机
+
+1. 仅在参考 `29/29` 后，使用冻结输入、已验证工具链和官方双基线完成两次全新干净构建；两次都要
+   同时满足自重放和参考 `29/29`，并生成完整树 SHA-256 清单。
+2. 确认 `FlightSimulator2024.exe` 已退出后，对 Community 中两个覆盖包及其布局、清单、索引和
+   ContentHistory 创建带时间戳备份；先在非 Community 位置完成恢复演练，再允许 GUI/CLI 共用
+   deployer 覆盖目标。
+3. 部署后立即核对树哈希和完整 validator。用户按 `ZBCF`、`ZUNZ`、`ZUUU` 验证机场输入、跑道、
+   SID、STAR、IAP、航路/航点以及退出飞行和退出模拟器。全部通过前只标记测试版，禁止正式
+   GitHub Release。
+
+### 4. 面向其他 424 周期和目标格式的复用管线
+
+固定主链为：
+
+`lock-inputs -> ingest-424 -> evidence-audit -> normalize-model -> model-audit -> project-target -> build-target -> validate-target -> diff-and-audit -> stage-backup-deploy`
+
+- `lock-inputs` 固化每期 CSV/PDF、官方模板、工具链和 OCR 运行时版本/哈希；`ingest-424` 与
+  `normalize-model` 只产出版本化 `NavModel`，不得掺入目标专用猜测。
+- 新目标格式必须独立建设 `profile/adapter/validator/deployer`，并登记官方可用基线、真实加载路径/
+  SQL 或读取流程、schema/文件契约、单位、NULL/default、物理排序、周期元数据、降级策略、最小
+  fixture、运行时模拟器、GUI/CLI 参数、备份恢复和实机清单。
+- 适配器仅消费 `NavModel` 与目标模板契约。默认 BGL 的未闭合假设、探针结论和参考差异不得迁移为
+  PMDG、iFly、TFDI、FSL/FSLabs 或后续格式的规则；每个目标必须重新取得本机可复核证据。
+- 每轮结束同步两份 `AGENTS.md`：假设/变量、证据、测试、模型/候选差异、来源卡、重放、参考
+  `x/29`、部署状态、否决结论、下一项唯一任务及提交/推送结果。代码或仓库文档改动后必须运行
+  `pytest -q`、`git diff --check`、精确暂存、单主题提交和普通推送；网络不可用时保留本地提交，
+  待恢复后用 `git ls-remote --heads origin main` 核验，禁止强推。
+
+### 5. r258 准入结论
+
+当前下一项不是新的内容修改或重复 SDK 探针。r258 仅在发现阶段 0 所列三类新证据之一后启动：
+若是新 424 直接来源，走阶段 A；若是真实加载契约，走阶段 B；若是可恢复工具链变量，先建立
+工具链清单后再走阶段 B。未满足准入条件时保持 r257 冻结结论和不可部署状态。

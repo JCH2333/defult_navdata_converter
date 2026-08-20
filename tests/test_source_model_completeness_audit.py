@@ -22,7 +22,7 @@ def _model(root: Path) -> NavModel:
     return model
 
 
-def test_audit_keeps_source_boundaries_and_identifies_displacement_probe(
+def test_audit_keeps_source_boundaries_and_marks_historically_rejected_displacement(
     tmp_path: Path,
 ) -> None:
     root = tmp_path / "raw"
@@ -56,7 +56,18 @@ def test_audit_keeps_source_boundaries_and_identifies_displacement_probe(
     assert report["groups"]["runway_threshold_displacement"][
         "positive_displacement_record_total"
     ] == 1
-    assert report["summary"]["source_complete_sdk_probe_candidates"] == [
+    assert report["groups"]["runway_threshold_displacement"]["disposition"] == (
+        "source_complete_current_target_rejected"
+    )
+    assert report["groups"]["runway_threshold_displacement"][
+        "historical_probe_evidence"
+    ] == {
+        "probe": "r195-offset-threshold",
+        "consolidated_audit": "r246-historical-sdk-probe-evidence-v1",
+        "result": "no_section_cardinality_effect",
+    }
+    assert report["summary"]["source_complete_sdk_probe_candidates"] == []
+    assert report["summary"]["source_complete_current_target_rejections"] == [
         "runway_threshold_displacement",
     ]
     assert report["summary"]["model_or_adapter_change_authorized"] is False
