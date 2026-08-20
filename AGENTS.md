@@ -3937,3 +3937,10 @@ untime_contract_audit.py 中多机模契约验证机制、语义差分、物理�
 - `sdk-section-provenance-audit` 新增按案例汇总的“相同 XML -> 相同 BGL”重放统计，不再要求重放输入必须与基线相同；r328 为 `same_input_output_replay_count=1`、`same_input_output_mismatch_count=0`。该能力可复用于任何 SDK 目标探针，回归：`test_section_provenance_detects_replayed_variant_without_baseline_match`。
 - 结论：`onlyAddIfReplace` 对此受控 XML 的 `0x35` 移除效果在当前 SDK 可重复，但它仍无 424 来源授权，且既有新增机场离线读取反证仍成立；不得写入默认 BGL adapter，不得用于匹配参考 Section、记录数或体积。参考字节一致性仍为 `0/29`，`deployable=false`，部署与 Release 门禁保持关闭。下一步转向“424 -> NavModel -> XML -> BGL Section”贡献度矩阵，先量化现有来源实体的投影规模，禁止反向读取参考记录。
 - 本轮完整回归：`python -m pytest -q` 为 `496 passed in 4.68s`。未部署 Community、未执行备份恢复演练、未实机验证、未创建 Release。
+
+## 2026-08-20 r329 424 到投影贡献度矩阵基线
+
+- 新增只读 `projection-contribution-audit`：从显式传入的冻结 `NavModel` 重新生成 `00_enroute.xml` 和十个地区机场 XML，汇总模型实体/`SourceRef` 引用数、XML 标签计数以及候选 BGL Header/Section 表。审计不读取参考 payload、不修改候选，并明确写入 `section_type_semantics_inferred=false`；它只能量化各层规模，不能把 Section 类型或数量解释为实体语义或一一映射。Windows `Path` 在报告中规范化为字符串，并由 JSON 标准库重读回归覆盖。
+- 真实审计：`diagnostics/r329-projection-contribution-audit-20260820.json`，SHA-256 `2d9409a949453290493583953d144c4f4bc369eb56215237c509e9cc35845b0e`；诊断 XML 位于 `diagnostics/r329-projection-contribution-xml-retry-20260820`，共 `11` 份，候选 BGL Header 共 `21` 份。标准库重读确认模型仍为 r187 SHA-256 `7cec24bd4a57545d39aab037abe4125c763ad12f364bd5f8f0073b0e050fdb4b`，且 `reference_payload_read=false`、`section_type_semantics_inferred=false`。
+- 冻结模型量级为：机场 `275`、跑道方向 `640`、导航台 `438`、全局航点 `2741`、终端航点 `12549`、航路段 `4446`、程序段 `10409`；拒绝记录 `435`、拒绝程序 `10` 仍保留为来源边界。该数字用于后续选择单 BGL/单 Section 的审计优先级，不解除任何缺口卡，也不允许补造对象或修改正式 adapter。
+- 回归：定向 `24 passed in 1.57s`，完整 `python -m pytest -q` 为 `497 passed in 4.85s`。候选参考字节一致性仍为 `0/29`、`deployable=false`；未部署 Community、未执行备份恢复演练、未实机验证、未创建 Release。下一步以此矩阵选定 `ZJ_airports.bgl` 的单一候选/Section 差异，先取得可复跑 XML 触发或记录边界证据，再改变任何投影规则。

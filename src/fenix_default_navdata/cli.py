@@ -105,6 +105,10 @@ from .enroute_bgl_cardinality_audit import (
     audit_enroute_bgl_cardinality,
     write_enroute_bgl_cardinality_audit,
 )
+from .projection_contribution_audit import (
+    audit_projection_contributions,
+    write_projection_contribution_audit,
+)
 from .default_gap_cards import (
     audit_default_gap_cards,
     write_default_gap_cards,
@@ -493,6 +497,18 @@ def build_parser() -> argparse.ArgumentParser:
     enroute_bgl_cardinality.add_argument("--candidate", required=True)
     enroute_bgl_cardinality.add_argument("--reference")
     enroute_bgl_cardinality.add_argument("--output", required=True)
+    projection_contribution = sub.add_parser(
+        "projection-contribution-audit",
+        help="量化 NavModel、诊断投影 XML 与候选 BGL 节表，不读取参考记录",
+    )
+    projection_contribution.add_argument("--model", required=True)
+    projection_contribution.add_argument("--candidate", required=True)
+    projection_contribution.add_argument(
+        "--projection-xml-root",
+        required=True,
+        help="新建的诊断 XML 输出目录；若已存在则拒绝覆盖",
+    )
+    projection_contribution.add_argument("--output", required=True)
     model_replay = sub.add_parser(
         "model-replay-audit",
         help="只读比较两个 NavModel 快照，并以精确路径和哈希执行白名单门禁",
@@ -2072,6 +2088,19 @@ def main(argv: list[str] | None = None) -> int:
         output = Path(args.output).expanduser().resolve()
         report["output"] = str(output)
         write_sdk_bgl_expression_matrix(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "projection-contribution-audit":
+        model_path = Path(args.model).expanduser().resolve()
+        output = Path(args.output).expanduser().resolve()
+        report = audit_projection_contributions(
+            load_model(model_path),
+            Path(args.candidate),
+            Path(args.projection_xml_root),
+            model_path=model_path,
+        )
+        report["output"] = str(output)
+        write_projection_contribution_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "sdk-toolchain-audit":
