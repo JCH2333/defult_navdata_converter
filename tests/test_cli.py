@@ -657,6 +657,46 @@ def test_unclassified_procedure_card_audit_reads_exact_card_and_writes_report(
     assert received["report"]["output"] == str(received["output"])
 
 
+def test_unclassified_procedure_cards_audit_reads_selected_cards_and_writes_report(
+    monkeypatch,
+) -> None:
+    received: dict[str, object] = {}
+    model = NavModel(Path("raw"))
+
+    monkeypatch.setattr(cli, "load_model", lambda path: received.update(
+        model_path=path
+    ) or model)
+    monkeypatch.setattr(
+        cli,
+        "audit_unclassified_procedure_cards",
+        lambda received_model, cards: received.update(
+            model=received_model, cards=cards
+        ) or {"diagnostic": "unclassified-procedure-cards-audit-v1"},
+    )
+    monkeypatch.setattr(
+        cli,
+        "write_unclassified_procedure_cards_audit",
+        lambda path, report: received.update(output=path, report=report),
+    )
+
+    result = cli.main([
+        "unclassified-procedure-cards-audit",
+        "--model", "output/model.json.gz",
+        "--card", "ZGBS:RNP-0:12:0",
+        "--card", "ZUKD:EO-15:15:9",
+        "--output", "diagnostics/unclassified-procedure-cards.json",
+    ])
+
+    assert result == 0
+    assert received["model_path"] == Path("output/model.json.gz")
+    assert received["model"] is model
+    assert received["cards"] == ["ZGBS:RNP-0:12:0", "ZUKD:EO-15:15:9"]
+    assert received["output"] == Path(
+        "diagnostics/unclassified-procedure-cards.json"
+    ).resolve()
+    assert received["report"]["output"] == str(received["output"])
+
+
 def test_export_model_command_passes_source_and_output(monkeypatch) -> None:
     captured: dict[str, object] = {}
 

@@ -3,7 +3,9 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections import Counter
 from pathlib import Path
+from typing import Iterable
 
 import pymupdf
 
@@ -255,7 +257,60 @@ def audit_unclassified_procedure_card(
     }
 
 
+def audit_unclassified_procedure_cards(
+    model: NavModel,
+    card_keys: Iterable[str] | None = None,
+) -> dict[str, object]:
+    """Audit a deterministic set of cards with the same direct-PDF gate."""
+
+    available = [key for key, _ in _card_records(model)]
+    selected = available if card_keys is None else list(card_keys)
+    if len(set(selected)) != len(selected):
+        raise UnclassifiedProcedureCardAuditError("批量未分类程序卡不能包含重复键")
+    unknown = sorted(set(selected) - set(available))
+    if unknown:
+        raise UnclassifiedProcedureCardAuditError(
+            f"批量未分类程序卡包含未知键: {', '.join(unknown)}"
+        )
+    items = [audit_unclassified_procedure_card(model, key) for key in selected]
+    dispositions = Counter(str(item["disposition"]) for item in items)
+    proven_kinds = Counter(
+        str(item["source_proven_kind"])
+        for item in items
+        if item["source_proven_kind"] is not None
+    )
+    return {
+        "diagnostic": "unclassified-procedure-cards-audit-v1",
+        "read_only": True,
+        "reference_records_read": False,
+        "fenix_records_read": False,
+        "model_changed": False,
+        "projection_changed": False,
+        "card_keys": selected,
+        "summary": {
+            "card_total": len(items),
+            "target_mapping_allowed_total": sum(
+                1 for item in items if item["target_mapping_allowed"]
+            ),
+            "disposition_counts": dict(sorted(dispositions.items())),
+            "source_proven_kind_counts": dict(sorted(proven_kinds.items())),
+        },
+        "items": items,
+    }
+
+
 def write_unclassified_procedure_card_audit(
+    path: Path,
+    report: dict[str, object],
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
+def write_unclassified_procedure_cards_audit(
     path: Path,
     report: dict[str, object],
 ) -> None:

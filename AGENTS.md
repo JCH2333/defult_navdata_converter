@@ -107,6 +107,13 @@
 - 424 中另有 11 条同坐标/同频但跨区域的物理重复 VOR 被确定性抑制；只有 SNF 的跨区域添加有独立可复核授权。该规则不扩大到参考独有 VOR。
 - 结论：缺少参考独有 VOR 的完整 424 身份证据，不修改 `navaid_country()`、设施选择或候选；状态 `blocked`。证据：`diagnostics/r352-vor-source-identity-audit.json`、`diagnostics/r347-semantic-diff.json`。
 
+### r353 未分类程序批量审计管线（2026-08-20）
+
+- 新增 `unclassified-procedure-cards-audit` CLI，复用单卡 PDF SHA-256、页码、标签锚点和类别标题门禁，支持全量或指定卡集合，输出确定性汇总与逐卡证据。
+- 冻结 r187 模型实际运行：13 张卡、`target_mapping_allowed_total=0`、13 条均为 `rejected_missing_direct_label_anchor`；未读取参考记录/Fenix，未修改模型或投影。
+- 新增回归后全量测试为 `502 passed`。该管线只改善来源审计复用性，不授权 `RNP/CC/EO` 标签映射，不改变候选或 `0/29` 字节状态。
+- 证据：`diagnostics/r353-unclassified-procedure-cards.json`；代码：`src/fenix_default_navdata/unclassified_procedure_card_audit.py`、`src/fenix_default_navdata/cli.py`。
+
 ## 已确认的通用契约
 
 - 官方包必须保留全球基线，区域覆盖独立生成。
@@ -149,7 +156,7 @@
 - r328：`onlyAddIfReplace` 隔离探针和相同输入重放门禁；不改变 adapter。
 - r329-r335：贡献度、ZJ Section、运行时触发和来源缺口只读审计；参考差异未授权投影，waypoint/airway 缺口 `1013/1186` 保持拒绝。
 - r338-r343：GeneralDoc 边界修复、全量 BGL 结构审计、SDK 作用域探针和根级终端航点实验；候选仍 `0/29` 字节一致、未部署。
-- r347-r352：设施索引修复、机场终端航点作用域恢复、航路类型/设施区域/NDB 作用域、未分类程序和 VOR 身份来源审计；候选仍 `0/29`，未授权修改映射或部署。
+- r347-r353：设施索引修复、机场终端航点作用域恢复、航路类型/设施区域/NDB 作用域、未分类程序/VOR 来源审计及批量审计管线；候选仍 `0/29`，未授权修改映射或部署。
 
 ## 维护协议
 

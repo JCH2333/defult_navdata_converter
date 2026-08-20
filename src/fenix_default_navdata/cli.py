@@ -127,7 +127,9 @@ from .unclassified_procedure_audit import (
 )
 from .unclassified_procedure_card_audit import (
     audit_unclassified_procedure_card,
+    audit_unclassified_procedure_cards,
     write_unclassified_procedure_card_audit,
+    write_unclassified_procedure_cards_audit,
 )
 from .bgl import find_compiler
 from .airway_connection_shape_probe import run_airway_connection_shape_probe
@@ -822,6 +824,25 @@ def build_parser() -> argparse.ArgumentParser:
         "--output",
         required=True,
         help="本地未分类程序卡审计 JSON 输出路径",
+    )
+    unclassified_procedure_cards_audit = sub.add_parser(
+        "unclassified-procedure-cards-audit",
+        help="只读批量审计未分类程序卡的直接 PDF 类别证据",
+    )
+    unclassified_procedure_cards_audit.add_argument(
+        "--model",
+        required=True,
+        help="可复用 NavModel 快照（JSON 或 JSON.GZ）",
+    )
+    unclassified_procedure_cards_audit.add_argument(
+        "--card",
+        action="append",
+        help="可重复指定精确卡键；省略时审计全部未分类程序卡",
+    )
+    unclassified_procedure_cards_audit.add_argument(
+        "--output",
+        required=True,
+        help="本地批量未分类程序卡审计 JSON 输出路径",
     )
     default_gap_cards = sub.add_parser(
         "default-gap-cards-audit",
@@ -2096,6 +2117,16 @@ def main(argv: list[str] | None = None) -> int:
         output = Path(args.output).expanduser().resolve()
         report["output"] = str(output)
         write_sdk_bgl_expression_matrix(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "unclassified-procedure-cards-audit":
+        report = audit_unclassified_procedure_cards(
+            load_model(Path(args.model)),
+            args.card,
+        )
+        output = Path(args.output).expanduser().resolve()
+        report["output"] = str(output)
+        write_unclassified_procedure_cards_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "projection-contribution-audit":

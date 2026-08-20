@@ -159,3 +159,27 @@ def test_card_audit_accepts_unique_same_line_direct_label_kind_link(
     assert report["source_proven_kind"] == "进近"
     assert report["target_mapping_allowed"] is True
     assert report["disposition"] == "direct_label_kind_link_confirmed"
+
+
+def test_batch_card_audit_reuses_exact_card_gate_and_summarizes(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        unclassified_procedure_card_audit,
+        "_read_source_page_text",
+        lambda path, page: "RNP-0 进近\n",
+    )
+
+    report = unclassified_procedure_card_audit.audit_unclassified_procedure_cards(
+        _card_model(tmp_path / "raw"),
+    )
+
+    assert report["diagnostic"] == "unclassified-procedure-cards-audit-v1"
+    assert report["summary"] == {
+        "card_total": 1,
+        "target_mapping_allowed_total": 1,
+        "disposition_counts": {"direct_label_kind_link_confirmed": 1},
+        "source_proven_kind_counts": {"进近": 1},
+    }
+    assert report["items"][0]["card_key"] == "ZTEST:RNP-0:15:0"
