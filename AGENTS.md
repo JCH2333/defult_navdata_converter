@@ -3540,3 +3540,19 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
   Navdatareader 的单次结果不得用于来源闭合、语义差分、SDK 选择或字节级验收；未来
   目标格式适配器必须先通过重复读取门禁，或使用独立的真实加载器证据。
 - 全量测试基线更新为 `481 passed`；参考字节一致性仍为 `0/29`，`deployable=false`。
+
+## 2026-08-20 r310 SDK Section 来源审计与 Windows manifest 兼容
+
+- 新增只读 `sdk-section-provenance-audit` 及
+  `sdk-section-provenance-manifest-v1`。manifest 显式绑定同一探针的基线
+  XML/BGL 与多个变体 XML/BGL；审计保存 XML SHA-256、BGL 文件 SHA-256、版本、
+  QMID 和 Section 类型/字段/计数/尺寸差异，不读取导航记录，不导出参考 payload。
+- r140 隔离探针实证：以 `zual-com` 为基线，机场子节点 NDB 和根节点 NDB 两个变体
+  均产生可重复的 Section 表变化；报告为
+  `diagnostics\r310-sdk-section-provenance-audit-20260820.json`。该结果只证明
+  SDK 输入作用域会影响编译输出，不能把 `0x17/0x33` 或其他 Section 类型反推为
+  正式导航对象语义，`projection_authorized=false`。
+- manifest 读取兼容 UTF-8 与 Windows PowerShell 生成的 UTF-8 BOM；对应回归已加入
+  `tests/test_sdk_section_provenance_audit.py` 和 `tests/test_cli.py`。
+- 本轮新增测试通过，随后必须执行全量回归；参考一致性仍为 `0/29`，
+  `deployable=false`，不修改 adapter、不替换二进制、不覆盖 Community。

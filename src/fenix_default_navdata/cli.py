@@ -73,6 +73,10 @@ from .sdk_toolchain_pair_audit import (
     audit_sdk_toolchain_pair,
     write_sdk_toolchain_pair_audit,
 )
+from .sdk_section_provenance_audit import (
+    audit_sdk_section_provenance,
+    write_sdk_section_provenance_audit,
+)
 from .airport_source_inventory import (
     build_airport_source_inventory,
     write_airport_source_inventory,
@@ -1376,6 +1380,16 @@ def build_parser() -> argparse.ArgumentParser:
     sdk_toolchain_pair.add_argument("--first-report", required=True)
     sdk_toolchain_pair.add_argument("--second-report", required=True)
     sdk_toolchain_pair.add_argument("--output", required=True)
+    sdk_section_provenance = sub.add_parser(
+        "sdk-section-provenance-audit",
+        help="只读审计 XML 变体对 SDK BGL Section 表的确定性影响",
+    )
+    sdk_section_provenance.add_argument(
+        "--manifest",
+        required=True,
+        help="sdk-section-provenance-manifest-v1 JSON",
+    )
+    sdk_section_provenance.add_argument("--output", required=True)
     reader_repeatability = sub.add_parser(
         "reader-repeatability-audit",
         help="重复读取同一 BGL 包并检查读取器结果是否稳定",
@@ -2263,6 +2277,11 @@ def main(argv: list[str] | None = None) -> int:
             Path(args.second_report),
         )
         write_sdk_toolchain_pair_audit(Path(args.output), report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "sdk-section-provenance-audit":
+        report = audit_sdk_section_provenance(Path(args.manifest))
+        write_sdk_section_provenance_audit(Path(args.output), report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "reader-repeatability-audit":

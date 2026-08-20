@@ -161,6 +161,52 @@ def test_sdk_toolchain_audit_writes_requested_report(tmp_path: Path, monkeypatch
     }
 
 
+def test_cli_runs_sdk_section_provenance_audit(tmp_path: Path) -> None:
+    import json
+    import struct
+
+    def bgl(section_type: int) -> bytes:
+        return (
+            struct.pack("<IIIIII", 0x19920201, 0x38, 0, 0, 0x08051803, 1)
+            + struct.pack("<IIIIIIII", 0x20, 0, 0, 0, 0, 0, 0, 0)
+            + struct.pack("<IIIII", section_type, 1, 1, 0x4C, 1)
+            + b"X"
+        )
+
+    baseline_xml = tmp_path / "baseline.xml"
+    variant_xml = tmp_path / "variant.xml"
+    baseline_bgl = tmp_path / "baseline.bgl"
+    variant_bgl = tmp_path / "variant.bgl"
+    baseline_xml.write_text("<FSData />", encoding="utf-8")
+    variant_xml.write_text("<FSData><Ndb /></FSData>", encoding="utf-8")
+    baseline_bgl.write_bytes(bgl(0x03))
+    variant_bgl.write_bytes(bgl(0x17))
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(json.dumps({
+        "diagnostic": "sdk-section-provenance-manifest-v1",
+        "cases": [{
+            "name": "cli-case",
+            "baseline": {"xml": str(baseline_xml), "bgl": str(baseline_bgl)},
+            "variants": [{
+                "name": "variant",
+                "xml": str(variant_xml),
+                "bgl": str(variant_bgl),
+            }],
+        }],
+    }), encoding="utf-8")
+    output = tmp_path / "audit.json"
+
+    assert cli.main([
+        "sdk-section-provenance-audit",
+        "--manifest", str(manifest),
+        "--output", str(output),
+    ]) == 0
+    assert output.is_file()
+    assert json.loads(output.read_text(encoding="utf-8"))["decision"][
+        "projection_authorized"
+    ] is False
+
+
 def test_route_fragment_probe_passes_sdk_and_reader_options(monkeypatch) -> None:
     received: dict[str, object] = {}
     compiler = CompilerInfo(Path("fspackagetool.exe"), "PackageTool", "test")
