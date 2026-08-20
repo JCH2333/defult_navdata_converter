@@ -41,7 +41,7 @@
 - r338 模型计数与冻结模型一致；V111/V162 四条端点区域恢复
 - 与参考默认数据字节一致：`0/29`
 - `deployable=false`
-- 当前完整回归：`502 passed`
+- 当前完整回归：`506 passed`（2026-08-20）
 - 当前未部署 Community、未实机验证、未创建 Release。
 
 ### r338-r343 阶段结论
@@ -148,6 +148,14 @@
 - 结论：参考范围超出当前 424 输入边界，不能复制参考记录回填；候选独有机场也不能仅因参考范围缺少而删除。当前仍为 `0/29`、`deployable=false`，未部署、未实机验证。
 - 代码、测试和证据：`src/fenix_default_navdata/airport_scope_source_audit.py`、`tests/test_airport_scope_source_audit.py`、`diagnostics/r361-airport-scope-source-audit.json`。
 
+### r362-r363 SDK 工具链对照构建（2026-08-20）
+
+- 使用同一份 r356 冻结模型、同一官方设施索引和同一输入，分别调用 SDK 1.5.3 与 1.6.9；输出仅用于诊断，不部署。
+- r362（SDK 1.5.3）：`local_contract_verified=true`，本地 `validate` 通过；参考包仍为 `0/29`。与 r356 候选的 15 个主包文件和 14 个机场补丁文件全部字节相同，证明完整模型下 SDK 1.5.3 不改变既有差异。
+- r363（SDK 1.6.9）：Package Tool 返回码 `1`，两个包均未生成 `manifest.json`、`layout.json`、`bglIndex.bout` 或 BGL，`local_contract_verified=false`；隔离诊断未发现新的 BuilderLog 内容。该版本不能用于收敛判断。
+- 结论：SDK 1.5.3 已排除为当前完整 BGL 差异的原因；SDK 1.6.9 是失败工具链，不修改 adapter 迎合其失败。继续按来源缺口和 BGL 投影契约审计。
+- 证据：`diagnostics/r362-validate-sdk153.json`、`diagnostics/r363-validate-sdk169.json`、`diagnostics/r362-file-convergence-sdk153.json`、`diagnostics/r363-file-convergence-sdk169.json`、本地 `sdk-builds` 隔离诊断。
+
 ## 已确认的通用契约
 
 - 官方包必须保留全球基线，区域覆盖独立生成。
@@ -191,6 +199,8 @@
 - r329-r335：贡献度、ZJ Section、运行时触发和来源缺口只读审计；参考差异未授权投影，waypoint/airway 缺口 `1013/1186` 保持拒绝。
 - r338-r343：GeneralDoc 边界修复、全量 BGL 结构审计、SDK 作用域探针和根级终端航点实验；候选仍 `0/29` 字节一致、未部署。
 - r347-r353：设施索引修复、机场终端航点作用域恢复、航路类型/设施区域/NDB 作用域、未分类程序/VOR 来源审计及批量审计管线；候选仍 `0/29`，未授权修改映射或部署。
+- r354-r361：424 重导出、`00_enroute`/来源缺口/航路类型/机场范围只读审计；候选仍 `0/29`。
+- r362-r363：SDK 1.5.3/1.6.9 完整模型对照；1.5.3 与 r356 完全一致，1.6.9 构建失败；未修改 adapter、未部署。
 
 ## 维护协议
 
