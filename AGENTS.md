@@ -3929,3 +3929,11 @@ untime_contract_audit.py 中多机模契约验证机制、语义差分、物理�
 - 真实审计：`diagnostics/r327-zj-airports-record-sequence-20260820.json`，SHA-256 `2c0900eadf6f01b2e410b0a81c6f419dc4afb5bd5a85f13b1c84d471baed4ef7`。候选与参考所有 Section 均按 16 字节记录闭合；候选为 `0x03/0x13/0x22/0x32/0x34/0x35`，参考为 `0x03/0x13/0x17/0x22/0x32/0x33/0x34`。`0x13` 为 `3/2003` 条、`0x22` 为 `17/2003` 条；共同 Section 的有序摘要均不一致，首个共同记录位置均不同；`0x17`、`0x33` 缺失于候选，`0x35` 缺失于参考。
 - 该结果仅定位“记录数量和序列尚未收敛”，不证明任何 Section 的导航语义、父子索引或应新增的 424 投影对象。r310/r311 的 SDK 输入矩阵仍只可用于表达诊断；在取得可解释来源、作用域和真实加载契约的单变量证据前，禁止为匹配 Section 类型、记录数量或文件体积而复制参考记录或改写 adapter。
 - 未部署 Community、未执行备份恢复演练、未实机验证、未创建 Release；参考字节一致性仍为 `0/29`，`deployable=false`。下一步应以隔离 SDK 探针验证 `onlyAddIfReplace` 对 `0x35` 的精确触发边界，并同时保留 XML、SDK 指纹、BGL 哈希、序列摘要与重复读取门禁；该探针不得修改 `NavModel` 或正式候选。
+
+## 2026-08-20 r328 onlyAddIfReplace 边界复证与变体重放门禁
+
+- 使用 `scripts/airport_subset_probe.py` 在同一份来源派生的空 `ZUAL` 覆盖 XML 上完成当前 SDK 的三组隔离构建：常规基线、仅设置 `Airport.onlyAddIfReplace=TRUE`、以及相同变体重放。完整输入、探针脚本、Package Tool 路径/进程轨迹、包树哈希和 BGL 节表均保留在 `diagnostics/r328-only-add-if-replace-20260820`；不读取参考 BGL payload、不修改 `NavModel`、不修改正式候选。
+- 真实审计：`diagnostics/r328-only-add-if-replace-audit-20260820.json`，SHA-256 `a41f71dce8b036295276bdb38f200c98556e23d32e7bb4c24b5037de81fe7536`。常规输入 XML SHA-256 为 `fbb05204c81c38de71f033fa03d264266e7abbac72a4259a8cd2c86878c3fdf6`，生成 `363` 字节 BGL、SHA-256 `6e55a27d5b9bbd7622f1703380814c7cd42b2cbd73e083c08f73945a50456cfa`、Section 为 `0x03/0x35`；唯一属性变体 XML SHA-256 为 `b71deb710043bbe649c023042b4b5c3a35b56b5a240ee89e8216d28a666cab72`，两次均生成 `220` 字节 BGL、SHA-256 `210cf7c4ae4cbc8a575bcae75306011d6a210f56d156293785e45f9c45b21de3`、仅有 `0x03`。QMID 与 `0x03` 计数均未变化，唯一 Section 影响为移除 `0x35`。
+- `sdk-section-provenance-audit` 新增按案例汇总的“相同 XML -> 相同 BGL”重放统计，不再要求重放输入必须与基线相同；r328 为 `same_input_output_replay_count=1`、`same_input_output_mismatch_count=0`。该能力可复用于任何 SDK 目标探针，回归：`test_section_provenance_detects_replayed_variant_without_baseline_match`。
+- 结论：`onlyAddIfReplace` 对此受控 XML 的 `0x35` 移除效果在当前 SDK 可重复，但它仍无 424 来源授权，且既有新增机场离线读取反证仍成立；不得写入默认 BGL adapter，不得用于匹配参考 Section、记录数或体积。参考字节一致性仍为 `0/29`，`deployable=false`，部署与 Release 门禁保持关闭。下一步转向“424 -> NavModel -> XML -> BGL Section”贡献度矩阵，先量化现有来源实体的投影规模，禁止反向读取参考记录。
+- 本轮完整回归：`python -m pytest -q` 为 `496 passed in 4.68s`。未部署 Community、未执行备份恢复演练、未实机验证、未创建 Release。

@@ -52,6 +52,8 @@ def test_section_provenance_reports_xml_and_section_deltas_without_payload(
     assert report["decision"]["section_type_semantics_inferred"] is False
     assert report["summary"]["case_count"] == 1
     assert report["summary"]["variant_count"] == 1
+    assert report["summary"]["same_input_output_replay_count"] == 0
+    assert report["summary"]["same_input_output_mismatch_count"] == 0
     assert "0x17" in report["summary"]["section_effects"]
     variant = report["cases"][0]["variants"][0]
     assert variant["same_xml_as_baseline"] is False
@@ -96,3 +98,42 @@ def test_section_provenance_accepts_utf8_bom_manifest(tmp_path: Path) -> None:
 
     assert report["cases"][0]["variants"][0]["same_xml_as_baseline"] is True
     assert report["summary"]["same_input_replay_count"] == 1
+    assert report["summary"]["same_input_output_replay_count"] == 1
+
+
+def test_section_provenance_detects_replayed_variant_without_baseline_match(
+    tmp_path: Path,
+) -> None:
+    baseline_xml = tmp_path / "baseline.xml"
+    variant_xml = tmp_path / "variant.xml"
+    baseline_bgl = tmp_path / "baseline.bgl"
+    variant_bgl = tmp_path / "variant.bgl"
+    baseline_xml.write_text("<FSData />", encoding="utf-8")
+    variant_xml.write_text("<FSData onlyAddIfReplace=\"TRUE\" />", encoding="utf-8")
+    baseline_bgl.write_bytes(_bgl(0x35, 1, 4))
+    variant_bgl.write_bytes(_bgl(0x03, 1, 4))
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(json.dumps({
+        "diagnostic": "sdk-section-provenance-manifest-v1",
+        "cases": [{
+            "name": "variant-replay",
+            "baseline": {"xml": str(baseline_xml), "bgl": str(baseline_bgl)},
+            "variants": [
+                {"name": "first", "xml": str(variant_xml), "bgl": str(variant_bgl)},
+                {"name": "replay", "xml": str(variant_xml), "bgl": str(variant_bgl)},
+            ],
+        }],
+    }), encoding="utf-8")
+
+    report = audit_sdk_section_provenance(manifest)
+
+    assert report["summary"]["same_input_replay_count"] == 0
+    assert report["summary"]["same_input_output_replay_count"] == 1
+    assert report["summary"]["same_input_output_mismatch_count"] == 0
+    assert report["summary"]["same_input_output_replays"] == [{
+        "case": "variant-replay",
+        "xml_sha256": report["cases"][0]["variants"][0]["xml"]["sha256"],
+        "entries": ["first", "replay"],
+        "bgl_sha256": [report["cases"][0]["variants"][0]["bgl"]["sha256"]],
+        "output_consistent": True,
+    }]

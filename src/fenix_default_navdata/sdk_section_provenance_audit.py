@@ -108,6 +108,48 @@ def _load_manifest(path: Path) -> dict[str, Any]:
     return value
 
 
+def _same_input_output_replays(
+    case_rows: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Summarize repeated XML inputs without requiring them to be baselines."""
+
+    replays: list[dict[str, object]] = []
+    for case in case_rows:
+        baseline = case["baseline"]
+        variants = case["variants"]
+        if not isinstance(baseline, Mapping) or not isinstance(variants, list):
+            raise SdkSectionProvenanceAuditError("audit case lacks result rows")
+        entries = [("baseline", baseline)]
+        entries.extend(
+            (str(variant["name"]), variant)
+            for variant in variants
+            if isinstance(variant, Mapping)
+        )
+        by_xml_hash: dict[str, list[tuple[str, Mapping[str, object]]]] = {}
+        for name, entry in entries:
+            xml = entry.get("xml")
+            if not isinstance(xml, Mapping) or not isinstance(xml.get("sha256"), str):
+                raise SdkSectionProvenanceAuditError("audit result lacks XML hash")
+            by_xml_hash.setdefault(xml["sha256"], []).append((name, entry))
+        for xml_hash, grouped_entries in sorted(by_xml_hash.items()):
+            if len(grouped_entries) < 2:
+                continue
+            bgl_hashes: set[str] = set()
+            for _, entry in grouped_entries:
+                bgl = entry.get("bgl")
+                if not isinstance(bgl, Mapping) or not isinstance(bgl.get("sha256"), str):
+                    raise SdkSectionProvenanceAuditError("audit result lacks BGL hash")
+                bgl_hashes.add(bgl["sha256"])
+            replays.append({
+                "case": case["name"],
+                "xml_sha256": xml_hash,
+                "entries": [name for name, _ in grouped_entries],
+                "bgl_sha256": sorted(bgl_hashes),
+                "output_consistent": len(bgl_hashes) == 1,
+            })
+    return replays
+
+
 def audit_sdk_section_provenance(manifest_path: Path) -> dict[str, object]:
     """Audit deterministic XML-to-BGL Section deltas without navigation semantics."""
 
@@ -170,6 +212,7 @@ def audit_sdk_section_provenance(manifest_path: Path) -> dict[str, object]:
             },
             "variants": variant_rows,
         })
+    same_input_output_replays = _same_input_output_replays(case_rows)
     section_effects: dict[int, dict[str, list[str]]] = {}
     same_input_replays = 0
     for case in case_rows:
@@ -209,6 +252,17 @@ def audit_sdk_section_provenance(manifest_path: Path) -> dict[str, object]:
             "case_count": len(case_rows),
             "variant_count": sum(len(case["variants"]) for case in case_rows),
             "same_input_replay_count": same_input_replays,
+            "same_input_output_replay_count": sum(
+                len(item["entries"]) - 1
+                for item in same_input_output_replays
+                if item["output_consistent"]
+            ),
+            "same_input_output_mismatch_count": sum(
+                1
+                for item in same_input_output_replays
+                if not item["output_consistent"]
+            ),
+            "same_input_output_replays": same_input_output_replays,
             "section_effects": {
                 f"{section_type:#x}": {
                     key: sorted(values)
