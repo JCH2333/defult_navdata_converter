@@ -3209,3 +3209,12 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
   - **任务 3.3**: 为未来新 AIRAC 周期（如 2609+）及新机模（iFly, FSLabs 等）提供一键化、标准化的多机模全量数据生成平台。
 
 - r277 完整执行更新并同步两份 `AGENTS.md`，全量测试 `471 passed`，`git diff --check` 通过，未动运行时游戏文件，`deployable=false`。
+
+## 2026-08-20 r278 BGL 内部字段与进近航段 (Approach Legs) 结构取证
+
+- r278 只读分析 `src/fenix_default_navdata/bgl.py` 中 `_append_approaches`、`_append_legs` 与 `_approach_sections` 的 XML 序列化行为，结合 BGL Section 结构进行对齐取证：
+  - 进近段类型分流：正确按 424 规范划分 `transitions`、`primary`、`missed` 航段，并绑定 `_iap_chart_roles`；
+  - 显式跑道 MAPT 切分：`_split_iap_at_explicit_runway_map` 保证了主进近与复飞航段边界的准确性，防止航段外溢；
+  - 严格保持来源边界与只读原则，未私自伪造字段，未修改任何候选包或运行时环境。
+- 结论：BGL 投影链路的航段组装逻辑清晰健壮，完全与规范化 `NavModel` 解耦对齐。
+- r278 全量回归 `471 passed in 4.24s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
