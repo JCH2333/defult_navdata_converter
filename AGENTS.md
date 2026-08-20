@@ -3490,3 +3490,15 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
   `model_or_adapter_change_authorized=false`、参考 `0/29` 和 `deployable=false`。
 - 下一步只允许取得能复现 Jepp 族 Section 的真实生成/加载契约，或基于 424 直接事实和
   最小 XML 正反例证明该表达；不得把官方模板 BGL payload 复制为候选内容。
+
+## 2026-08-20 r306 参考 BGL 与官方模板整文件哈希交叉盘点
+
+- 只读计算 `Default navdata 2608R1` 的 21 个受控 BGL，与官方
+  `navigraph-nav-base` 的 469 个 BGL 及 `navigraph-nav-jepp` 的 1747 个 BGL 做
+  SHA-256 交叉匹配；诊断结果写入被忽略的
+  `diagnostics\r306-reference-template-bgl-hash-audit.json`。
+- 结果为参考 BGL 整文件同哈希 `0/21`；因此参考中国覆盖包不是官方模板 BGL 的直接
+  文件复制。该结果不能证明记录来源，也不能授权复制参考 payload，只能排除“复制
+  官方模板文件即可达到字节一致”的路径。
+- 当前字节验收仍为 `0/29`，`deployable=false`。下一步需要参考生成链、真实加载契约
+  或可复现的目标表达证据；在此之前不修改 BGL adapter，不手工替换二进制文件。
