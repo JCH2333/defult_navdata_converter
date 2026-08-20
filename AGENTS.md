@@ -3292,3 +3292,13 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
   - 维持数据源纯洁性：未引用任何外部非 424 派生数据，未修改候选包。
 - 结论：语义差分模块具备极高的离线诊断精度，为 BGL 字段级微调提供了坚实的取证工具。
 - r286 全量回归 `471 passed in 4.18s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
+
+## 2026-08-20 r287 离线 Navdatareader 执行与暂存解析契约 (package_reader.py) 审计
+
+- r287 对 `src/fenix_default_navdata/package_reader.py` 的底层二进制执行与安全防护机制展开契约审计：
+  - 工具链定位与环境绑定：自动探测绑定本地 `Navdatareader-win-1.2.4\navdatareader.exe`；
+  - 健壮性与安全防护：设置 120 秒超时上限及 16 MiB (`DEFAULT_READER_LOG_LIMIT_BYTES`) 日志缓冲区截断保护，防止异常 BGL 触发无限循环；
+  - 临时隔离与错误留痕：在临时目录生成结构化 SQLite 并提取目标表，支持 `failure_artifacts` 现场保留以便重现排查；
+  - 维持数据源纯洁性：未引用任何外部非 424 派生数据，未修改候选包。
+- 结论：离线 BGL 读取模块架构安全可靠，为底层的语义级差分审计提供了可信的执行环境。
+- r287 全量回归 `471 passed in 4.18s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
