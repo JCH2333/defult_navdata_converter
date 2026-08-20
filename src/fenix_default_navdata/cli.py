@@ -142,10 +142,15 @@ from .bgl_binary_diff_audit import (
     audit_bgl_binary_differences,
     write_bgl_binary_diff_audit,
 )
+from .bgl_record_layout import (
+    audit_bgl_record_layouts,
+    write_bgl_record_layout_audit,
+)
 from .package_metadata_audit import (
     audit_package_derived_metadata,
     write_package_derived_metadata_audit,
 )
+from .status_snapshot import audit_status_snapshot, write_status_snapshot
 from .convert import convert, export_intermediate_model
 from .deployment import deploy, restore
 from .general_docs import (
@@ -375,6 +380,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="受控 BGL 相对路径，可重复传入",
     )
     bgl_binary_diff.add_argument("--output", required=True, help="差分 JSON 输出路径")
+    bgl_record_layout = sub.add_parser(
+        "bgl-record-layout-audit",
+        help="只读解析固定长度 BGL 记录边界和哈希摘要，不导出导航记录",
+    )
+    bgl_record_layout.add_argument("--candidate", required=True, help="候选 BGL 文件")
+    bgl_record_layout.add_argument("--reference", required=True, help="参考 BGL 文件")
+    bgl_record_layout.add_argument("--output", required=True, help="记录布局审计 JSON 输出路径")
     reference_template = sub.add_parser(
         "reference-template-source-audit",
         help="只读审计参考包与官方模板的文件元数据来源，不读取导航记录",
@@ -429,6 +441,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="可选的同输入重复候选，用于逐文件重放确定性比较",
     )
     convergence.add_argument("--output", required=True, help="本地收敛看板 JSON 输出路径")
+    status_snapshot = sub.add_parser(
+        "status-snapshot",
+        help="只读生成冻结模型、候选收敛和发布门禁的权威状态快照",
+    )
+    status_snapshot.add_argument("--model", required=True, help="冻结 NavModel 快照")
+    status_snapshot.add_argument("--candidate", required=True, help="候选包根目录")
+    status_snapshot.add_argument("--repeat-candidate", help="同输入重复构建的候选包根目录")
+    status_snapshot.add_argument("--reference", help="Default navdata 2608R1 参考目录")
+    status_snapshot.add_argument("--raw", help="424 原始目录，仅锁定顶层 CSV 摘要")
+    status_snapshot.add_argument("--gap-cards", help="只读来源缺口卡审计 JSON")
+    status_snapshot.add_argument("--output", required=True, help="状态快照 JSON 输出路径")
     package_metadata = sub.add_parser(
         "package-derived-metadata-audit",
         help="只读归因 Package Tool 派生包元数据，不读取参考导航 payload",
@@ -1664,6 +1687,16 @@ def main(argv: list[str] | None = None) -> int:
         write_bgl_binary_diff_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
+    if args.command == "bgl-record-layout-audit":
+        output = Path(args.output).expanduser().resolve()
+        report = audit_bgl_record_layouts(
+            Path(args.candidate),
+            Path(args.reference),
+        )
+        report["output"] = str(output)
+        write_bgl_record_layout_audit(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
     if args.command == "reference-template-source-audit":
         output = Path(args.output).expanduser().resolve()
         report = audit_reference_template_sources(
@@ -1700,6 +1733,24 @@ def main(argv: list[str] | None = None) -> int:
         )
         report["output"] = str(output)
         write_file_convergence_audit(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "status-snapshot":
+        reference = _path(args.reference) or detect_paths().reference_root
+        if not reference:
+            raise SystemExit("无法自动检测 Default navdata 2608R1 参考目录，请显式传入 --reference")
+        output = Path(args.output).expanduser().resolve()
+        report = audit_status_snapshot(
+            project_root=Path.cwd(),
+            raw_root=_path(args.raw),
+            model=Path(args.model),
+            candidate=Path(args.candidate),
+            repeat_candidate=_path(args.repeat_candidate),
+            reference=reference,
+            gap_cards=_path(args.gap_cards),
+        )
+        report["output"] = str(output)
+        write_status_snapshot(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "package-derived-metadata-audit":

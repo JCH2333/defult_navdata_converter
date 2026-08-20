@@ -3912,3 +3912,13 @@ untime_contract_audit.py 中多机模契约验证机制、语义差分、物理�
 - 每轮只在实际产生代码、测试或可复跑证据时更新进度；纯阅读和计划调整不增加版本完成度。
 - 根目录不是 Git 仓库；根 `AGENTS.md` 只能作为本地工作区镜像。可提交版本位于 `fenix_to_default_navdata\AGENTS.md`，两份文档必须同轮同步，子仓库修改提交并推送到 GitHub。
 - 本机文件时间可能显示为未来的 `2026-08-21`；在当前日期仍为 `2026-08-20` 时，不得继续生成或引用未来日期记录。
+
+## 2026-08-20 r326 权威状态快照与 ZJ BGL 记录布局基线
+
+- 新增只读 `status-snapshot` 命令和 `authority-status-snapshot-v1` 诊断，固定汇总 Git 状态、顶层 424 CSV SHA-256 锁、冻结 `NavModel` 哈希、40 张来源缺口卡摘要、候选自重放、参考收敛与发布门禁；不读取或导出参考 BGL 导航记录。回归：`tests/test_status_snapshot.py`。
+- 真实快照：`diagnostics/r326-authority-status-snapshot-20260820.json`，SHA-256 `fc08d816412d640a1aa20d0199e59b57b9cb77fe8a4cc5e71c1eab182e244d5b`。输入锁含 33 个顶层 424 CSV；r187 冻结模型 SHA-256 仍为 `7cec24bd4a57545d39aab037abe4125c763ad12f364bd5f8f0073b0e050fdb4b`；来源缺口卡仍为航路端点 12、航点地区 5、IAP 主段 10、未分类程序 13，共 40 张，全部保持 blocked/rejected。
+- r188/r189 受控范围实际自重放为 `29/29`，与参考仍为 `0/29`，`deployable=false`。因此 r325 中的 `25/29` 只能视为 r315 的另一组候选比较结果，不能覆盖本次对冻结 r188/r189 的可复跑结论；两者均不改变参考字节验收为零的事实。
+- 新增 `bgl-record-layout-audit`：仅按 BGL Header/Section 的 `size/count` 解析固定长度记录边界，输出类型、偏移、长度和 SHA-256 摘要；Section 越界、重叠、截断或无法整除时拒绝推断，不输出参考记录明文。回归：`tests/test_bgl_record_layout.py` 覆盖固定长度闭合、截断、非整除布局和摘要差异。
+- 真实 `ZJ_airports.bgl` 审计：`diagnostics/r326-zj-airports-record-layout-20260820.json`，SHA-256 `aa7b014d55bc16793c3a9ecb119c6071516dc298c618f7c0e38e5bfa5506361c`。候选和参考全部已按 16 字节固定长度记录闭合；候选有 6 个 Section（`0x03/0x13/0x22/0x32/0x34/0x35`），参考有 7 个（`0x03/0x13/0x22/0x32/0x33/0x34`）。这只是结构差异，尚未证明 Section 语义、父子索引或应修改的 XML/投影规则。
+- 本轮完整回归：`python -m pytest -q` 为 `494 passed in 4.99s`。未部署 Community、未执行备份恢复演练、未实机验证、未创建 Release。
+- 下一步：在记录布局审计上增加按 Section/记录序列的脱敏收敛摘要和最小 SDK 单变量触发矩阵；在获得可复跑的 Section 语义和 XML 触发证据前，禁止依据 `0x33/0x35` 差异修改默认 BGL adapter。
