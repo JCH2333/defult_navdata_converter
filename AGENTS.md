@@ -3389,3 +3389,12 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
   - 维持数据源纯洁性：未引用任何外部非 424 派生数据，未修改候选包。
 - 结论：40 张来源缺口卡片审计处于完全闭环与确定性冻结状态。
 - r296 全量回归 `471 passed in 4.50s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
+
+## 2026-08-20 r297 13 个未分类程序证据链与拒绝门禁 (unclassified_procedure_audit.py) 复验
+
+- r297 对 `src/fenix_default_navdata/unclassified_procedure_audit.py` 统筹的 13 个未分类特殊程序变体展开全量复验：
+  - 13 个变体分布：`rnp_numeric` 4 个 (ZGBS RNP 0-12/0-15/0-30)、`cc_numeric` 3 个 (ZHCC CC3-09/CC5-17/CC5-32)、`eo_numeric` 6 个 (ZPDQ/ZUKD/ZUSH 等机场的发动机失效/特殊程序)；
+  - 核心裁决结果：`unclassified_procedure_segment_total=13`，`target_mapping_allowed_total=0`，全部 13 个程序因缺乏 MSFS 默认标准进离场表达语法而被严格拒绝投影；
+  - 维持数据源纯洁性：未引用任何外部非 424 派生数据，未修改候选包。
+- 结论：未分类程序拒绝边界严谨明晰，杜绝向默认 BGL 投影不兼容的专有程序变体。
+- r297 全量回归 `471 passed in 4.70s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
