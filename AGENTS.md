@@ -37,7 +37,7 @@
 - 冻结模型：`output/intermediate-2608-r187-navaid-label-replay.json.gz`
 - 模型 SHA-256：`7cec24bd4a57545d39aab037abe4125c763ad12f364bd5f8f0073b0e050fdb4b`
 - 当前有效参考候选：`output/candidate-2608-default-r188-doviv-replay`，自重放 `29/29`
-- 最新实验候选：`output/candidate-2608-default-r343-root-terminal-waypoints`
+- 最新实验候选：`output/candidate-2608-default-r347-airport-terminal-waypoints`
 - r338 模型计数与冻结模型一致；V111/V162 四条端点区域恢复
 - 与参考默认数据字节一致：`0/29`
 - `deployable=false`
@@ -58,6 +58,20 @@
 - r339 的 40 张默认缺口卡仍全部为 `blocked/rejected`：航路端点区域 12、航点区域 5、IAP 主进近 10、未分类程序 13；本轮没有新的 424 直接证据授权投影。
 - 当前冻结模型与候选仍保持 `0/29` 字节一致、`deployable=false`。下一阶段只接受新增的同周期 424 直接证据，并继续使用“来源缺口审计 -> 最小测试 -> 双构建 -> 差分”的复用管线。
 - 证据：`diagnostics/r339-default-gap-cards-20260820.json`、`diagnostics/r340-source-model-completeness-20260820.json`、`diagnostics/r343-bgl-binary-diff.json`。本结论不改变模型、adapter 或候选。
+
+### r346 阶段结论（2026-08-20）
+
+- r343 的根级终端航点实验被同一 Navdatareader 反证：参考 ZB 机场 BGL 为 2710 个 waypoint，旧 r77 为 2739 个，r343 仅 1346 个；r346 恢复机场内 `Waypoint`，仅导航包按 `duplicate_terminal_waypoints` 增加根级副本。
+- r346 使用冻结 r187 模型重建，500 个测试通过；ZB 读取为 2741 waypoint、58 ILS，候选可读取。文件收敛仍为参考 `0/29`，因此未部署、未实机验证。
+- 参考机场 BGL 仍有 `0x17/0x33` 等额外 Section，且 Section 数量不能直接解释为记录数；本阶段只确认作用域错误，不授权复制参考记录或 payload。
+- 证据：`diagnostics/r346-r77-navreader.sqlite`、`diagnostics/r346-r343-navreader.sqlite`、`diagnostics/r346-r346-zb-navreader.sqlite`、`diagnostics/r346-file-convergence.json`、`diagnostics/r346-bgl-binary-diff.json`。
+
+### r347 阶段结论（2026-08-20）
+
+- 使用本机已验证官方设施索引重新构建，`local_contract_verified=true`、`selected_navaids=254`；r346 因错误诊断索引导致 `selected_navaids=0`，其全包语义差分不作依据。
+- r347 全包读取结果：VOR `121/135`、NDB `133/174`、waypoint `27705/27887`、airway `5044/4620`（候选/参考）；语义差分仍存在，文件收敛仍为 `0/29`。
+- 结论：机场终端航点作用域已恢复，但设施字段、航路投影和来源缺口仍需按 `r347-semantic-diff.json` 分层调查；禁止复制参考记录或 payload。候选未部署、未实机验证、不得 Release。
+- 证据：`diagnostics/r347-candidate-navreader.sqlite`、`diagnostics/r347-semantic-diff.json`、`output/candidate-2608-default-r347-airport-terminal-waypoints/conversion-report.json`。
 
 ## 已确认的通用契约
 

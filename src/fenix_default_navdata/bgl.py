@@ -803,38 +803,28 @@ def _terminal_waypoint_identities(points) -> tuple[dict[tuple[str, str, str, str
         )
         representatives.setdefault(key, point)
 
-    grouped: dict[tuple[str, str], list[tuple[str, str, str, str, str]]] = {}
+    grouped: dict[tuple[str, str, str], list[tuple[str, str, str, str, str]]] = {}
     reserved: set[tuple[str, str, str]] = set()
     for key in representatives:
-        # Terminal waypoints are emitted at FSData scope, not inside Airport.
-        # Their SDK identity is therefore global within a region.  Keep equal
-        # coordinates shared, but suffix distinct coordinates deterministically.
-        group_key = (key[1], key[2])
+        group_key = key[:3]
         grouped.setdefault(group_key, []).append(key)
-        reserved.add((key[0], key[1], key[2]))
+        reserved.add(group_key)
 
     identities: dict[tuple[str, str, str, str, str], str] = {}
-    for (region, base_ident), keys in sorted(grouped.items()):
-        by_coordinate: dict[tuple[str, str], list[tuple[str, str, str, str, str]]] = {}
-        for key in keys:
-            by_coordinate.setdefault((key[3], key[4]), []).append(key)
-        for index, coordinate in enumerate(sorted(by_coordinate)):
+    for (airport, region, base_ident), keys in sorted(grouped.items()):
+        for index, key in enumerate(sorted(keys)):
             if index == 0:
-                identity = base_ident
-            else:
-                suffix = 1
-                while True:
-                    candidate = f"{base_ident[:5]}{suffix:03d}"
-                    if (region, candidate) not in {
-                        (existing_region, existing_ident)
-                        for existing_airport, existing_region, existing_ident in reserved
-                    }:
-                        identity = candidate
-                        break
-                    suffix += 1
-            for key in by_coordinate[coordinate]:
-                identities[key] = identity
-                reserved.add((key[0], region, identity))
+                identities[key] = base_ident
+                continue
+            suffix = 1
+            while True:
+                candidate = f"{base_ident[:5]}{suffix:03d}"
+                identity = (airport, region, candidate)
+                if identity not in reserved:
+                    reserved.add(identity)
+                    identities[key] = candidate
+                    break
+                suffix += 1
     return identities, representatives
 
 
@@ -1698,7 +1688,7 @@ def _shared_terminal_enroute_points(
     for key, terminal_ident in identities.items():
         point = representatives[key]
         identity = _airway_waypoint_identity(
-            point.ident,
+            terminal_ident,
             point.country or point.airport[:2],
             point.latitude,
             point.longitude,
@@ -2073,6 +2063,27 @@ def write_bglcomp_xml(
                     _runway_ilses(runway.secondary, airport_ilses),
                     end="SECONDARY",
                 )
+        terminal_points = sorted(
+            (
+                (key, point)
+                for key, point in terminal_representatives.items()
+                if point.airport == airport.icao
+            ),
+            key=lambda item: (
+                terminal_identities[item[0]],
+                item[1].latitude,
+                item[1].longitude,
+                item[1].key,
+            ),
+        )
+        for point_key, point in terminal_points:
+            ET.SubElement(airport_element, "Waypoint", _attrs(
+                lat=_float(point.latitude),
+                lon=_float(point.longitude),
+                waypointType="NAMED",
+                waypointRegion=(point.country or airport.icao[:2])[:2],
+                waypointIdent=terminal_identities[point_key],
+            ))
         projected_procedures += _append_airport_procedures(
             airport_element,
             airport.icao,
@@ -2096,9 +2107,9 @@ def write_bglcomp_xml(
         for key, point in terminal_representatives.items()
         if airport_prefix is None or point.airport.startswith(airport_prefix)
     ] if scope in {"all", "airports"} else []
-    terminal_waypoint_count = 0
+    terminal_waypoint_count = len(selected_terminal_points)
     root_terminal_waypoint_count = 0
-    if scope in {"all", "airports"}:
+    if duplicate_terminal_waypoints and scope in {"all", "airports"}:
         deduped_terminal_points: dict[tuple[str, str], tuple[tuple[str, str, str, str, str], object]] = {}
         for point_key, point in selected_terminal_points:
             key = (
