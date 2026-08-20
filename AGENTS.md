@@ -3425,3 +3425,12 @@ r188/r189 候选报告、最新来源审计、收敛审计、完整测试和游�
   - 维持数据源纯洁性：未引用任何外部非 424 派生数据，未修改候选包。
 - 结论：GeneralDoc 解析层结构稳定、版本可控，为航路最低高度与重要点识别提供了权威只读证据。
 - r300 全量回归 `471 passed in 4.57s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
+
+## 2026-08-20 r301 终端航图 (Terminal PDF) 证据抽取与缓存版本控制 (pdf_charts.py) 审计
+
+- r301 对 `src/fenix_default_navdata/pdf_charts.py` 统筹的 7356 张终端航图提取逻辑展开契约审计：
+  - 多类型航图覆盖：进近图表索引（`extract_airport_approach_charts`）、标准程序图（`extract_airport_standard_procedure_charts`）、数据库编码表（`extract_airport_database_charts`）、坐标页与 AD 2.19 设施表；
+  - 缓存版本控制：固定 `_EVIDENCE_CACHE_VERSION=43`，确保解析规则变动时精准失效旧缓存并自动重构；
+  - 维持数据源纯洁性：未引用任何外部非 424 派生数据，未修改候选包。
+- 结论：终端航图抽取层架构完备、证据链完整，具备工业级离线提取与复验能力。
+- r301 全量回归 `471 passed in 4.75s`，`git diff --check` 通过，游戏未运行，未修改候选，参考一致性为 `0/29`，`deployable=false`。
