@@ -81,3 +81,4 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - `--baseline-db` 只用于官方 VOR/NDB/航点索引校验、区域恢复和默认导航台选择，不合并参考 BGL payload。
 - 参考两个目标包约 90.6 MB，当前候选约 17.0 MB；参考 20/20 个机场 BGL 含 `0x17`，候选全部缺少；`00_enroute` 的 `0x20` 完全一致，但仍少 `0x13=12`、`0x17=4`、`0x22=419` 个节。
 - `r312-reference-template-source-audit-20260820.json` 未发现可复用的参考导航 BGL 模板。未取得 424 直接来源或目标加载契约前，不得按参考节表反推对象或修改 adapter；本方向保持 blocked。
+- r374：参考来源追踪。参考包元数据的 BGL/索引时间为 2026-08-06，`manifest.json` 标识 `PMDG DFD v2 converter`；工作区未找到对应 XML、BglComp 输入或专用生成器。旧 `navdata_converter` 仅为 2607 -> PMDG DFDv2 SQLite 的简化转换器，不能复用于默认 BGL。无新来源证据，模型、adapter、候选保持不变，继续 blocked。
