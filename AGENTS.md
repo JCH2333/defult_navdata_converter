@@ -216,3 +216,11 @@
 - 每条新增规则注明适用周期/目标、证据、触发条件、处理方式和测试。
 - 实验性推测标记“待验证”，不得写成通用规则。
 - 后续更新本文件时，同时更新工作区根目录镜像 `..\AGENTS.md`。
+## r365 最新阶段状态（2026-08-20）
+
+- 代码变更：`bgl.py` 按 424 `RTE_SEG.CODE_TYPE_START/END` 将航路端点投影为 `VOR`/`NDB`，并同步 Route link 的 `waypointType`；无来源类型仍为 `NAMED`。测试断言已同步。
+- 来源证据：VOR 端点唯一对应目标 `type=V`，NDB 端点唯一对应目标 `type=N`；r365 语义差分中 waypoint `type/artificial` 差异由 `397/397` 降为 `7/7`。
+- 构建证据：SDK 1.5.3 本地契约通过，r365 读取器库为 `waypoint=3254`、`airway=4839`；参考为 `3266/4614`。XML 源边仍为 `4434` 个 `Next` 和 `4434` 个 `Previous`，未发现重复写入。
+- 结论：r365 保留为来源类型投影实验候选，但 airway 端点关联仍有独立差异，不能作为收敛候选；参考字节一致仍为 `0/29`，`deployable=false`。未部署、未实机验证、未 Release。
+- 下一步：审计读取器对 `VOR/NDB` 端点的关联/去重规则，区分根 `Waypoint` 类型修复与 airway 行数差异；禁止据参考 payload、坐标或记录回填。
+- 可复用管线：`lock-inputs -> ingest-424 -> evidence-audit -> normalize-model -> model-audit -> project-target -> build-target -> validate-target -> diff-and-audit -> stage-backup-deploy`。诊断只保留脱敏 JSON/哈希/计数，数据库和候选不提交。

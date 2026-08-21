@@ -1618,7 +1618,7 @@ def test_enroute_projection_normalizes_sdk_identity_and_route_requirements(tmp_p
     }
 
 
-def test_enroute_projection_uses_named_route_shadows_and_preserves_facilities(
+def test_enroute_projection_uses_source_proven_route_shadows_and_preserves_facilities(
     tmp_path: Path,
 ):
     model = NavModel(Path("source"))
@@ -1649,10 +1649,10 @@ def test_enroute_projection_uses_named_route_shadows_and_preserves_facilities(
     end = root.find("Waypoint[@waypointIdent='NDB01']")
     assert start is not None
     assert end is not None
-    assert start.attrib["waypointType"] == "NAMED"
-    assert end.attrib["waypointType"] == "NAMED"
-    assert start.find("Route/Next").attrib["waypointType"] == "NAMED"
-    assert end.find("Route/Previous").attrib["waypointType"] == "NAMED"
+    assert start.attrib["waypointType"] == "VOR"
+    assert end.attrib["waypointType"] == "NDB"
+    assert start.find("Route/Next").attrib["waypointType"] == "NDB"
+    assert end.find("Route/Previous").attrib["waypointType"] == "VOR"
     assert root.find("Vor[@ident='VOR01']") is not None
     assert root.find("Ndb[@ident='NDB01']") is not None
 
