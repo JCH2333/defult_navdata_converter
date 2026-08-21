@@ -59,6 +59,7 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - r384：端到端主审计通过：来源-模型、BGL 投影结构和 Package Tool 均可复核，`pipeline_master_verified=true`；仍明确 `model_or_adapter_change_authorized=false`，不改变参考字节一致性 `0/29`。证据：`diagnostics/r384-pipeline-master-audit.json`。
 - r385：用冻结模型、同一官方 navaid baseline 和 Package Tool 重新构建；与 r366 候选逐文件 `29/29` 相同，与参考仍 `0/29`。证明当前差异可确定性复现，不是构建漂移。证据：`diagnostics/r385-file-convergence.json`。
 - r386：扩展 `route-holding-source-audit` 统计 `POINT_ID -> DESIGNATED_POINT`；真实 2608 数据中 116 条等待记录有 44 条身份匹配、72 条未匹配，仅 3 条带 `SERVICED_AIRPORT`、43 条带 `CODE_FIR`，无重复身份，仍无足够机场作用域，`projection_allowed=false`。证据：`diagnostics/r386-route-holding-source-audit.json`；定向测试 `5 passed`。
+- r387：用 r385 候选和参考包生成完整脱敏航路语义差分及 `source-gap-audit`；2,263 条同源航路字段差异中 2,241 条为几何组差异，12 条端点区域仍无唯一来源。候选机场 BGL 触发 Navdatareader `Unexpected record type ... 0x108` 并被日志门禁停止，不能据此读取参考字段或修改 adapter；工作区未发现参考 XML、生成器或可重放配置。证据：`diagnostics/r387-semantic-diff-waypoint-airway-full.json`、`diagnostics/r387-source-gap-audit.json`。
 
 详细日志、差分和运行输出只保存在 `diagnostics/` 与 `output/`，不复制到本文件。
 
