@@ -1003,6 +1003,7 @@ def build_parser() -> argparse.ArgumentParser:
     sdk_matrix.add_argument("--enroute-cardinality", required=True)
     sdk_matrix.add_argument("--connection-probe", required=True)
     sdk_matrix.add_argument("--child-order-probe", required=True)
+    sdk_matrix.add_argument("--offset-threshold-matrix")
     sdk_matrix.add_argument("--output", required=True)
     sdk_toolchain = sub.add_parser(
         "sdk-toolchain-audit",
@@ -2190,6 +2191,9 @@ def main(argv: list[str] | None = None) -> int:
             Path(args.inventory), Path(args.projection_matrix),
             Path(args.enroute_cardinality), Path(args.connection_probe),
             Path(args.child_order_probe),
+            Path(args.offset_threshold_matrix)
+            if args.offset_threshold_matrix
+            else None,
         )
         output = Path(args.output).expanduser().resolve()
         report["output"] = str(output)

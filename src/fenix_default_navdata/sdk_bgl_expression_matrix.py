@@ -9,6 +9,25 @@ class SdkBglExpressionMatrixError(RuntimeError):
     pass
 
 
+def _has_reference_gap_sections(value: object) -> bool:
+    """Normalize legacy text and current structured gap indicators."""
+
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    if isinstance(value, (list, tuple, set, Mapping)):
+        return bool(value)
+    if isinstance(value, str):
+        return bool(value.strip()) and value.strip().casefold() not in {
+            "false",
+            "none",
+            "[]",
+            "{}",
+        }
+    return bool(value)
+
+
 def _load(path: Path, diagnostic: str) -> dict[str, object]:
     try:
         value = json.loads(path.expanduser().read_text(encoding="utf-8"))
@@ -27,6 +46,7 @@ def audit_sdk_bgl_expression_matrix(
     enroute_cardinality_path: Path,
     connection_probe_path: Path,
     child_order_probe_path: Path,
+    offset_threshold_matrix_path: Path | None = None,
 ) -> dict[str, object]:
     """Summarize only reusable, machine-readable SDK evidence."""
 
@@ -35,6 +55,11 @@ def audit_sdk_bgl_expression_matrix(
     cardinality = _load(enroute_cardinality_path, "enroute-bgl-cardinality-audit-v1")
     connection = _load(connection_probe_path, "sdk_airway_connection_shape")
     child_order = _load(child_order_probe_path, "sdk_airway_route_child_order")
+    offset_threshold = (
+        _load(offset_threshold_matrix_path, "offset-threshold-matrix-v1")
+        if offset_threshold_matrix_path is not None
+        else None
+    )
     classifications = projection.get("classification_counts")
     if not isinstance(classifications, Mapping):
         raise SdkBglExpressionMatrixError("projection matrix lacks classifications")
@@ -56,6 +81,44 @@ def audit_sdk_bgl_expression_matrix(
     for file in cardinality.get("files", []):
         if isinstance(file, Mapping):
             sections.extend(file.get("section_deltas", []))
+    airport_candidates = {
+        key: value.get("disposition")
+        for key, value in sorted(candidates.items())
+        if isinstance(value, Mapping)
+    }
+    offset_threshold_evidence: dict[str, object] | None = None
+    if offset_threshold is not None:
+        source_records = offset_threshold.get("source_records")
+        builds = offset_threshold.get("builds")
+        observed = offset_threshold.get("bgl_section_types_observed")
+        offset_threshold_evidence = {
+            "source_records": source_records,
+            "builds": builds,
+            "bgl_section_types_observed": observed,
+            "contains_reference_gap_sections": _has_reference_gap_sections(
+                offset_threshold.get("contains_reference_gap_sections")
+            ),
+            "candidate_or_model_modified": bool(
+                offset_threshold.get("candidate_or_model_modified")
+            ),
+            "disposition": (
+                "tested_no_reference_convergence_and_rejected"
+                if (
+                    isinstance(source_records, int)
+                    and isinstance(builds, Mapping)
+                    and builds.get("total") == source_records
+                    and builds.get("successful") == source_records
+                    and not offset_threshold.get("candidate_or_model_modified")
+                )
+                else "evidence_incomplete"
+            ),
+        }
+        if offset_threshold_evidence["disposition"] == (
+            "tested_no_reference_convergence_and_rejected"
+        ):
+            airport_candidates["runway_offset_thresholds"] = (
+                "rejected_after_probe"
+            )
     return {
         "diagnostic": "sdk-bgl-expression-matrix-v1",
         "read_only": True,
@@ -69,9 +132,10 @@ def audit_sdk_bgl_expression_matrix(
                 "section_deltas_without_semantics": sections,
             },
             "airport_expression_candidates": {
-                key: value.get("disposition")
-                for key, value in sorted(candidates.items())
-                if isinstance(value, Mapping)
+                **airport_candidates,
+            },
+            "airport_expression_evidence": {
+                "runway_offset_thresholds": offset_threshold_evidence,
             },
             "next_action": {
                 "status": "blocked_on_machine_readable_target_evidence",
