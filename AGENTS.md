@@ -224,3 +224,9 @@
 - 结论：r365 保留为来源类型投影实验候选，但 airway 端点关联仍有独立差异，不能作为收敛候选；参考字节一致仍为 `0/29`，`deployable=false`。未部署、未实机验证、未 Release。
 - 下一步：审计读取器对 `VOR/NDB` 端点的关联/去重规则，区分根 `Waypoint` 类型修复与 airway 行数差异；禁止据参考 payload、坐标或记录回填。
 - 可复用管线：`lock-inputs -> ingest-424 -> evidence-audit -> normalize-model -> model-audit -> project-target -> build-target -> validate-target -> diff-and-audit -> stage-backup-deploy`。诊断只保留脱敏 JSON/哈希/计数，数据库和候选不提交。
+## r366 最新阶段状态（2026-08-21）
+- `bgl.py` 新增全局 `(region, ident)` 身份门禁：终端 `NAMED` 航点不得与已有 424 VOR/NDB 占用同一读取器身份；回归覆盖坐标略有差异的冲突。
+- 全量测试：`509 passed`。SDK 1.5.3 构建与独立 `validate` 均通过本地契约；`shared_terminal_enroute_waypoints=0`。
+- Navdatareader：候选 `waypoint/airway=3150/4223`，参考 `3266/4614`；r365 的 airway `4839` 降至 `4223`，但语义差异仍未解释。
+- 文件收敛：参考范围 `29` 个文件，字节一致 `0/29`；`deployable=false`，未部署、未实机验证、未 Release。
+- 证据：`diagnostics/r366-validate.json`、`diagnostics/r366-file-convergence.json`、`diagnostics/r366-00-enroute-semantic-diff-full.json`。下一步继续只读审计参考独有 airway 与 424 `RTE_SEG.csv` 的来源覆盖，禁止复制参考 payload/坐标/记录回填。

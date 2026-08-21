@@ -1678,13 +1678,14 @@ def _airway_waypoint_identity(
 def _shared_terminal_enroute_points(
     model: NavModel,
     existing_identities: set[tuple[str, str, str]],
+    existing_global_identities: set[tuple[str, str]],
 ) -> list[object]:
     """Return only source-proven terminal points safe to share enroute.
 
     Coordinate pages remain airport-local unless the same SDK identity at the
     same source coordinate is published by at least two airports.  Any
-    identity with multiple source coordinates stays unresolved, and existing
-    enroute identities always retain their original content.
+    identity with multiple source coordinates stays unresolved.  Existing
+    global identities, including navaids, always retain their original content.
     """
     identities, representatives = _terminal_waypoint_identities(
         model.terminal_waypoints
@@ -1707,7 +1708,11 @@ def _shared_terminal_enroute_points(
             (round(point.latitude, 6), round(point.longitude, 6))
             for point in candidates
         }
-        if len(coordinates) != 1 or identity in existing_identities:
+        if (
+            len(coordinates) != 1
+            or identity in existing_identities
+            or (identity[1], identity[2]) in existing_global_identities
+        ):
             continue
         if len({point.airport for point in candidates}) < 2:
             continue
@@ -1820,9 +1825,28 @@ def _append_enroute(
         )
         for point in points
     }
+    existing_global_identities = {
+        (
+            identity[1],
+            identity[2],
+        )
+        for identity in existing_identities
+    }
+    existing_global_identities.update(
+        (
+            (navaid.country or "").upper()[:2],
+            _normalized_waypoint_ident(
+                navaid.ident,
+                navaid.latitude,
+                navaid.longitude,
+            ),
+        )
+        for navaid in model.navaids
+    )
     shared_terminal_points = _shared_terminal_enroute_points(
         model,
         existing_identities,
+        existing_global_identities,
     )
     points.extend(shared_terminal_points)
     deduped: dict[tuple[str, str, str], object] = {}

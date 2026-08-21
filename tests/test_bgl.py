@@ -314,9 +314,15 @@ def test_enroute_projection_adds_only_shared_terminal_waypoints(tmp_path: Path):
     model.waypoints.append(Waypoint(
         "existing", "EXISTING", "EXISTING", 35.0, 105.0, source, "ZB",
     ))
+    model.navaids.append(Navaid(
+        "navaid", "NAVAID", "VOR", "NAVAID", 35.6, 105.6,
+        113.0, 0.0, 0, "ZB", SourceRef("VOR.csv", 2),
+    ))
     model.terminal_waypoints.extend((
         TerminalWaypoint("shared-one", "ZBAA", "SHARED", 35.1, 105.1, source, "ZB"),
         TerminalWaypoint("shared-two", "ZBAD", "SHARED", 35.1, 105.1, source, "ZB"),
+        TerminalWaypoint("navaid-one", "ZBAA", "NAVAID", 35.6001, 105.6001, source, "ZB"),
+        TerminalWaypoint("navaid-two", "ZBAD", "NAVAID", 35.6001, 105.6001, source, "ZB"),
         TerminalWaypoint("local", "ZBAA", "LOCAL", 35.2, 105.2, source, "ZB"),
         TerminalWaypoint("ambiguous-one", "ZBAA", "AMBIG", 35.3, 105.3, source, "ZB"),
         TerminalWaypoint("ambiguous-two", "ZBAD", "AMBIG", 35.3, 105.3, source, "ZB"),
@@ -335,6 +341,7 @@ def test_enroute_projection_adds_only_shared_terminal_waypoints(tmp_path: Path):
         for point in root.findall("Waypoint")
     }
     assert set(points) == {"EXISTING", "SHARED"}
+    assert root.find("Vor[@ident='NAVAID']") is not None
     assert points["EXISTING"].attrib["lat"] == "35"
     assert projection.waypoints == 2
     assert projection.shared_terminal_enroute_waypoints == 1
