@@ -24,6 +24,7 @@ from scripts.airport_subset_probe import (
     parse_root_object_specs,
     parse_runway_attributes,
     keep_runways,
+    _runway_matches_direction,
     select_airports,
     select_holding_patterns,
     set_runway_attributes,
@@ -276,6 +277,61 @@ def test_keep_runways_rejects_unknown_and_preserves_source_order():
     ]
     with pytest.raises(ValueError, match="--keep-runway-number"):
         keep_runways(airport, runway_numbers=("36",))
+
+
+def test_runway_direction_selection_distinguishes_designators_and_opposite_end():
+    airport = ET.fromstring(
+        '<Airport ident="ZSSS">'
+        '<Runway number="18" primaryDesignator="L" secondaryDesignator="R"/>'
+        '<Runway number="18" primaryDesignator="R" secondaryDesignator="L"/>'
+        '</Airport>'
+    )
+
+    assert [
+        _runway_matches_direction(runway, "18L")
+        for runway in airport.findall("Runway")
+    ] == [True, False]
+    assert [
+        _runway_matches_direction(runway, "36L")
+        for runway in airport.findall("Runway")
+    ] == [False, True]
+    assert [
+        _runway_matches_direction(runway, "36R")
+        for runway in airport.findall("Runway")
+    ] == [True, False]
+
+
+def test_runway_direction_selection_handles_undesignated_opposite_end():
+    airport = ET.fromstring(
+        '<Airport ident="ZPPP"><Runway number="03" '
+        'primaryDesignator="NONE" secondaryDesignator="NONE"/></Airport>'
+    )
+
+    assert _runway_matches_direction(airport.find("Runway"), "03")
+    assert _runway_matches_direction(airport.find("Runway"), "21")
+
+
+def test_append_runway_children_can_select_one_directional_physical_runway():
+    airport = ET.fromstring(
+        '<Airport ident="ZSSS">'
+        '<Runway number="18" primaryDesignator="L" secondaryDesignator="R"/>'
+        '<Runway number="18" primaryDesignator="R" secondaryDesignator="L"/>'
+        '</Airport>'
+    )
+    child = parse_airport_child_specs(
+        ["OffsetThreshold;end=PRIMARY;length=328F;surface=CONCRETE"]
+    )
+
+    selected = append_runway_children(
+        airport,
+        child,
+        runway_numbers=(),
+        runway_idents=("18L",),
+    )
+
+    assert selected == ("18",)
+    assert len(airport.findall("Runway")[0].findall("OffsetThreshold")) == 1
+    assert len(airport.findall("Runway")[1].findall("OffsetThreshold")) == 0
 
 
 def test_root_children_reuse_diagnostic_specs_without_reparenting():

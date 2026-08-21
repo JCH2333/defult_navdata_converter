@@ -291,15 +291,30 @@ def append_runway_children(
     children: tuple[ET.Element, ...],
     *,
     runway_numbers: tuple[str, ...],
+    runway_idents: tuple[str, ...] = (),
 ) -> tuple[str, ...]:
     """Insert diagnostic-only children into explicitly selected existing runways."""
 
     runways = list(airport.findall("Runway"))
+    ident_set = set(runway_idents)
     selected = [
         runway
         for runway in runways
-        if not runway_numbers
-        or (runway.get("number") or "").upper() in set(runway_numbers)
+        if (
+            not runway_numbers
+            and not runway_idents
+        )
+        or (
+            runway_numbers
+            and (runway.get("number") or "").upper() in set(runway_numbers)
+        )
+        or (
+            runway_idents
+            and any(
+                _runway_matches_direction(runway, ident)
+                for ident in ident_set
+            )
+        )
     ]
     if runway_numbers:
         present = {(runway.get("number") or "").upper() for runway in runways}
@@ -307,6 +322,17 @@ def append_runway_children(
         if unknown:
             raise ValueError(
                 "--runway-number 包含当前机场不存在的跑道: "
+                + ", ".join(unknown)
+            )
+    if runway_idents:
+        unknown = sorted(
+            ident
+            for ident in ident_set
+            if not any(_runway_matches_direction(runway, ident) for runway in runways)
+        )
+        if unknown:
+            raise ValueError(
+                "--runway-ident 包含当前机场不存在的跑道方向: "
                 + ", ".join(unknown)
             )
     for runway in selected:
@@ -334,11 +360,33 @@ def keep_runways(
     airport: ET.Element,
     *,
     runway_numbers: tuple[str, ...],
+    runway_idents: tuple[str, ...] = (),
 ) -> tuple[str, ...]:
     """Retain a controlled runway subset without changing source order."""
 
-    if not runway_numbers:
+    if not runway_numbers and not runway_idents:
         return tuple((runway.get("number") or "").upper() for runway in airport.findall("Runway"))
+    if runway_idents:
+        runways = list(airport.findall("Runway"))
+        unknown = sorted(
+            ident
+            for ident in set(runway_idents)
+            if not any(_runway_matches_direction(runway, ident) for runway in runways)
+        )
+        if unknown:
+            raise ValueError(
+                "--keep-runway-ident 包含当前机场不存在的跑道方向: "
+                + ", ".join(unknown)
+            )
+        selected = [
+            runway
+            for runway in runways
+            if any(_runway_matches_direction(runway, ident) for ident in runway_idents)
+        ]
+        for runway in runways:
+            if runway not in selected:
+                airport.remove(runway)
+        return tuple((runway.get("number") or "").upper() for runway in selected)
     present = {
         (runway.get("number") or "").upper()
         for runway in airport.findall("Runway")
@@ -354,6 +402,42 @@ def keep_runways(
         if (runway.get("number") or "").upper() not in retained:
             airport.remove(runway)
     return tuple((runway.get("number") or "").upper() for runway in airport.findall("Runway"))
+
+
+def _runway_number(value: str) -> int:
+    number = (value or "").strip().upper().rstrip("LCR")
+    if not number.isdigit():
+        return -1
+    parsed = int(number)
+    return 36 if parsed == 0 else parsed
+
+
+def _opposite_runway_number(number: int) -> int:
+    if number < 1 or number > 36:
+        return -1
+    opposite = ((number + 17) % 36) + 1
+    return opposite
+
+
+def _runway_matches_direction(runway: ET.Element, direction: str) -> bool:
+    """Match a source runway direction to an XML runway end."""
+
+    direction = (direction or "").strip().upper()
+    if not direction:
+        return False
+    number = _runway_number(direction)
+    if number < 1:
+        return False
+    suffix = direction[len(direction.rstrip("LCR")):]
+    xml_number = _runway_number(runway.get("number") or "")
+    primary = (runway.get("primaryDesignator") or "").upper()
+    secondary = (runway.get("secondaryDesignator") or "").upper()
+    if xml_number == number and (not suffix or suffix == primary):
+        return True
+    return (
+        xml_number == _opposite_runway_number(number)
+        and (not suffix or suffix == secondary)
+    )
 
 
 def append_root_children(
@@ -640,11 +724,25 @@ def _parser() -> argparse.ArgumentParser:
         help="仅诊断用：限制 --append-runway-child 到指定的既有跑道号。",
     )
     parser.add_argument(
+        "--runway-ident",
+        action="append",
+        nargs="+",
+        default=[],
+        help="仅诊断用：按跑道方向（含 L/R/C）限制 --append-runway-child。",
+    )
+    parser.add_argument(
         "--keep-runway-number",
         action="append",
         nargs="+",
         default=[],
         help="仅诊断用：仅保留指定既有跑道号，保留源 XML 中的物理顺序。",
+    )
+    parser.add_argument(
+        "--keep-runway-ident",
+        action="append",
+        nargs="+",
+        default=[],
+        help="仅诊断用：仅保留指定跑道方向对应的物理跑道。",
     )
     parser.add_argument(
         "--append-runway-child",
@@ -763,6 +861,14 @@ def main() -> int:
     )
     if len(set(requested_runway_numbers)) != len(requested_runway_numbers):
         raise SystemExit("--runway-number 不能包含重复跑道号")
+    requested_runway_idents = tuple(
+        ident.strip().upper()
+        for values in args.runway_ident
+        for ident in values
+        if ident.strip()
+    )
+    if len(set(requested_runway_idents)) != len(requested_runway_idents):
+        raise SystemExit("--runway-ident 不能包含重复跑道方向")
     retained_runway_numbers = tuple(
         number.strip().upper()
         for values in args.keep_runway_number
@@ -771,6 +877,14 @@ def main() -> int:
     )
     if len(set(retained_runway_numbers)) != len(retained_runway_numbers):
         raise SystemExit("--keep-runway-number 不能包含重复跑道号")
+    retained_runway_idents = tuple(
+        ident.strip().upper()
+        for values in args.keep_runway_ident
+        for ident in values
+        if ident.strip()
+    )
+    if len(set(retained_runway_idents)) != len(retained_runway_idents):
+        raise SystemExit("--keep-runway-ident 不能包含重复跑道方向")
     try:
         assigned_holding_attributes = parse_holding_attributes(
             args.set_holding_attribute
@@ -822,6 +936,7 @@ def main() -> int:
                 keep_runways(
                     airport,
                     runway_numbers=retained_runway_numbers,
+                    runway_idents=retained_runway_idents,
                 )
             )
             selected_runway_numbers[airport.attrib["ident"]] = list(
@@ -829,6 +944,7 @@ def main() -> int:
                     airport,
                     appended_runway_children,
                     runway_numbers=requested_runway_numbers,
+                    runway_idents=requested_runway_idents,
                 )
             )
         except ValueError as error:
@@ -1015,8 +1131,10 @@ def main() -> int:
             "assigned_airport_attributes": assigned_airport_attributes,
             "assigned_runway_attributes": assigned_runway_attributes,
             "runway_numbers": list(requested_runway_numbers),
+            "runway_idents": list(requested_runway_idents),
             "selected_runway_numbers": selected_runway_numbers,
             "keep_runway_numbers": list(retained_runway_numbers),
+            "keep_runway_idents": list(retained_runway_idents),
             "retained_runway_numbers": retained_runway_numbers_by_airport,
             "appended_airport_children": [
                 {"tag": child.tag, "attributes": dict(child.attrib)}

@@ -52,6 +52,7 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - SDK 生成的 BGL Section 数量/类型只能说明布局，不得反推对象语义或复制参考 payload。
 - `RTE_SEG.CODE_TYPE_START/END` 可作为 VOR/NDB 航路端点类型来源；终端 `NAMED` 航点不得与 424 VOR/NDB 占用同一 `(region, ident)` 身份。
 - `RWY_DIRECTION.VAL_THR_DISPLACE` 的 33 条记录仅允许做独立隔离探针；未取得可复核结果前不得接入正式 adapter。
+- `scripts/airport_subset_probe.py` 支持 `--runway-ident`/`--keep-runway-ident` 精确选择含 L/R/C 的跑道方向，并按 XML `primaryDesignator/secondaryDesignator` 区分 PRIMARY/SECONDARY 端。
 - OCR 只能作为固定运行配置下的受限证据，不能创造主进近、图页归属或绕过 `blocked/no_unique_primary`。
 
 ## 阶段索引
@@ -67,10 +68,11 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - r369：参考独有全局航点 `1014` 条，分类 `811/154/39/9/1`，可安全提升 `0` 条。
 - r370：机场 `20/20` 缺参考 `0x17`、`18/20` 参考含 `0x33`；航路差异 `0x13=-12`、`0x17=-4`、`0x22=-419`；SDK 矩阵无授权单变量。
 - r371：只读审计 NavModel -> XML -> 候选 BGL；模型计数 `275/640/438/430/2741/12549/4446/10409/1297`（机场/跑道/导航台/ILS/全局航点/终端航点/航路段/程序段/等待航线），拒绝记录/程序 `435/10`。机场 XML 消费模型来源计数一致；`00_enroute.xml` 为 `Waypoint=3145`、`VOR=361`、`NDB=77`、`Next/Previous=4394/4394`、`Route=5744`，跳过航路段/航点 `52/9`。候选未修改、未读取参考 payload。
+- r372：对全部 33 条正值 `RWY_DIRECTION.VAL_THR_DISPLACE` 做精确跑道方向隔离构建，`33/33` 成功；所有输出仅含 `0x3/0x13/0x32/0x35`，`0x17/0x33` 均未出现。该字段不能解释参考 Section 差异，不修改正式 adapter。证据：`diagnostics/r372-offset-threshold-matrix.json`、`diagnostics/r372-offset-threshold-matrix-summary.json`。
 
 ## 当前后续
 
 - 保持 r366 模型、adapter 和候选不变。
-- 优先执行 `VAL_THR_DISPLACE` 33 条记录的单变量隔离探针，输出脱敏计数、哈希、构建状态和结论。
+- 继续保持 `VAL_THR_DISPLACE` 为已否决的诊断方向，不接入正式 adapter；下一步回到 SDK/目标加载契约或参考输入范围审计。
 - 每阶段只记录短摘要；详细证据放在 `diagnostics/`，不复制到本文件。
 - 新目标格式必须复用同一 `NavModel` 和管线，另建独立 adapter/validator/deployer。
