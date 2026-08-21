@@ -55,6 +55,7 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - r381：机场参考 BGL 普遍含 `0x17`、多数含 `0x33`，候选对应缺失且多出 `0x35`；机场/航路节计数也大幅不同。该审计只确认结构差异，不能据此推断对象语义或授权复制参考记录。证据：`diagnostics/r381-airport-bgl-cardinality.json`、`diagnostics/r381-enroute-bgl-cardinality.json`。
 - r382：表达式矩阵接入 r372 `OffsetThreshold` 探针摘要，兼容历史文本型缺失节字段；33/33 构建成功、未改模型/候选、未收敛参考缺口，故标记 `rejected_after_probe`。航路序列化仍无新的单变量。证据：`diagnostics/r382-sdk-bgl-expression-matrix.json`；定向测试 `7 passed`，全量测试 `517 passed`。
 - r383：来源完整性审计确认 33 个根 CSV 全部归类、16/16 来源组完整，`source_complete_sdk_probe_candidates=[]`。剩余来源组均为已投影、证据保留或目标结构拒绝；未发现可安全新增到默认 adapter 的 424 字段。证据：`diagnostics/r383-source-model-completeness.json`。
+- r384：端到端主审计通过：来源-模型、BGL 投影结构和 Package Tool 均可复核，`pipeline_master_verified=true`；仍明确 `model_or_adapter_change_authorized=false`，不改变参考字节一致性 `0/29`。证据：`diagnostics/r384-pipeline-master-audit.json`。
 
 详细日志、差分和运行输出只保存在 `diagnostics/` 与 `output/`，不复制到本文件。
 
