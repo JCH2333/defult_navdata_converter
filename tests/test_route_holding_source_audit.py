@@ -67,6 +67,11 @@ def test_route_holding_audit_keeps_point_evidence_but_rejects_airport_projection
     assert report["relationships"]["model_point_key_match_rows"] == 1
     assert report["relationships"]["rows_with_explicit_airport_field"] == 0
     assert report["relationships"]["rows_with_structured_airway_owner"] == 0
+    assert report["relationships"]["designated_point_identity_match_rows"] == 1
+    assert report["relationships"]["designated_point_identity_unresolved_rows"] == 1
+    assert report["relationships"]["designated_point_rows_with_serviced_airport"] == 0
+    assert report["relationships"]["designated_point_rows_with_fir"] == 0
+    assert report["relationships"]["designated_point_serviced_airports"] == []
     assert report["target"]["projection_allowed"] is False
     assert report["target"]["disposition"] == "source_evidence_only"
 

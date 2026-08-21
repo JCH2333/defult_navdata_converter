@@ -85,6 +85,15 @@ def audit_route_holding_source(
 
     rows, holding_encoding = _rows(holding_path)
     point_ids, point_row_counts, point_encodings = _source_point_ids(root)
+    designated_rows = []
+    designated_path = root / "DESIGNATED_POINT.csv"
+    if designated_path.is_file():
+        designated_rows, _ = _rows(designated_path)
+    designated_by_significant: dict[str, list[dict[str, str]]] = {}
+    for row in designated_rows:
+        point_id = _clean(row.get("SIGNIFICANT_POINT_ID"))
+        if point_id:
+            designated_by_significant.setdefault(point_id, []).append(row)
     model_point_keys = {
         *(point.key for point in model.waypoints),
         *(point.key for point in model.navaids),
@@ -101,6 +110,11 @@ def audit_route_holding_source(
     rows_with_coordinates = 0
     rows_with_airport_field = 0
     rows_with_structured_airway_owner = 0
+    designated_identity_match_rows = 0
+    designated_identity_unresolved_rows = 0
+    designated_rows_with_serviced_airport = 0
+    designated_rows_with_fir = 0
+    designated_serviced_airports: set[str] = set()
     unresolved_point_ids: list[str] = []
     for row, point_id in zip(rows, holding_point_ids):
         owner = source_point_owner.get(point_id)
@@ -121,6 +135,20 @@ def audit_route_holding_source(
             for field in ("EN_ROUTE_RTE_ID", "RTE_SEG_ID", "SEGMENT_ID")
         ):
             rows_with_structured_airway_owner += 1
+        designated_matches = designated_by_significant.get(point_id, [])
+        if designated_matches:
+            designated_identity_match_rows += 1
+            if any(_clean(match.get("SERVICED_AIRPORT")) for match in designated_matches):
+                designated_rows_with_serviced_airport += 1
+                designated_serviced_airports.update(
+                    _clean(match.get("SERVICED_AIRPORT"))
+                    for match in designated_matches
+                    if _clean(match.get("SERVICED_AIRPORT"))
+                )
+            if any(_clean(match.get("CODE_FIR")) for match in designated_matches):
+                designated_rows_with_fir += 1
+        else:
+            designated_identity_unresolved_rows += 1
 
     duplicate_route_ids = {
         value: count
@@ -184,6 +212,16 @@ def audit_route_holding_source(
             "model_point_key_match_rows": matched_model_keys,
             "rows_with_explicit_airport_field": rows_with_airport_field,
             "rows_with_structured_airway_owner": rows_with_structured_airway_owner,
+            "designated_point_identity_match_rows": designated_identity_match_rows,
+            "designated_point_identity_unresolved_rows": designated_identity_unresolved_rows,
+            "designated_point_duplicate_identity_count": sum(
+                len(matches) > 1 for matches in designated_by_significant.values()
+            ),
+            "designated_point_rows_with_serviced_airport": (
+                designated_rows_with_serviced_airport
+            ),
+            "designated_point_rows_with_fir": designated_rows_with_fir,
+            "designated_point_serviced_airports": sorted(designated_serviced_airports),
             "source_point_identity_is_uuid": all(
                 len(value.split("-")) == 5 for value in holding_point_ids if value
             ),

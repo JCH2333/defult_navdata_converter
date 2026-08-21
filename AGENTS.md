@@ -58,6 +58,7 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - r383：来源完整性审计确认 33 个根 CSV 全部归类、16/16 来源组完整，`source_complete_sdk_probe_candidates=[]`。剩余来源组均为已投影、证据保留或目标结构拒绝；未发现可安全新增到默认 adapter 的 424 字段。证据：`diagnostics/r383-source-model-completeness.json`。
 - r384：端到端主审计通过：来源-模型、BGL 投影结构和 Package Tool 均可复核，`pipeline_master_verified=true`；仍明确 `model_or_adapter_change_authorized=false`，不改变参考字节一致性 `0/29`。证据：`diagnostics/r384-pipeline-master-audit.json`。
 - r385：用冻结模型、同一官方 navaid baseline 和 Package Tool 重新构建；与 r366 候选逐文件 `29/29` 相同，与参考仍 `0/29`。证明当前差异可确定性复现，不是构建漂移。证据：`diagnostics/r385-file-convergence.json`。
+- r386：扩展 `route-holding-source-audit` 统计 `POINT_ID -> DESIGNATED_POINT`；真实 2608 数据中 116 条等待记录有 44 条身份匹配、72 条未匹配，仅 3 条带 `SERVICED_AIRPORT`、43 条带 `CODE_FIR`，无重复身份，仍无足够机场作用域，`projection_allowed=false`。证据：`diagnostics/r386-route-holding-source-audit.json`；定向测试 `5 passed`。
 
 详细日志、差分和运行输出只保存在 `diagnostics/` 与 `output/`，不复制到本文件。
 
