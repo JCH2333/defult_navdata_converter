@@ -85,6 +85,10 @@ from .sdk_section_closure_audit import (
     audit_sdk_section_closure,
     write_sdk_section_closure_audit,
 )
+from .airport_document_source_audit import (
+    audit_airport_document_sources,
+    write_airport_document_source_audit,
+)
 from .reference_template_source_audit import (
     audit_reference_template_sources,
     write_reference_template_source_audit,
@@ -1572,6 +1576,29 @@ def build_parser() -> argparse.ArgumentParser:
     sdk_section_closure.add_argument("--source-completeness", required=True)
     sdk_section_closure.add_argument("--airport-inventory", required=True)
     sdk_section_closure.add_argument("--output", required=True)
+    airport_document_source = sub.add_parser(
+        "airport-document-source-audit",
+        help="只读审计机场 PDF/OCR 是否包含指定机场标识",
+    )
+    airport_document_source.add_argument(
+        "--ocr-report",
+        action="append",
+        required=True,
+        help="ocr-skill JSON，可重复指定",
+    )
+    airport_document_source.add_argument(
+        "--target-airport",
+        action="append",
+        required=True,
+        help="待审计机场 ICAO，可重复指定",
+    )
+    airport_document_source.add_argument(
+        "--source-document",
+        action="append",
+        default=[],
+        help="对应原始 PDF，可重复指定，用于记录哈希",
+    )
+    airport_document_source.add_argument("--output", required=True)
     reader_repeatability = sub.add_parser(
         "reader-repeatability-audit",
         help="重复读取同一 BGL 包并检查读取器结果是否稳定",
@@ -2599,6 +2626,15 @@ def main(argv: list[str] | None = None) -> int:
             Path(args.airport_inventory),
         )
         write_sdk_section_closure_audit(Path(args.output), report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "airport-document-source-audit":
+        report = audit_airport_document_sources(
+            [Path(item) for item in args.ocr_report],
+            args.target_airport,
+            source_documents=[Path(item) for item in args.source_document],
+        )
+        write_airport_document_source_audit(Path(args.output), report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "reader-repeatability-audit":

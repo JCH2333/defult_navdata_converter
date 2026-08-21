@@ -317,6 +317,7 @@ python -m fenix_default_navdata.cli build `
 - `scripts/airport_subset_probe.py` 的隔离构建会在本次诊断目录写入 `probe-report.json`，记录完整输入选择、每个探针 BGL 的文件大小、头部版本、QMID、节表类型/计数/尺寸和读取器状态。它只用于验证 SDK 输入对象如何影响编译布局，不读取参考 BGL 的内容。
 - `sdk-section-provenance-audit` 消费 `sdk-section-provenance-manifest-v1`，将同一探针的基线 XML/BGL 与一个或多个变体 XML/BGL 绑定，比较 XML SHA-256、BGL 文件哈希、头部和 Section 表，并输出按 Section 类型聚合的影响摘要及“相同 XML -> 相同 BGL”的重放统计。它只读取 BGL 头，不读取导航记录或 payload 语义；Section 差异只能证明 SDK 表达效果，不能授权修改正式 adapter。manifest 同时接受 UTF-8 和 Windows UTF-8 BOM。
 - `sdk-section-closure-audit` 聚合 Section provenance、SDK 表达矩阵、来源完整性和机场来源库存，区分“可复现的 SDK Section 触发效果”与“有 424 来源及目标加载契约支持的投影授权”。它只读诊断 JSON，不读取参考导航 payload、不修改模型或候选；适用于未来其他目标格式的 Section 假设收敛。
+- `airport-document-source-audit` 消费固定 OCR 运行时生成的机场 PDF JSON，按目标 ICAO 输出源文件哈希、页面覆盖和命中摘要哈希，不保存 OCR 正文；命中也不会自动授权投影，必须另有结构化字段和目标加载契约证据。该步骤可复用于其他目标格式的来源缺口审计。
 - 该探针的 `--set-airport-attribute name=value` 仅为隔离编译实验设置 XML 属性，绝不写入 `NavModel` 或正式候选。
 - `--append-airport-child "TAG;NAME=VALUE;..."` 可在每个被选机场末尾追加属性型 SDK 子对象，用于可复现的单变量布局实验；它同样永远不写入 `NavModel` 或正式候选。
 - `--keep-runway-number` 可将机场探针缩小到既有的物理跑道子集；`--append-runway-child` 只向 `--runway-number` 指定的既有跑道插入 SDK 子对象，并维护 `OffsetThreshold`、`BlastPad`、`Overrun` 位于 `Ils`/`IlsReference` 之前的 XSD 顺序。它们同样只用于诊断，不能绕过正式适配器的来源和字节收敛门禁。
