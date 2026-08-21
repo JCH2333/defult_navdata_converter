@@ -85,6 +85,10 @@ from .reference_template_source_audit import (
     audit_reference_template_sources,
     write_reference_template_source_audit,
 )
+from .reference_build_source_audit import (
+    audit_reference_build_sources,
+    write_reference_build_source_audit,
+)
 from .runtime_contract_audit import (
     audit_runtime_contract_binaries,
     write_runtime_contract_audit,
@@ -421,6 +425,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="官方 navigraph-nav-jepp 根目录",
     )
     reference_template.add_argument("--output", required=True, help="审计 JSON 输出路径")
+    reference_build = sub.add_parser(
+        "reference-build-source-audit",
+        help="只读审计参考包生成输入、候选 XML 和 SDK 工具边界",
+    )
+    reference_build.add_argument("--reference", required=True, help="参考包根目录")
+    reference_build.add_argument("--candidate", help="候选根目录")
+    reference_build.add_argument(
+        "--sdk-root",
+        action="append",
+        default=[],
+        help="SDK 根目录，可重复传入",
+    )
+    reference_build.add_argument("--output", required=True, help="审计 JSON 输出路径")
     runtime_contract = sub.add_parser(
         "runtime-contract-audit",
         help="只读提取运行时二进制中的 SQL、表名和文件路径契约",
@@ -1789,6 +1806,17 @@ def main(argv: list[str] | None = None) -> int:
         )
         report["output"] = str(output)
         write_reference_template_source_audit(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "reference-build-source-audit":
+        output = Path(args.output).expanduser().resolve()
+        report = audit_reference_build_sources(
+            Path(args.reference),
+            candidate_root=_path(args.candidate),
+            sdk_roots=[Path(item) for item in args.sdk_root],
+        )
+        report["output"] = str(output)
+        write_reference_build_source_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "runtime-contract-audit":
