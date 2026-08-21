@@ -241,3 +241,9 @@
 - `airport-source-inventory` 只读盘点确认机场侧唯一可进入 SDK 隔离探针队列的是 `33` 条 `RWY_DIRECTION.VAL_THR_DISPLACE`；既有 OffsetThreshold 探针不会产生参考缺失的 `0x17/0x33`，不得接入正式适配器。
 - 机场关联 VOR/NDB 仍仅证明 `enroute` 内容来源，不能变成机场子对象；进近扇区通信频率存在多跑道关联且基数不符，不能投影为 `Com/Tower`。
 - 证据：`diagnostics/r368-default-gap-cards.json`、`diagnostics/r368-airport-source-inventory.json`。候选、代码和 `0/29` 状态不变。
+
+### r369 GeneralDoc 航点来源审计（2026-08-21）
+- 使用完整脱敏 `semantic-diff`（参考独有 waypoint `1014` 条）重跑 ENR 4.4 来源分类：`ident_absent=811`、`region_mismatch=154`、`near_boundary=39`、`outside=9`、`ambiguous=1`，可直接提升 `0` 条。
+- 结论：424 直接来源不能安全补回参考独有全局航点；保持 `NavModel`、adapter、候选和部署状态不变。被截断差分会被工具拒绝，完整性门禁有效。
+- 证据：`diagnostics/r369-00-enroute-semantic-diff-complete.json`、`diagnostics/r369-general-doc-keypoint-audit.json`。候选仍 `0/29`、`deployable=false`。
+- 复用门禁：`semantic-diff --sample-limit` 必须覆盖全部参考缺口身份，再运行来源审计；不得用参考 payload、坐标或记录回填。
