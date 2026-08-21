@@ -24,7 +24,7 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - 冻结候选：`output/candidate-2608-default-r366-terminal-global-identity`
 - 实验候选：`output/candidate-2608-default-r377-navaid-fir-priority-full-evidence`
 - 参考范围 29 个文件，字节一致 `0/29`，`deployable=false`；未部署、未实机验证、未 Release。
-- 最近全量测试：`513 passed`。
+- 最近全量测试：`515 passed`。
 
 ## 验证门禁
 
@@ -52,12 +52,13 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - r377-r378：完成 navaid 区域规则与完整证据重放；r377 候选本地契约通过，但参考仍 `0/29`。
 - r379：完成机场作用域来源审计。424、模型和候选均为 275 个机场，全部有 `AD_HP.csv`、`Terminal` 和 CSV 文本证据；参考额外 7 个机场（`ZBSH,ZGFS,ZL02,ZL03,ZSLT,ZW01,ZW02`）无 424 直接证据，禁止回填。证据：`diagnostics/r379-airport-scope-source-audit.json`。
 - r380：新增可复用 `reference-build-source-audit`，只读记录参考生成输入、候选 XML 和 SDK 工具边界。真实审计发现参考包有 `21` 个 BGL、无 XML/生成器；候选有 `47` 个 XML；两个 SDK 均有 Package Tool 和 XSD、无 `bglcomp.exe`。参考 manifest 的 creator 为 `PMDG DFD v2 converter`，仍不能授权修改 adapter。证据：`diagnostics/r380-reference-build-source-audit.json`。
+- r381：机场参考 BGL 普遍含 `0x17`、多数含 `0x33`，候选对应缺失且多出 `0x35`；机场/航路节计数也大幅不同。该审计只确认结构差异，不能据此推断对象语义或授权复制参考记录。证据：`diagnostics/r381-airport-bgl-cardinality.json`、`diagnostics/r381-enroute-bgl-cardinality.json`；全量测试 `515 passed`。
 
 详细日志、差分和运行输出只保存在 `diagnostics/` 与 `output/`，不复制到本文件。
 
 ## 后续
 
 - 保持 r366 冻结模型、adapter 和候选不变。
-- 继续审计参考生成输入范围、SDK/Package Tool 与真实加载契约；只有取得 424 直接证据或明确契约后才修改 adapter。
+- 继续审计参考生成输入范围、SDK/Package Tool 与真实加载契约；优先寻找标准 XML 对象与节类型的独立契约证据。只有取得 424 直接证据或明确契约后才修改 adapter。
 - 新目标格式可复用 `reference-build-source-audit`，先确认生成输入和工具边界，再决定是否进入目标 adapter 实现。
 - 新目标格式复用同一 `NavModel` 和管线，另建独立 profile/adapter/validator/deployer。
