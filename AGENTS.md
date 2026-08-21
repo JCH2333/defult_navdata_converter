@@ -76,3 +76,8 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - 继续保持 `VAL_THR_DISPLACE` 为已否决的诊断方向，不接入正式 adapter；下一步回到 SDK/目标加载契约或参考输入范围审计。
 - 每阶段只记录短摘要；详细证据放在 `diagnostics/`，不复制到本文件。
 - 新目标格式必须复用同一 `NavModel` 和管线，另建独立 adapter/validator/deployer。
+### r373：baseline 与参考包范围审计
+
+- `--baseline-db` 只用于官方 VOR/NDB/航点索引校验、区域恢复和默认导航台选择，不合并参考 BGL payload。
+- 参考两个目标包约 90.6 MB，当前候选约 17.0 MB；参考 20/20 个机场 BGL 含 `0x17`，候选全部缺少；`00_enroute` 的 `0x20` 完全一致，但仍少 `0x13=12`、`0x17=4`、`0x22=419` 个节。
+- `r312-reference-template-source-audit-20260820.json` 未发现可复用的参考导航 BGL 模板。未取得 424 直接来源或目标加载契约前，不得按参考节表反推对象或修改 adapter；本方向保持 blocked。
