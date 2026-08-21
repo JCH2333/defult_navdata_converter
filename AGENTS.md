@@ -236,3 +236,8 @@
 - `2088` 条字段差异全部唯一回链到 424 航路/序号；`2065` 条纯几何差异，`23` 条几何加最低高度差异。`VAL_MTCA` 的米转英尺变换命中 `0` 条，`adapter_change_authorized=false`。
 - 结论：没有新的 424 直接证据授权修改航路投影；保持 r366 代码和候选不变。证据：`diagnostics/r366-00-enroute-semantic-diff-redacted-full.json`、`r366-source-gap-audit.json`、`r366-airway-diff-audit.json`、`r366-airway-source-field-audit.json`。
 - 管线复用：后续目标格式可复用“完整脱敏差分 -> 来源分类 -> 字段变换审计”门禁；禁止用参考 payload、坐标或记录回填。
+## r368 缺口卡与机场来源盘点（2026-08-21）
+- `default-gap-cards-audit` 对 r366 候选重新生成 `40` 张来源卡：航路端点区域 `12`、全局航点区域 `5`、IAP 主进近 `10`、未分类程序 `13`；全部仍为 `rejected/blocked`，没有新可投影类别。
+- `airport-source-inventory` 只读盘点确认机场侧唯一可进入 SDK 隔离探针队列的是 `33` 条 `RWY_DIRECTION.VAL_THR_DISPLACE`；既有 OffsetThreshold 探针不会产生参考缺失的 `0x17/0x33`，不得接入正式适配器。
+- 机场关联 VOR/NDB 仍仅证明 `enroute` 内容来源，不能变成机场子对象；进近扇区通信频率存在多跑道关联且基数不符，不能投影为 `Com/Tower`。
+- 证据：`diagnostics/r368-default-gap-cards.json`、`diagnostics/r368-airport-source-inventory.json`。候选、代码和 `0/29` 状态不变。
