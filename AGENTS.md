@@ -230,3 +230,9 @@
 - Navdatareader：候选 `waypoint/airway=3150/4223`，参考 `3266/4614`；r365 的 airway `4839` 降至 `4223`，但语义差异仍未解释。
 - 文件收敛：参考范围 `29` 个文件，字节一致 `0/29`；`deployable=false`，未部署、未实机验证、未 Release。
 - 证据：`diagnostics/r366-validate.json`、`diagnostics/r366-file-convergence.json`、`diagnostics/r366-00-enroute-semantic-diff-full.json`。下一步继续只读审计参考独有 airway 与 424 `RTE_SEG.csv` 的来源覆盖，禁止复制参考 payload/坐标/记录回填。
+## r367 来源缺口与航路差异审计（2026-08-21）
+- 用 r366 候选重新生成完整脱敏 `semantic-diff`，并重跑 `source-gap-audit`、`airway-diff-audit`、`airway-source-field-audit`；所有报告只保留计数、类别、哈希和候选来源摘要。
+- 参考独有 airway `1085` 条：`484` 条不在 `RTE_SEG.csv`，`123` 条同名不同序号，`468` 条可回链同名同序号，其中 `10` 条因端点区域缺失未投影。
+- `2088` 条字段差异全部唯一回链到 424 航路/序号；`2065` 条纯几何差异，`23` 条几何加最低高度差异。`VAL_MTCA` 的米转英尺变换命中 `0` 条，`adapter_change_authorized=false`。
+- 结论：没有新的 424 直接证据授权修改航路投影；保持 r366 代码和候选不变。证据：`diagnostics/r366-00-enroute-semantic-diff-redacted-full.json`、`r366-source-gap-audit.json`、`r366-airway-diff-audit.json`、`r366-airway-source-field-audit.json`。
+- 管线复用：后续目标格式可复用“完整脱敏差分 -> 来源分类 -> 字段变换审计”门禁；禁止用参考 payload、坐标或记录回填。
