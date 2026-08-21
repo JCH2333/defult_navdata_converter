@@ -54,6 +54,7 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - r380：新增可复用 `reference-build-source-audit`，只读记录参考生成输入、候选 XML 和 SDK 工具边界。真实审计发现参考包有 `21` 个 BGL、无 XML/生成器；候选有 `47` 个 XML；两个 SDK 均有 Package Tool 和 XSD、无 `bglcomp.exe`。参考 manifest 的 creator 为 `PMDG DFD v2 converter`，仍不能授权修改 adapter。证据：`diagnostics/r380-reference-build-source-audit.json`。
 - r381：机场参考 BGL 普遍含 `0x17`、多数含 `0x33`，候选对应缺失且多出 `0x35`；机场/航路节计数也大幅不同。该审计只确认结构差异，不能据此推断对象语义或授权复制参考记录。证据：`diagnostics/r381-airport-bgl-cardinality.json`、`diagnostics/r381-enroute-bgl-cardinality.json`。
 - r382：表达式矩阵接入 r372 `OffsetThreshold` 探针摘要，兼容历史文本型缺失节字段；33/33 构建成功、未改模型/候选、未收敛参考缺口，故标记 `rejected_after_probe`。航路序列化仍无新的单变量。证据：`diagnostics/r382-sdk-bgl-expression-matrix.json`；定向测试 `7 passed`，全量测试 `517 passed`。
+- r383：来源完整性审计确认 33 个根 CSV 全部归类、16/16 来源组完整，`source_complete_sdk_probe_candidates=[]`。剩余来源组均为已投影、证据保留或目标结构拒绝；未发现可安全新增到默认 adapter 的 424 字段。证据：`diagnostics/r383-source-model-completeness.json`。
 
 详细日志、差分和运行输出只保存在 `diagnostics/` 与 `output/`，不复制到本文件。
 
