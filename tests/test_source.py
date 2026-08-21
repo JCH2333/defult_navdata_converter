@@ -838,8 +838,8 @@ def test_surface_retains_first_expressible_source_component(composition: str, ex
     assert _surface(composition) == expected
 
 
-def test_navaid_country_prefers_serviced_airport_when_fir_conflicts() -> None:
-    assert navaid_country("ZBES", "沈阳情报区") == "ZB"
+def test_navaid_country_prefers_single_source_fir_when_airport_conflicts() -> None:
+    assert navaid_country("ZBES", "沈阳情报区") == "ZY"
 
 
 def test_navaid_country_uses_serviced_airport_for_multi_fir_boundary() -> None:
@@ -994,7 +994,7 @@ def test_load_naip_recovers_blank_route_endpoint_firs_from_matching_424_records(
         for leg in model.airway_legs
     ] == [
         ("ZB", "ZG"),
-        ("ZU", "ZB"),
+        ("ZP", "ZB"),
         ("ZB", "ZB"),
     ]
     assert next(point.country for point in model.waypoints if point.ident == "NOFIR") == "ZB"

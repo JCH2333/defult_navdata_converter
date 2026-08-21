@@ -359,15 +359,14 @@ def _load_airport_pdf_names(model: NavModel) -> None:
 def navaid_country(serviced_airport: str, fir: str) -> str:
     """Map a 424 navaid to a default-data region without guessing boundaries.
 
-    A valid serviced airport is the only source-backed physical side for a
-    navaid recorded against a FIR boundary, so it takes precedence.  A single
-    published FIR is a fallback when no serviced airport exists.  Multiple
-    country regions without that airport-side evidence remain unresolved.
+    A single source-declared FIR is the authoritative region for a navaid.
+    The servicing airport is only a fallback when the FIR is blank or cannot
+    be resolved to a single region.  The 424 source contains many navaids
+    whose servicing airport is outside the published FIR, so using that
+    airport as the primary region would create incorrect enroute identities.
     """
 
     airport_prefix = (serviced_airport or "").strip().upper()[:2]
-    if airport_prefix in CN_PREFIXES:
-        return airport_prefix
     fir_names = tuple(
         part.strip()
         for part in re.split(r"[，,]", fir or "")
@@ -385,7 +384,11 @@ def navaid_country(serviced_airport: str, fir: str) -> str:
             raise ValueError(f"unmapped navaid FIR: {fir!r}") from error
         if len(countries) == 1:
             return next(iter(countries))
+        if airport_prefix in CN_PREFIXES:
+            return airport_prefix
         raise ValueError(f"ambiguous navaid FIR without serviced airport: {fir!r}")
+    if airport_prefix in CN_PREFIXES:
+        return airport_prefix
     raise ValueError("empty navaid FIR and serviced airport")
 
 

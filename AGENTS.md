@@ -31,7 +31,7 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - 模型 SHA-256：`7cec24bd4a57545d39aab037abe4125c763ad12f364bd5f8f0073b0e050fdb4b`
 - 当前实验候选：`output/candidate-2608-default-r366-terminal-global-identity`
 - 参考范围 29 个文件，字节一致 `0/29`，`deployable=false`。
-- 最近全量测试基线：`509 passed`。
+- 最近全量测试基线：`513 passed`。
 - 当前未部署 Community、未实机验证、未创建 Release。
 - 工作区 Git 提交和推送由根目录协作规则约束；提交前确认不含数据库、诊断和构建产物。
 
@@ -84,3 +84,4 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - r374：参考来源追踪。参考包元数据的 BGL/索引时间为 2026-08-06，`manifest.json` 标识 `PMDG DFD v2 converter`；工作区未找到对应 XML、BglComp 输入或专用生成器。旧 `navdata_converter` 仅为 2607 -> PMDG DFDv2 SQLite 的简化转换器，不能复用于默认 BGL。无新来源证据，模型、adapter、候选保持不变，继续 blocked。
 - r375：对 r366 候选运行包级派生元数据、全量 BGL 节表和 3 个样本 BGL 二进制只读审计。候选与参考 BGL 版本字段相同，但机场结构仍普遍缺 `0x17/0x33`、多出 `0x35`；参考 `layout/index/content history` 的差异也不能由时间正规化单独解释。证据：`diagnostics/r375-package-derived-metadata.json`、`diagnostics/r375-bgl-layout.json`、`diagnostics/r375-bgl-binary-diff-samples.json`。无新来源或加载契约证据，禁止按节表反推对象，模型、adapter、候选保持不变，继续 blocked。
 - r376：发现本地 `NavigraphDFDv2-2604.1.0` 仅含 DFDv2 SQLite 样本，无 BGL 生成器。使用 Navdatareader 1.2.4 对 r366 与参考的 `00_enroute.bgl` 做同配置只读读取：候选/参考行数为 `121/135 VOR`、`133/143 NDB`、`3150/3266 Waypoint`、`4223/4614 Airway`；语义差分严格一致 `2994` 行，仍有 `1560/2091` 逻辑键差异。候选 `ZB_airports.bgl` 触发读取器空扫描，参考同文件可读出 `2710` 终端航点和 `59` ILS。证据：`diagnostics/navdatareader/r376-*.sqlite`、`diagnostics/navdatareader/r376-enroute-semantic-diff.json`。这是结构/来源缺口证据，不授权参考记录回填或修改 adapter；继续 blocked。
+- r377：完成 424 navaid 区域源侧审计并加入可复用 `navaid_region_source_audit`。2608 `VOR.csv` 为 `13` 条服务机场/FIR 冲突，其中 FIR 多边形明确支持 FIR `5` 条、位于多边形外 `7` 条、近边界 `1` 条；`NDB.csv` 实际为 `0` 条同类冲突。`navaid_country` 改为单一可映射 `CODE_FIR` 优先、无 FIR 才回退服务机场；聚焦与全量测试 `513 passed`。重导出模型计数变为全局航点 `2265`、拒绝记录 `1`，说明该规则会触发大范围身份重算；r377 候选本地契约通过但参考仍 `0/29`、`deployable=false`。候选机场 BGL 的 Navdatareader 探针在边界记录偏移 `2787278` 重复告警并被停止，不能作为通过证据。实验模型/候选未晋级为冻结状态，未部署。证据：`diagnostics/r377-navaid-region-source-audit.json`、`output/intermediate-2608-r377-navaid-fir-priority.json.gz`、`output/candidate-2608-default-r377-navaid-fir-priority/conversion-report.json`。
