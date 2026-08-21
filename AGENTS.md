@@ -37,11 +37,11 @@
 - 冻结模型：`output/intermediate-2608-r187-navaid-label-replay.json.gz`
 - 模型 SHA-256：`7cec24bd4a57545d39aab037abe4125c763ad12f364bd5f8f0073b0e050fdb4b`
 - 当前有效参考候选：`output/candidate-2608-default-r188-doviv-replay`，自重放 `29/29`
-- 最新有效实验候选：`output/candidate-2608-default-r362-sdk153`；r363 SDK 1.6.9 构建失败，不计入候选
+- 最新有效实验候选：`output/candidate-2608-default-r366-terminal-global-identity`；r363 SDK 1.6.9 构建失败，不计入候选
 - r338 模型计数与冻结模型一致；V111/V162 四条端点区域恢复
 - 与参考默认数据字节一致：`0/29`
 - `deployable=false`
-- 当前完整回归：`509 passed`（2026-08-20）
+- 当前完整回归：`509 passed`（2026-08-21）
 - 当前未部署 Community、未实机验证、未创建 Release。
 
 ### r338-r343 阶段结论
@@ -247,3 +247,8 @@
 - 结论：424 直接来源不能安全补回参考独有全局航点；保持 `NavModel`、adapter、候选和部署状态不变。被截断差分会被工具拒绝，完整性门禁有效。
 - 证据：`diagnostics/r369-00-enroute-semantic-diff-complete.json`、`diagnostics/r369-general-doc-keypoint-audit.json`。候选仍 `0/29`、`deployable=false`。
 - 复用门禁：`semantic-diff --sample-limit` 必须覆盖全部参考缺口身份，再运行来源审计；不得用参考 payload、坐标或记录回填。
+
+### r370 BGL 收敛与 SDK 表达式矩阵（2026-08-21）
+- `airport-bgl-cardinality-audit`：20/20 机场 BGL 缺少参考 `0x17`，18/20 参考还含 `0x33`；`enroute-bgl-cardinality-audit`：`0x20` 区完全一致，差异为 `0x13=-12`、`0x17=-4`、`0x22=-419`。
+- `sdk-bgl-expression-matrix-audit` 确认 XML 航路序列完整，连接/子节点顺序探针无新的单变量；现有机场候选仅 `VAL_THR_DISPLACE` 可做隔离探针，既有结果不能解释参考 Section，正式 adapter 不变。
+- 结论：Section 数量/类型不能反推记录或授权复制参考 payload；候选仍 `0/29`、`deployable=false`。证据：`diagnostics/r370-airport-bgl-cardinality.json`、`r370-enroute-bgl-cardinality.json`、`r370-sdk-bgl-expression-matrix.json`、`r370-status-snapshot.json`。
