@@ -29,7 +29,8 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 
 - 冻结模型：`output/intermediate-2608-r187-navaid-label-replay.json.gz`
 - 模型 SHA-256：`7cec24bd4a57545d39aab037abe4125c763ad12f364bd5f8f0073b0e050fdb4b`
-- 当前实验候选：`output/candidate-2608-default-r366-terminal-global-identity`
+- 冻结基线候选：`output/candidate-2608-default-r366-terminal-global-identity`
+- 当前实验候选：`output/candidate-2608-default-r377-navaid-fir-priority-full-evidence`
 - 参考范围 29 个文件，字节一致 `0/29`，`deployable=false`。
 - 最近全量测试基线：`513 passed`。
 - 当前未部署 Community、未实机验证、未创建 Release。
@@ -69,6 +70,7 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - r370：机场 `20/20` 缺参考 `0x17`、`18/20` 参考含 `0x33`；航路差异 `0x13=-12`、`0x17=-4`、`0x22=-419`；SDK 矩阵无授权单变量。
 - r371：只读审计 NavModel -> XML -> 候选 BGL；模型计数 `275/640/438/430/2741/12549/4446/10409/1297`（机场/跑道/导航台/ILS/全局航点/终端航点/航路段/程序段/等待航线），拒绝记录/程序 `435/10`。机场 XML 消费模型来源计数一致；`00_enroute.xml` 为 `Waypoint=3145`、`VOR=361`、`NDB=77`、`Next/Previous=4394/4394`、`Route=5744`，跳过航路段/航点 `52/9`。候选未修改、未读取参考 payload。
 - r372：对全部 33 条正值 `RWY_DIRECTION.VAL_THR_DISPLACE` 做精确跑道方向隔离构建，`33/33` 成功；所有输出仅含 `0x3/0x13/0x32/0x35`，`0x17/0x33` 均未出现。该字段不能解释参考 Section 差异，不修改正式 adapter。证据：`diagnostics/r372-offset-threshold-matrix.json`、`diagnostics/r372-offset-threshold-matrix-summary.json`。
+- r378：用完整 PDF/GeneralDoc/IAP 证据重放 r377；相对旧 navaid 规则仅有 `881` 项模型差异（`66` navaid、`519` waypoint、`294` airway identity），无 GeneralDoc/IAP/最低高度差异。r377 模型计数恢复为 `2754/435`（全局航点/拒绝记录），候选 `validate` 与本地契约通过，参考逐文件仍 `0/29`。`00_enroute` 探针读出 `120/133/3163/4223`（VOR/NDB/waypoint/airway），读取器返回 1 的已知 BROKEN 状态；未部署、未实机验证。证据：`output/intermediate-2608-r377-navaid-fir-priority-full-evidence.json.gz`、`diagnostics/r377-navaid-only-model-replay-local.json`、`diagnostics/r377-file-convergence-audit.json`、`diagnostics/navdatareader/r377-candidate.sqlite`。
 
 ## 当前后续
 
