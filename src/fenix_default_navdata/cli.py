@@ -81,6 +81,10 @@ from .sdk_section_provenance_audit import (
     audit_sdk_section_provenance,
     write_sdk_section_provenance_audit,
 )
+from .sdk_section_closure_audit import (
+    audit_sdk_section_closure,
+    write_sdk_section_closure_audit,
+)
 from .reference_template_source_audit import (
     audit_reference_template_sources,
     write_reference_template_source_audit,
@@ -1559,6 +1563,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="sdk-section-provenance-manifest-v1 JSON",
     )
     sdk_section_provenance.add_argument("--output", required=True)
+    sdk_section_closure = sub.add_parser(
+        "sdk-section-closure-audit",
+        help="只读闭合 SDK Section 来源假设，不修改模型或适配器",
+    )
+    sdk_section_closure.add_argument("--provenance", required=True)
+    sdk_section_closure.add_argument("--expression-matrix", required=True)
+    sdk_section_closure.add_argument("--source-completeness", required=True)
+    sdk_section_closure.add_argument("--airport-inventory", required=True)
+    sdk_section_closure.add_argument("--output", required=True)
     reader_repeatability = sub.add_parser(
         "reader-repeatability-audit",
         help="重复读取同一 BGL 包并检查读取器结果是否稳定",
@@ -2576,6 +2589,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "sdk-section-provenance-audit":
         report = audit_sdk_section_provenance(Path(args.manifest))
         write_sdk_section_provenance_audit(Path(args.output), report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "sdk-section-closure-audit":
+        report = audit_sdk_section_closure(
+            Path(args.provenance),
+            Path(args.expression_matrix),
+            Path(args.source_completeness),
+            Path(args.airport_inventory),
+        )
+        write_sdk_section_closure_audit(Path(args.output), report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "reader-repeatability-audit":

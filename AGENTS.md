@@ -25,7 +25,7 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - 实验候选：`output/candidate-2608-default-r377-navaid-fir-priority-full-evidence`
 - 重建候选：`output/candidate-2608-default-r385-frozen-rebuild`
 - 参考范围 29 个文件，字节一致 `0/29`，`deployable=false`；未部署、未实机验证、未 Release。
-- 最近全量测试：`517 passed`。
+- 最近全量测试：`517 passed`；r388 新增 SDK Section 闭合审计与 11 个定向测试。
 
 ## 验证门禁
 
@@ -60,6 +60,7 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - r385：用冻结模型、同一官方 navaid baseline 和 Package Tool 重新构建；与 r366 候选逐文件 `29/29` 相同，与参考仍 `0/29`。证明当前差异可确定性复现，不是构建漂移。证据：`diagnostics/r385-file-convergence.json`。
 - r386：扩展 `route-holding-source-audit` 统计 `POINT_ID -> DESIGNATED_POINT`；真实 2608 数据中 116 条等待记录有 44 条身份匹配、72 条未匹配，仅 3 条带 `SERVICED_AIRPORT`、43 条带 `CODE_FIR`，无重复身份，仍无足够机场作用域，`projection_allowed=false`。证据：`diagnostics/r386-route-holding-source-audit.json`；定向测试 `5 passed`。
 - r387：用 r385 候选和参考包生成完整脱敏航路语义差分及 `source-gap-audit`；2,263 条同源航路字段差异中 2,241 条为几何组差异，12 条端点区域仍无唯一来源。候选机场 BGL 触发 Navdatareader `Unexpected record type ... 0x108` 并被日志门禁停止，不能据此读取参考字段或修改 adapter；工作区未发现参考 XML、生成器或可重放配置。证据：`diagnostics/r387-semantic-diff-waypoint-airway-full.json`、`diagnostics/r387-source-gap-audit.json`。
+- r388：新增可复用 `sdk-section-closure-audit`，聚合 r311 Section provenance、r382 SDK 表达矩阵、r383 来源完整性和 r368 机场来源库存。`0x17/0x33` 的 NDB 触发效果可复现，但 77 条 NDB 仍不足以解释参考机场 Section 的作用域/基数；`0x35` 仅为候选布局差异；无来源完整且未测试候选。结论 `projection_authorized=false`，未改模型/适配器。证据：`diagnostics/r388-sdk-section-closure-audit.json`。
 
 详细日志、差分和运行输出只保存在 `diagnostics/` 与 `output/`，不复制到本文件。
 
