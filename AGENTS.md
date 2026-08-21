@@ -23,6 +23,7 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - 模型 SHA-256：`7cec24bd4a57545d39aab037abe4125c763ad12f364bd5f8f0073b0e050fdb4b`
 - 冻结候选：`output/candidate-2608-default-r366-terminal-global-identity`
 - 实验候选：`output/candidate-2608-default-r377-navaid-fir-priority-full-evidence`
+- 重建候选：`output/candidate-2608-default-r385-frozen-rebuild`
 - 参考范围 29 个文件，字节一致 `0/29`，`deployable=false`；未部署、未实机验证、未 Release。
 - 最近全量测试：`517 passed`。
 
@@ -56,6 +57,7 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - r382：表达式矩阵接入 r372 `OffsetThreshold` 探针摘要，兼容历史文本型缺失节字段；33/33 构建成功、未改模型/候选、未收敛参考缺口，故标记 `rejected_after_probe`。航路序列化仍无新的单变量。证据：`diagnostics/r382-sdk-bgl-expression-matrix.json`；定向测试 `7 passed`，全量测试 `517 passed`。
 - r383：来源完整性审计确认 33 个根 CSV 全部归类、16/16 来源组完整，`source_complete_sdk_probe_candidates=[]`。剩余来源组均为已投影、证据保留或目标结构拒绝；未发现可安全新增到默认 adapter 的 424 字段。证据：`diagnostics/r383-source-model-completeness.json`。
 - r384：端到端主审计通过：来源-模型、BGL 投影结构和 Package Tool 均可复核，`pipeline_master_verified=true`；仍明确 `model_or_adapter_change_authorized=false`，不改变参考字节一致性 `0/29`。证据：`diagnostics/r384-pipeline-master-audit.json`。
+- r385：用冻结模型、同一官方 navaid baseline 和 Package Tool 重新构建；与 r366 候选逐文件 `29/29` 相同，与参考仍 `0/29`。证明当前差异可确定性复现，不是构建漂移。证据：`diagnostics/r385-file-convergence.json`。
 
 详细日志、差分和运行输出只保存在 `diagnostics/` 与 `output/`，不复制到本文件。
 
