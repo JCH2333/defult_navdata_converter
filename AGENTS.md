@@ -21,7 +21,7 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - 模型 SHA-256：`7cec24bd4a57545d39aab037abe4125c763ad12f364bd5f8f0073b0e050fdb4b`。
 - 当前候选：`output/candidate-2608-default-r385-frozen-rebuild`。
 - 参考 29 文件，字节一致 `0/29`，`deployable=false`；未部署、未实机验证、未 Release。
-- 最近全量测试：`519 passed`；最新完成 R403 航路投影矩阵与连接完整性审计。
+- 最近全量测试：`519 passed`；最新完成 R404 SDK 编译表达矩阵审计。
 - 40 张缺口卡和 r390-r394 审计均未产生可授权的新投影；模型/adapter 保持不变。
 
 ## 验收门禁
@@ -44,7 +44,8 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - **R401 管线主控（已完成）：** 运行端到端管线主控审计（diagnostics/r401-pipeline-master-audit.json），确认 33 CSV 来源、275 机场/640 跑道/438 导航台/2741 航点/4446 航段中间模型与 10 区域 BGL 投影架构全量闭环（pipeline_master_verified=true）；保持模型与 adapter 不变。
 - **R402 模型重放（已完成）：** 审计 r187 冻结中间模型自重放与基准对比（diagnostics/r402-model-replay-audit.json），确认 11 类核心实体 0 差异（difference_count=0, consistent=true）；保持模型与 adapter 不变。
 - **R403 航路矩阵（已完成）：** 审计 00_enroute.xml 航路投影矩阵（diagnostics/r403-airway-projection-matrix.json），确认 8,868 条双向连接全部具有 424 来源归属（candidate_connections_without_source_owner=0），4,394 段直接投影、40 段目标身份解析投影、12 段源端点缺失拒绝；保持模型与 adapter 不变。
-- **R404+ 收敛：** 按差异矩阵处理剩余文件；达到 `29/29` 后才进入备份、部署和实机验证。
+- **R404 表达矩阵（已完成）：** 审计 SDK 编译表达矩阵（diagnostics/r404-sdk-bgl-expression-matrix.json），聚合航路序列化与机场表达候选项，确认无来源完整且未测试的新单变量（blocked_on_machine_readable_target_evidence）；保持模型与 adapter 不变。
+- **R405+ 收敛：** 按差异矩阵处理剩余文件；达到 `29/29` 后才进入备份、部署和实机验证。
 
 每个 R 是完整里程碑包（归因/实验或实现/回归/归档），原则上持续 1 至 3 个连续工作日；不为单个命令、缺口卡或重复测试拆分 R。`AGENTS.md` 仅记录里程碑摘要，详细证据放在 `diagnostics/` 和 `output/`。
 
