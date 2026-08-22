@@ -2037,6 +2037,9 @@ def test_standard_procedure_alias_matches_zbcf_target_contract() -> None:
     assert _standard_procedure_alias("KAKAT-8ZA", "arrival") == "KAK8ZA"
     assert _standard_procedure_alias("TGO-8ZA", "arrival") == "TGO8ZA"
     assert _standard_procedure_alias("P528-9ZA", "arrival") == "P5289A"
+    assert _standard_procedure_alias("BELI-9N", "departure") == "BELI9N"
+    assert _standard_procedure_alias("IGRA9-1", "arrival") == "IGRA91"
+    assert _standard_procedure_alias("ELNE1-3", "arrival") == "ELNE13"
 
 
 def test_airport_projection_uses_standard_zbcf_sid_star_aliases(tmp_path: Path) -> None:
@@ -2100,10 +2103,11 @@ def test_airport_projection_keeps_truncated_sid_star_names_unique(tmp_path: Path
     assert len(arrival_names) == 2
     assert len(set(arrival_names)) == 2
     assert all(len(name) <= 6 for name in arrival_names)
+    first_departure = airport.findall("Departure")[0]
     transition_names = [
         item.attrib["name"]
-        for item in airport.findall(
-            "Departure[@name='APAKA-']/EnrouteTransitions/EnrouteTransitionLegs"
+        for item in first_departure.findall(
+            "EnrouteTransitions/EnrouteTransitionLegs"
         )
     ]
     assert len(transition_names) == 2

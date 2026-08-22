@@ -1263,7 +1263,9 @@ def _standard_procedure_alias(label: str, kind: str) -> str:
         if len(fix) == 4:
             return f"{fix[:6]}{suffix[0]}{suffix[-1]}"
         return f"{fix[:3]}{suffix}"
-    return raw
+    # CAAC standard SID/STAR labels use both ``BELI-9N`` and ``IGRA9-1``.
+    # The MSFS procedure-name field uses the compact form in the default BGL.
+    return raw.replace("-", "")
 
 
 def _append_departures(

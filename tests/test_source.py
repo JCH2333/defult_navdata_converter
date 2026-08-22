@@ -9,6 +9,7 @@ from fenix_default_navdata.source import (
     _load_terminal_landing_aids,
     _promote_shared_terminal_coordinate_waypoints,
     _project_same_page_rnp_primary_to_ils,
+    _project_unique_rnav_ils_chart_primaries,
     _retain_database_referenced_terminal_waypoints,
     _surface,
     audit_enroute_navaid_ocr_source,
@@ -17,6 +18,39 @@ from fenix_default_navdata.source import (
     summarize_airway_source_metadata,
     waypoint_country,
 )
+
+
+def test_projects_unique_rnav_ils_chart_primary_without_ils_missed_section() -> None:
+    model = NavModel(Path("raw"))
+    database_source = SourceRef(
+        "Terminal/ZSHC/ZSHC-0C-11.pdf", 1, 1, "database-hash",
+    )
+    chart_source = SourceRef(
+        "Terminal/ZSHC/ZSHC-5L-1.pdf", 1, 1, "ils-chart-hash",
+    )
+    model.procedure_segments.append(ProcedureSegment(
+        "ZSHC", "R06", "approach", "06", "", (
+            ChartTerminalLeg("R06", "06", "IF", "HC203", "fixture"),
+            ChartTerminalLeg("R06", "06", "TF", "HC200", "fixture"),
+        ), database_source,
+    ))
+    model.procedure_charts.append(ProcedureChart(
+        "ZSHC", "ZSHC-5L-1.pdf", 1, "instrument-approach-index",
+        "RNAV CAT-I/II ILS/DME z RWY06", "text", (), ("06",), (), (), (),
+        chart_source,
+    ))
+
+    _project_unique_rnav_ils_chart_primaries(model)
+
+    projected = [
+        segment for segment in model.procedure_segments
+        if segment.label == "I06" and segment.approach_family == "ILS"
+    ]
+    assert len(projected) == 1
+    assert [leg.fix_ident for leg in projected[0].legs] == ["HC203", "HC200"]
+    assert model.shared_ils_primary_projections[0]["selection"] == (
+        "unique_rnav_ils_chart_and_rnp_primary"
+    )
 from fenix_default_navdata.general_docs import (
     ENROUTE_AIRWAY_MINIMUM_ALTITUDE_DOCUMENTS,
     ENROUTE_KEY_POINT_DOCUMENT,

@@ -2529,6 +2529,106 @@ def _project_same_page_rnp_primary_to_ils(model: NavModel) -> None:
         projections.append(projection)
     model.procedure_segments.extend(additions)
     model.shared_ils_primary_projections.extend(projections)
+    _project_unique_rnav_ils_chart_primaries(model)
+
+
+def _project_unique_rnav_ils_chart_primaries(model: NavModel) -> None:
+    """Project a unique RNP primary when an RNAV-ILS chart names it directly.
+
+    Some 424 airports publish the ILS missed section only as an ILS chart
+    index, while the database coding page contains the matching RNP primary.
+    A unique ``RNAV ... ILS/DME z`` chart plus a unique RNP primary is enough
+    to establish the ILS primary; plain ILS-y and ambiguous variants remain
+    untouched.
+    """
+    groups: dict[tuple[str, str, str], list[ProcedureSegment]] = {}
+    for segment in model.procedure_segments:
+        if (
+            iap_section_kind(segment) == "approach"
+            and segment.legs
+            and segment.approach_family.upper() not in {"ILS", "RNP_AR"}
+        ):
+            groups.setdefault(
+                (segment.airport, segment.label, segment.runway), [],
+            ).append(segment)
+
+    existing = {
+        (segment.airport, segment.label, segment.runway)
+        for segment in model.procedure_segments
+    }
+    additions: list[ProcedureSegment] = []
+    projections: list[dict[str, object]] = []
+    for chart in model.procedure_charts:
+        title = chart.chart_name.upper()
+        if (
+            chart.chart_type != "instrument-approach-index"
+            or "RNAV" not in title
+            or "ILS" not in title
+            or "RNP" in title
+            or "(AR)" in title
+        ):
+            continue
+        selected: list[tuple[str, ProcedureSegment]] = []
+        for ils_label in approach_procedure_name_candidates(
+            chart.chart_name, chart.runways, chart.airport,
+        ):
+            if not _ILS_APPROACH_LABEL.fullmatch(ils_label):
+                continue
+            rnp_label = "R" + ils_label[1:]
+            for runway in chart.runways:
+                matches = groups.get((chart.airport, rnp_label, runway), [])
+                if len(matches) == 1:
+                    selected.append((ils_label, matches[0]))
+        if len(selected) != 1:
+            continue
+        ils_label, rnp_primary = selected[0]
+        identity = (chart.airport, ils_label, rnp_primary.runway)
+        if identity in existing:
+            continue
+        legs = tuple(
+            replace(
+                leg,
+                procedure_label=ils_label,
+                procedure_kind="approach",
+                approach_family="ILS",
+            )
+            for leg in rnp_primary.legs
+        )
+        additions.append(ProcedureSegment(
+            chart.airport,
+            ils_label,
+            "approach",
+            rnp_primary.runway,
+            rnp_primary.transition,
+            legs,
+            rnp_primary.source,
+            rnp_primary.fenix_name,
+            "ILS",
+        ))
+        existing.add(identity)
+        projections.append({
+            "airport": chart.airport,
+            "label": ils_label,
+            "runway": rnp_primary.runway,
+            "selection": "unique_rnav_ils_chart_and_rnp_primary",
+            "rnp_label": rnp_primary.label,
+            "primary_legs": len(legs),
+            "database_source": {
+                "file": rnp_primary.source.file,
+                "row": rnp_primary.source.row,
+                "page": rnp_primary.source.page,
+                "sha256": rnp_primary.source.sha256,
+            },
+            "chart_name": chart.chart_name,
+            "chart_source": {
+                "file": chart.source.file,
+                "row": chart.source.row,
+                "page": chart.source.page,
+                "sha256": chart.source.sha256,
+            },
+        })
+    model.procedure_segments.extend(additions)
+    model.shared_ils_primary_projections.extend(projections)
 
 
 def _load_terminal_standard_procedure_charts(model: NavModel, pdf_cache: Path | None = None) -> None:
