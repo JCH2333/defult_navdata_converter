@@ -6,6 +6,7 @@ from fenix_default_navdata.bgl import (
     CompilerInfo,
     PackageToolProcessTrace,
     _iap_chart_roles,
+    _standard_procedure_alias,
     _unique_limited_ident,
     compile_package,
     find_compiler,
@@ -2027,6 +2028,43 @@ def test_unique_limited_ident_preserves_short_names_and_variant_suffixes() -> No
     used = set()
     assert _unique_limited_ident("TRANSITION1", 5, used) == "TRANS"
     assert _unique_limited_ident("TRANSITION2", 5, used) == "TRAN2"
+
+
+def test_standard_procedure_alias_matches_zbcf_target_contract() -> None:
+    assert _standard_procedure_alias("KAKAT-8ZD", "departure") == "KAK8ZD"
+    assert _standard_procedure_alias("TGO-8ZD", "departure") == "TGO8ZD"
+    assert _standard_procedure_alias("P528-9ZD", "departure") == "P5289D"
+    assert _standard_procedure_alias("KAKAT-8ZA", "arrival") == "KAK8ZA"
+    assert _standard_procedure_alias("TGO-8ZA", "arrival") == "TGO8ZA"
+    assert _standard_procedure_alias("P528-9ZA", "arrival") == "P5289A"
+
+
+def test_airport_projection_uses_standard_zbcf_sid_star_aliases(tmp_path: Path) -> None:
+    model = NavModel(Path("source"))
+    source = SourceRef("Terminal/ZBCF/ZBCF-4Z01.pdf", 1, 1, "source-hash")
+    model.airports["a"] = Airport(
+        "a", "ZBCF", "ZBCF", 42.159722, 118.840833, 2041, 18000, 180, source,
+    )
+    model.procedure_segments.extend([
+        ProcedureSegment("ZBCF", "KAKAT-8ZD", "departure", "21", "", (), source),
+        ProcedureSegment("ZBCF", "P528-9ZD", "departure", "21", "", (), source),
+        ProcedureSegment("ZBCF", "TGO-8ZD", "departure", "21", "", (), source),
+        ProcedureSegment("ZBCF", "KAKAT-8ZA", "arrival", "21", "", (), source),
+        ProcedureSegment("ZBCF", "P528-9ZA", "arrival", "21", "", (), source),
+        ProcedureSegment("ZBCF", "TGO-8ZA", "arrival", "21", "", (), source),
+    ])
+
+    output = tmp_path / "zbcf-standard-procedure-aliases.xml"
+    write_bglcomp_xml(model, DEFAULT_CYCLE, output, scope="airports")
+
+    airport = ET.parse(output).getroot().find("Airport")
+    assert airport is not None
+    assert [item.attrib["name"] for item in airport.findall("Departure")] == [
+        "KAK8ZD", "P5289D", "TGO8ZD",
+    ]
+    assert [item.attrib["name"] for item in airport.findall("Arrival")] == [
+        "KAK8ZA", "P5289A", "TGO8ZA",
+    ]
 
 
 def test_airport_projection_keeps_truncated_sid_star_names_unique(tmp_path: Path) -> None:

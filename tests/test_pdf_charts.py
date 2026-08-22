@@ -155,6 +155,35 @@ def test_unnamed_runway_transition_does_not_become_numeric_procedure_label():
     ]
 
 
+def test_database_procedure_heading_keeps_p528_suffix_and_kind():
+    text = """
+    RWY03 离场 P528-9ZD
+    CA 032 1010 RNP1
+    TF P528 RNP1
+    RWY03 进场 P528-9ZA
+    IF P528 RNP1
+    TF CF403 RNP1
+    RWY21 离场 P528-8ZD
+    TF P528 RNP1
+    RWY21 进场 P528-8ZA
+    IF P528 RNP1
+    """
+
+    legs = extract_terminal_leg_evidence(text)
+
+    assert [
+        (leg.procedure_label, leg.procedure_kind, leg.runway, leg.fix_ident)
+        for leg in legs
+    ] == [
+        ("P528-9ZD", "离场", "03", None),
+        ("P528-9ZD", "离场", "03", "P528"),
+        ("P528-9ZA", "进场", "03", "P528"),
+        ("P528-9ZA", "进场", "03", "CF403"),
+        ("P528-8ZD", "离场", "21", "P528"),
+        ("P528-8ZA", "进场", "21", "P528"),
+    ]
+
+
 def test_database_combined_approach_missed_without_separator_splits_at_missed_legs():
     text = """
     RWY09 进近复飞Y

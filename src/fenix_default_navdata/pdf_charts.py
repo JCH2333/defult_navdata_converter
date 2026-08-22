@@ -22,7 +22,7 @@ from pypdf import PdfReader
 from .model import Ad219NdbEvidence, Ad219Vor, ChartFixCoordinate, ChartHoldingEvidence, ChartRouteFix, ChartStandardProcedureRoute, ChartTerminalLeg, Ils, ProcedureChart, SourceRef
 
 
-_EVIDENCE_CACHE_VERSION = 43
+_EVIDENCE_CACHE_VERSION = 44
 
 
 _PROCEDURE = re.compile(r"\b([A-Z0-9]{2,6}-\d{2}[AD])\b")
@@ -42,7 +42,8 @@ _CHART_COORDINATE = re.compile(
 _DATABASE_PROCEDURE = re.compile(
     r"\bRWY\s?(?P<runway>\d{2}[LRC]?)(?:\s*/\s*(?:RWY\s?)?\d{2}[LRC]?)*\s*"
     r"(?:(?P<kind>\u79bb\u573a|\u8fdb\u573a|\u7b49\u5f85)\s*|)[^\n]*?"
-    r"(?P<label_base>[A-Z][A-Z0-9]{0,5}?)-?(?P<label_suffix>\d{1,2}[A-Z]{0,2})(?:\b|\()"
+    r"(?P<label_base>[A-Z][A-Z0-9]{0,5})-?(?P<label_suffix>\d{1,2}[A-Z]{0,2})"
+    r"(?:\b|\()(?!-[A-Z0-9])"
 )
 _DATABASE_COMPOUND_PROCEDURE = re.compile(
     r"\bRWY\s?(?P<runway>\d{2}[LRC]?)\s*(?P<kind>\u79bb\u573a|\u8fdb\u573a)\s*"

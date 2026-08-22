@@ -1244,6 +1244,28 @@ def _unique_limited_ident(value: str, limit: int, used: set[str]) -> str:
     raise ValueError(f"无法为 {value!r} 分配唯一的 {limit} 字符 SDK 名称")
 
 
+_STANDARD_PROCEDURE_SUFFIX = re.compile(
+    r"^(?P<fix>[A-Z0-9]+)-(?P<suffix>\dZ[AD])$",
+)
+def _standard_procedure_alias(label: str, kind: str) -> str:
+    """Encode source-standard SID/STAR labels into the SDK's six-char field.
+
+    The 424 database sheets preserve chart labels such as ``KAKAT-8ZD`` and
+    ``P528-9ZA``.  The default package's BGL contract uses compact aliases
+    such as ``KAK8ZD`` and ``P5289A`` instead of a raw six-character slice,
+    which would produce unusable display names like ``KAKAT-`` and ``TGO-8Z``.
+    """
+    raw = (label or "").strip().upper()
+    suffix_match = _STANDARD_PROCEDURE_SUFFIX.fullmatch(raw)
+    if suffix_match:
+        fix = suffix_match.group("fix")
+        suffix = suffix_match.group("suffix")
+        if len(fix) == 4:
+            return f"{fix[:6]}{suffix[0]}{suffix[-1]}"
+        return f"{fix[:3]}{suffix}"
+    return raw
+
+
 def _append_departures(
     airport_element: ET.Element,
     airport: str,
@@ -1257,7 +1279,13 @@ def _append_departures(
         departure = ET.SubElement(
             airport_element,
             "Departure",
-            {"name": _unique_limited_ident(label, 6, used_names)},
+            {
+                "name": _unique_limited_ident(
+                    _standard_procedure_alias(label, "departure"),
+                    6,
+                    used_names,
+                ),
+            },
         )
         runway_transitions = ET.SubElement(departure, "RunwayTransitions")
         common = ET.SubElement(departure, "CommonRouteLegs")
@@ -1296,7 +1324,13 @@ def _append_arrivals(
         arrival = ET.SubElement(
             airport_element,
             "Arrival",
-            {"name": _unique_limited_ident(label, 6, used_names)},
+            {
+                "name": _unique_limited_ident(
+                    _standard_procedure_alias(label, "arrival"),
+                    6,
+                    used_names,
+                ),
+            },
         )
         enroute_transitions = ET.SubElement(arrival, "EnrouteTransitions")
         common = ET.SubElement(arrival, "CommonRouteLegs")
