@@ -21,7 +21,7 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - 模型 SHA-256：`7cec24bd4a57545d39aab037abe4125c763ad12f364bd5f8f0073b0e050fdb4b`。
 - 当前候选：`output/candidate-2608-default-r385-frozen-rebuild`。
 - 参考 29 文件，字节一致 `0/29`，`deployable=false`；未部署、未实机验证、未 Release。
-- 最近全量测试：`519 passed`；最新完成 R396 目标契约与编译结构探针。
+- 最近全量测试：`519 passed`；最新完成 R397 适配器增量授权评估。
 - 40 张缺口卡和 r390-r394 审计均未产生可授权的新投影；模型/adapter 保持不变。
 
 ## 验收门禁
@@ -37,7 +37,7 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 
 - **R395 基线治理（已完成）：** 建立 29 文件差异-来源-加载契约决策矩阵（diagnostics/r395-convergence-decision-matrix.json），明确 8 个元数据文件由编译派生、1 个航路 BGL 受几何/端点阻塞、20 个机场 BGL 受 Section 基数与 IAP 来源阻塞；当前未授权修改 adapter。
 - **R396 目标契约（已完成）：** 聚合 4 类核心 SDK 目标契约（XML 作用域/Route Previous-Next 排序/Section 基数与来源/元数据编译派生，diagnostics/r396-sdk-target-contract-audit.json），确认 3 项已在代码中强制实施，禁止逆向修改；当前未授权修改 adapter。
-- **R397 授权增量：** 仅实现同时具备 424 直接来源、目标契约和最小测试的一个最小变更；执行双构建、validate、差分和点查。
+- **R397 授权增量（已完成）：** 评估 6 类主要候选项（航路几何/未决端点/机场 Section/IAP 主进近/未分类程序/元数据派生，diagnostics/r397-adapter-increment-authorization-audit.json），确认 0 项满足双重授权，全部处于 blocked 状态；保持 adapter 与模型不变。
 - **R398+ 收敛：** 按差异矩阵处理剩余文件；达到 `29/29` 后才进入备份、部署和实机验证。
 
 每个 R 是完整里程碑包（归因/实验或实现/回归/归档），原则上持续 1 至 3 个连续工作日；不为单个命令、缺口卡或重复测试拆分 R。`AGENTS.md` 仅记录里程碑摘要，详细证据放在 `diagnostics/` 和 `output/`。

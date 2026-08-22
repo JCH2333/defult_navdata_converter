@@ -158,6 +158,10 @@ from .airway_coordinate_precision_probe import (
     write_source_airway_coordinate_precision_audit,
 )
 from .airway_route_child_order_probe import run_airway_route_child_order_probe
+from .adapter_increment_authorization_audit import (
+    audit_adapter_increment_authorization,
+    write_adapter_increment_authorization_audit,
+)
 from .sdk_target_contract_audit import (
     build_sdk_target_contract_audit,
     write_sdk_target_contract_audit,
@@ -478,6 +482,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="strings 最短字符串长度",
     )
     runtime_contract.add_argument("--output", required=True, help="审计 JSON 输出路径")
+    adapter_increment = sub.add_parser(
+        "adapter-increment-authorization-audit",
+        help="???????? 424 ???????????????????",
+    )
+    adapter_increment.add_argument("--output", required=True, help="?? JSON ????")
     target_contract = sub.add_parser(
         "sdk-target-contract-audit",
         help="?????? SDK/Package Tool ???????????????",
@@ -1896,6 +1905,13 @@ def main(argv: list[str] | None = None) -> int:
         )
         report["output"] = str(output)
         write_runtime_contract_audit(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "adapter-increment-authorization-audit":
+        output = Path(args.output).expanduser().resolve()
+        report = audit_adapter_increment_authorization()
+        report["output"] = str(output)
+        write_adapter_increment_authorization_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "sdk-target-contract-audit":
