@@ -24,7 +24,7 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - 历史候选：`output/candidate-2608-default-r366-terminal-global-identity`、`output/candidate-2608-default-r377-navaid-fir-priority-full-evidence`
 - 当前候选：`output/candidate-2608-default-r385-frozen-rebuild`
 - 参考范围 29 个文件，字节一致 `0/29`，`deployable=false`；未部署、未实机验证、未 Release。
-- 最近全量测试：`519 passed`；最新阶段 r392 缺口卡与未决项来源审计。
+- 最近全量测试：`519 passed`；最新阶段 r393 未分类程序缺口卡直接证据审计。
 
 ## 验证门禁
 
@@ -51,7 +51,7 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - r373-r378：参考 BGL/SDK 未找到可复用生成模板；完成 navaid 区域规则与证据重放，候选本地契约通过但参考仍 `0/29`。
 - r379-r385：完成机场作用域、参考构建来源、BGL 基数、SDK 表达式、来源完整性和主流程审计；参考额外 7 个机场无 424 直接证据，未授权回填。r385 冻结模型重建与既有候选 `29/29` 一致，证明差异可复现而非构建漂移。证据：`diagnostics/r379-*` 至 `r385-*`。
 - r386-r389：完成等待航线、航路字段、SDK Section 和机场 PDF 来源审计。等待记录缺少足够作用域；2,263 条同源航路差异中 2,241 条为几何差异、12 条端点无唯一来源；NDB `0x17/0x33` 不能解释参考 Section；7 个额外机场未被 424 PDF 命中。均为 `projection_authorized=false`，未改模型/适配器。证据：`diagnostics/r386-*` 至 `r389-*`。
-- r390-r392：新增 package-derived-metadata-audit、airway-endpoint-audit 与 default-gap-cards-audit。layout/bglIndex/尺寸等元数据差异依赖编译过程，未授权手工修改；航路 10 个未决端点（APOGO 等）关联 21 条未投影航段，7 个为多邻接地区跨 FIR 边界点，2 个非指定点，1 个 ACC 冲突；40 张缺口卡（航路端点 12、航点区域 5、IAP 10、未分类程序 13）全量审计确认全部处于 rejected/blocked 状态，均缺少唯一 424 来源依据，保持严格拒绝。模型/适配器不变。证据：diagnostics/r390-* 至 r392-*。
+- r390-r393：新增 package-derived-metadata-audit、airway-endpoint-audit、default-gap-cards-audit 与 unclassified-procedure-cards-audit。元数据差异依赖编译过程，未授权手工修改；航路 10 个未决端点缺少唯一 424 区域；13 张未分类程序缺口卡直接文本审计确认全部为 rejected_missing_direct_label_anchor（424 终端数据库编码图页未包含直接类别锚点），保持严格拒绝。模型/适配器不变。证据：diagnostics/r390-* 至 r393-*。
 
 详细日志、差分和运行输出只保存在 `diagnostics/` 与 `output/`，不复制到本文件。
 
