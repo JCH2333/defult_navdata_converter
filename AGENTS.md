@@ -21,7 +21,7 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - 模型 SHA-256：`7cec24bd4a57545d39aab037abe4125c763ad12f364bd5f8f0073b0e050fdb4b`。
 - 当前候选：`output/candidate-2608-default-r385-frozen-rebuild`。
 - 参考 29 文件，字节一致 `0/29`，`deployable=false`；未部署、未实机验证、未 Release。
-- 最近全量测试：`519 passed`；最新完成 R419 P239 航路端点来源卡片审计。
+- 最近全量测试：`519 passed`；最新完成 R420 OTBUG 航路端点来源卡片审计。
 - 40 张缺口卡和 r390-r394 审计均未产生可授权的新投影；模型/adapter 保持不变。
 
 ## 验收门禁
@@ -60,7 +60,8 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - **R417 P188 端点卡片（已完成）：** 深度审计跨 FIR 边界点 P188 来源链条（diagnostics/r417-airway-endpoint-card-P188.json），确认其连接 ZH/ZS 两邻接地区且 ACC 包含北京/济南/郑州等跨区管制（rejected_multiple_neighbor_regions_with_incomplete_acc_evidence），保持拒绝（projection_allowed=false）；保持模型与 adapter 不变。
 - **R418 P121 端点卡片（已完成）：** 深度审计跨 FIR 边界点 P121 来源链条（diagnostics/r418-airway-endpoint-card-P121.json），确认其连接 ZG/ZS 两邻接地区且 ACC 包含广州/长沙等不同管制区（rejected_multiple_neighbor_regions_with_incomplete_acc_evidence），保持拒绝（projection_allowed=false）；保持模型与 adapter 不变。
 - **R419 P239 端点卡片（已完成）：** 深度审计跨 FIR 边界点 P239 来源链条（diagnostics/r419-airway-endpoint-card-P239.json），确认其连接 ZH/ZP 两邻接地区且 ACC 映射指向冲突地区 ZG/ZH（rejected_multiple_neighbor_regions_with_conflicting_acc_regions），保持拒绝（projection_allowed=false）；保持模型与 adapter 不变。
-- **R420+ 收敛：** 按差异矩阵处理剩余文件；达到 `29/29` 后才进入备份、部署和实机验证。
+- **R420 OTBUG 端点卡片（已完成）：** 深度审计跨 FIR 边界点 OTBUG 来源链条（diagnostics/r420-airway-endpoint-card-OTBUG.json），确认其连接 ZH/ZS 两邻接地区且 ACC 跨越上海/广州/武汉/合肥等三区管制（rejected_multiple_neighbor_regions_with_incomplete_acc_evidence），保持拒绝（projection_allowed=false）；保持模型与 adapter 不变。
+- **R421+ 收敛：** 按差异矩阵处理剩余文件；达到 `29/29` 后才进入备份、部署和实机验证。
 
 每个 R 是完整里程碑包（归因/实验或实现/回归/归档），原则上持续 1 至 3 个连续工作日；不为单个命令、缺口卡或重复测试拆分 R。`AGENTS.md` 仅记录里程碑摘要，详细证据放在 `diagnostics/` 和 `output/`。
 
