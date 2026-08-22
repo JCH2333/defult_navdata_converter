@@ -10,6 +10,9 @@ from .package import AIRPORT_PACKAGE, BASE_PACKAGE, JEPP_PACKAGE, NAV_PACKAGE, s
 from .validation import validate_candidate
 
 
+_FUNCTIONAL_TEST_TARGET_PACKAGES = (NAV_PACKAGE, AIRPORT_PACKAGE)
+
+
 def simulator_running() -> bool:
     result = subprocess.run(
         ["tasklist", "/FI", "IMAGENAME eq FlightSimulator2024.exe", "/NH"],
@@ -75,7 +78,16 @@ def stage_functional_test(
     backup = backup_community(target, backup_root)
     deployed: dict[str, dict[str, object]] = {}
     try:
-        for name in (BASE_PACKAGE, JEPP_PACKAGE, NAV_PACKAGE, AIRPORT_PACKAGE):
+        preserved: dict[str, dict[str, object]] = {}
+        for name in (BASE_PACKAGE, JEPP_PACKAGE):
+            official = target / name
+            if not official.is_dir():
+                raise RuntimeError(f"Community 缺少官方 2608 包: {official}")
+            preserved[name] = {
+                "path": str(official),
+                "files": _package_files(official),
+            }
+        for name in _FUNCTIONAL_TEST_TARGET_PACKAGES:
             source = candidate / name
             if not source.is_dir():
                 raise RuntimeError(f"候选缺少包目录: {source}")
@@ -98,6 +110,7 @@ def stage_functional_test(
             "staged_at": dt.datetime.now().isoformat(),
             "validation": validation,
             "backup": str(backup),
+            "preserved_official_packages": preserved,
             "packages": deployed,
             "restore_command": "fenix-default-navdata restore --backup <backup> --target <Community>",
         }

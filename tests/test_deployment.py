@@ -170,6 +170,9 @@ def test_stage_functional_test_backups_and_records_hashes(
 
     assert (target / NAV_PACKAGE / "scenery" / "x.bgl").read_bytes() == b"candidate"
     assert (backup / NAV_PACKAGE / "old.txt").read_text(encoding="utf-8") == "original"
+    assert (target / BASE_PACKAGE / "old.txt").read_text(encoding="utf-8") == "original"
+    assert (target / JEPP_PACKAGE / "old.txt").read_text(encoding="utf-8") == "original"
     stage_manifest = json.loads((backup / "functional-test-stage.json").read_text(encoding="utf-8"))
     assert stage_manifest["kind"] == "functional-test-stage"
+    assert set(stage_manifest["preserved_official_packages"]) == {BASE_PACKAGE, JEPP_PACKAGE}
     assert stage_manifest["packages"][NAV_PACKAGE]["files"]["scenery/x.bgl"]
