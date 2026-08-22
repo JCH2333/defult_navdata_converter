@@ -21,7 +21,7 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - 模型 SHA-256：`7cec24bd4a57545d39aab037abe4125c763ad12f364bd5f8f0073b0e050fdb4b`。
 - 当前候选：`output/candidate-2608-default-r385-frozen-rebuild`。
 - 参考 29 文件，字节一致 `0/29`，`deployable=false`；未部署、未实机验证、未 Release。
-- 最近全量测试：`519 passed`；最新完成 R400 BGL布局与发布门禁审计。
+- 最近全量测试：`519 passed`；最新完成 R401 端到端管线主控审计。
 - 40 张缺口卡和 r390-r394 审计均未产生可授权的新投影；模型/adapter 保持不变。
 
 ## 验收门禁
@@ -41,7 +41,8 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - **R398 端到端看板（已完成）：** 聚合 29 文件全量收敛状态（diagnostics/r398-file-convergence-master.json），验证同输入自重放 29/29 一致，参考 0/29；确认 8 元数据、1 航路、20 机场 BGL 均有明确阻断归因；保持模型与 adapter 不变。
 - **R399 状态快照（已完成）：** 锁定 33 个原始 CSV 哈希、r187 模型、40 张缺口卡及 29 文件重放基线（diagnostics/r399-status-snapshot.json），四级门禁明确 candidate_replay_equal=true、reference_byte_equal=false、deployable=false；保持模型与 adapter 不变。
 - **R400 BGL 布局门禁（已完成）：** 审计 21 个目标 BGL 布局头结构（diagnostics/r400-bgl-layout-audit.json），确认 21 个 BGL 的头部版本一致（0x8051803），Section 差异仅反映编译组织，未授权逆向修改；四级门禁严格保持 deployable=false。
-- **R401+ 收敛：** 按差异矩阵处理剩余文件；达到 `29/29` 后才进入备份、部署和实机验证。
+- **R401 管线主控（已完成）：** 运行端到端管线主控审计（diagnostics/r401-pipeline-master-audit.json），确认 33 CSV 来源、275 机场/640 跑道/438 导航台/2741 航点/4446 航段中间模型与 10 区域 BGL 投影架构全量闭环（pipeline_master_verified=true）；保持模型与 adapter 不变。
+- **R402+ 收敛：** 按差异矩阵处理剩余文件；达到 `29/29` 后才进入备份、部署和实机验证。
 
 每个 R 是完整里程碑包（归因/实验或实现/回归/归档），原则上持续 1 至 3 个连续工作日；不为单个命令、缺口卡或重复测试拆分 R。`AGENTS.md` 仅记录里程碑摘要，详细证据放在 `diagnostics/` 和 `output/`。
 
