@@ -158,6 +158,10 @@ from .airway_coordinate_precision_probe import (
     write_source_airway_coordinate_precision_audit,
 )
 from .airway_route_child_order_probe import run_airway_route_child_order_probe
+from .convergence_decision_matrix_audit import (
+    audit_convergence_decision_matrix,
+    write_convergence_decision_matrix,
+)
 from .bgl_format import (
     audit_bgl_layouts,
     audit_file_convergence,
@@ -470,6 +474,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="strings 最短字符串长度",
     )
     runtime_contract.add_argument("--output", required=True, help="审计 JSON 输出路径")
+    convergence_matrix = sub.add_parser(
+        "convergence-decision-matrix-audit",
+        help="???? 29 ????????????????????",
+    )
+    convergence_matrix.add_argument("--candidate", required=True, help="??????")
+    convergence_matrix.add_argument(
+        "--reference",
+        help="Default navdata 2608R1 ??????????????",
+    )
+    convergence_matrix.add_argument(
+        "--repeat-candidate",
+        help="??????????",
+    )
+    convergence_matrix.add_argument("--output", required=True, help="?? JSON ????")
     convergence = sub.add_parser(
         "file-convergence-audit",
         help="只读建立候选、重复候选与参考包的逐文件收敛看板，不导出导航记录",
@@ -1869,6 +1887,20 @@ def main(argv: list[str] | None = None) -> int:
         )
         report["output"] = str(output)
         write_runtime_contract_audit(output, report)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "convergence-decision-matrix-audit":
+        reference = _path(args.reference) or detect_paths().reference_root
+        if not reference:
+            raise SystemExit("?????? Default navdata 2608R1 ?????????? --reference")
+        output = Path(args.output).expanduser().resolve()
+        report = audit_convergence_decision_matrix(
+            Path(args.candidate),
+            reference,
+            repeat_candidate_root=_path(args.repeat_candidate),
+        )
+        report["output"] = str(output)
+        write_convergence_decision_matrix(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "file-convergence-audit":
