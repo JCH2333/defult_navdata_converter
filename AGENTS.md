@@ -21,7 +21,7 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - 模型 SHA-256：`7cec24bd4a57545d39aab037abe4125c763ad12f364bd5f8f0073b0e050fdb4b`。
 - 当前候选：`output/candidate-2608-default-r385-frozen-rebuild`。
 - 参考 29 文件，字节一致 `0/29`，`deployable=false`；未部署、未实机验证、未 Release。
-- 最近全量测试：`519 passed`；最新完成 R408 航路字段差异与几何归因审计。
+- 最近全量测试：`519 passed`；最新完成 R409 空域与非指定航路端点审计。
 - 40 张缺口卡和 r390-r394 审计均未产生可授权的新投影；模型/adapter 保持不变。
 
 ## 验收门禁
@@ -49,7 +49,8 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - **R406 核心映射（已完成）：** 审计 424 核心实体到 NavModel 的通用映射（diagnostics/r406-core-model-mapping-audit.json），确认 275 机场、640 跑道、438 导航台、2,741 航点、4,446 航路段 100% 来源溯源且坐标有效（all_core_groups_verified=true）；保持模型与 adapter 不变。
 - **R407 航路限制与类型（已完成）：** 审计 ROUTE_RESTRICT（309 条）与 J/V 航路类型映射（diagnostics/r407-route-*.json），确认限制描述属文本证据保留（projection_allowed=false），J/V 映射因元数据冲突不足以建立独立适配器规则（insufficient_for_adapter_rule）；保持模型与 adapter 不变。
 - **R408 航路差异（已完成）：** 审计 2,263 条同源航路字段差异（diagnostics/r408-airway-diff-audit.json），确认 2,241 条为纯几何包围盒/坐标量化差异、22 条带最低高度差异，全部为 same_source_airway_and_sequence 同源记录，受编译器量化阻断；保持模型与 adapter 不变。
-- **R409+ 收敛：** 按差异矩阵处理剩余文件；达到 `29/29` 后才进入备份、部署和实机验证。
+- **R409 空域与非指定端点（已完成）：** 审计 424 四类空域（744 主表/6,492 顶点，diagnostics/r409-airspace-source-audit.json）与地名点 **** 航路端点缺口卡（diagnostics/r409-non-designated-*.json），确认空域属证据保留，非指定点禁止跨类型补写区域（projection_allowed=false）；保持模型与 adapter 不变。
+- **R410+ 收敛：** 按差异矩阵处理剩余文件；达到 `29/29` 后才进入备份、部署和实机验证。
 
 每个 R 是完整里程碑包（归因/实验或实现/回归/归档），原则上持续 1 至 3 个连续工作日；不为单个命令、缺口卡或重复测试拆分 R。`AGENTS.md` 仅记录里程碑摘要，详细证据放在 `diagnostics/` 和 `output/`。
 
