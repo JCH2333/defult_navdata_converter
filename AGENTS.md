@@ -21,7 +21,7 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - 模型 SHA-256：`7cec24bd4a57545d39aab037abe4125c763ad12f364bd5f8f0073b0e050fdb4b`。
 - 当前候选：`output/candidate-2608-default-r385-frozen-rebuild`。
 - 参考 29 文件，字节一致 `0/29`，`deployable=false`；未部署、未实机验证、未 Release。
-- 最近全量测试：`519 passed`；最新完成 R429 BGL 投影主控架构审计。
+- 最近全量测试：`519 passed`；最新完成 R430 424 来源到中间模型主控审计。
 - 40 张缺口卡和 r390-r394 审计均未产生可授权的新投影；模型/adapter 保持不变。
 
 ## 验收门禁
@@ -70,7 +70,8 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - **R427 记录步长审计（已完成）：** 审计 00_enroute.bgl 7 类 Section 内部记录步长与闭合边界（diagnostics/r427-bgl-record-layout-enroute.json），确认 7 个 Section 均为 fixed_stride 闭合结构（candidate_all_sections_closed=true），Section 20 Magvar 前 65,536 项位置精确一致；保持模型与 adapter 不变。
 - **R428 模板来源审计（已完成）：** 审计 29 个参考文件与官方 navigraph-nav-base/jepp 双模板关系（diagnostics/r428-reference-template-source-audit.json），确认 21 个 BGL 无模板匹配（100% 专有生成）、8 个元数据文件仅为同名派生（direct_copy_path_proven=false），禁止直接复制参考数据；保持模型与 adapter 不变。
 - **R429 BGL 投影主控（已完成）：** 审计 10 区域机场与航路 BGL 投影 schema 架构（diagnostics/r429-bgl-projection-master-audit.json），确认 10 个区域 275 机场/640 跑道/10,409 程序段/430 ILS 与 00_enroute 4,446 航段全量通过架构闭环校验（bgl_projection_master_pipeline_verified=true）；保持模型与 adapter 不变。
-- **R430+ 收敛：** 按差异矩阵处理剩余文件；达到 `29/29` 后才进入备份、部署和实机验证。
+- **R430 来源主控（已完成）：** 运行 424 到中间模型全量主控审计（diagnostics/r430-source-model-master-audit.json），确认 16 类来源数据组全量完整闭环，5 大核心实体与终端程序证据链严格溯源（master_pipeline_verified=true）；保持模型与 adapter 不变。
+- **R431+ 收敛：** 按差异矩阵处理剩余文件；达到 `29/29` 后才进入备份、部署和实机验证。
 
 每个 R 是完整里程碑包（归因/实验或实现/回归/归档），原则上持续 1 至 3 个连续工作日；不为单个命令、缺口卡或重复测试拆分 R。`AGENTS.md` 仅记录里程碑摘要，详细证据放在 `diagnostics/` 和 `output/`。
 
