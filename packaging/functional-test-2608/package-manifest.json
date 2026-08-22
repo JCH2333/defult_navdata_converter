@@ -1,0 +1,20 @@
+{
+  "kind": "msfs2024-default-navdata-functional-test",
+  "cycle": "2608",
+  "candidate": "candidate-2608-default-r385-frozen-rebuild",
+  "status": "functional-test",
+  "test_build": true,
+  "reference_equal_files": "0/29",
+  "official_packages_required_and_preserved": [
+    "navigraph-nav-base",
+    "navigraph-nav-jepp"
+  ],
+  "packages": {
+    "zzz-pmdg-china-navdata": {
+      "files": {}
+    },
+    "zzz-pmdg-china-navdata-airport-patch": {
+      "files": {}
+    }
+  }
+}
