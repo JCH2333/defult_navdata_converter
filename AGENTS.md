@@ -21,7 +21,7 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - 模型 SHA-256：`7cec24bd4a57545d39aab037abe4125c763ad12f364bd5f8f0073b0e050fdb4b`。
 - 当前候选：`output/candidate-2608-default-r385-frozen-rebuild`。
 - 参考 29 文件，字节一致 `0/29`，`deployable=false`；未部署、未实机验证、未 Release。
-- 最近全量测试：`519 passed`；最新完成 R406 核心模型映射审计。
+- 最近全量测试：`519 passed`；最新完成 R407 航路限制与类型来源审计。
 - 40 张缺口卡和 r390-r394 审计均未产生可授权的新投影；模型/adapter 保持不变。
 
 ## 验收门禁
@@ -47,7 +47,8 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - **R404 表达矩阵（已完成）：** 审计 SDK 编译表达矩阵（diagnostics/r404-sdk-bgl-expression-matrix.json），聚合航路序列化与机场表达候选项，确认无来源完整且未测试的新单变量（blocked_on_machine_readable_target_evidence）；保持模型与 adapter 不变。
 - **R405 工具链审计（已完成）：** 审计 MSFS 2024 SDK 1.6.9 与 1.5.3 Package Tool 二进制指纹及历史探针证据（diagnostics/r405-sdk-toolchain-audit.json），明确工具链差异不构成目标表达契约改变的授权（toolchain_difference_without_target_expression_evidence）；保持模型与 adapter 不变。
 - **R406 核心映射（已完成）：** 审计 424 核心实体到 NavModel 的通用映射（diagnostics/r406-core-model-mapping-audit.json），确认 275 机场、640 跑道、438 导航台、2,741 航点、4,446 航路段 100% 来源溯源且坐标有效（all_core_groups_verified=true）；保持模型与 adapter 不变。
-- **R407+ 收敛：** 按差异矩阵处理剩余文件；达到 `29/29` 后才进入备份、部署和实机验证。
+- **R407 航路限制与类型（已完成）：** 审计 ROUTE_RESTRICT（309 条）与 J/V 航路类型映射（diagnostics/r407-route-*.json），确认限制描述属文本证据保留（projection_allowed=false），J/V 映射因元数据冲突不足以建立独立适配器规则（insufficient_for_adapter_rule）；保持模型与 adapter 不变。
+- **R408+ 收敛：** 按差异矩阵处理剩余文件；达到 `29/29` 后才进入备份、部署和实机验证。
 
 每个 R 是完整里程碑包（归因/实验或实现/回归/归档），原则上持续 1 至 3 个连续工作日；不为单个命令、缺口卡或重复测试拆分 R。`AGENTS.md` 仅记录里程碑摘要，详细证据放在 `diagnostics/` 和 `output/`。
 
