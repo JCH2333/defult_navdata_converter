@@ -21,7 +21,7 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - 模型 SHA-256：`7cec24bd4a57545d39aab037abe4125c763ad12f364bd5f8f0073b0e050fdb4b`。
 - 当前候选：`output/candidate-2608-default-r385-frozen-rebuild`。
 - 参考 29 文件，字节一致 `0/29`，`deployable=false`；未部署、未实机验证、未 Release。
-- 最近全量测试：`519 passed`；最新完成 R424 航路 BGL 二进制结构差分审计。
+- 最近全量测试：`519 passed`；最新完成 R425 10 区域机场 BGL 二进制结构差分审计。
 - 40 张缺口卡和 r390-r394 审计均未产生可授权的新投影；模型/adapter 保持不变。
 
 ## 验收门禁
@@ -65,7 +65,8 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - **R422 LELIM 端点卡片（已完成）：** 深度审计单邻接带 ACC 冲突点 LELIM 来源链条（diagnostics/r422-airway-endpoint-card-LELIM.json），确认其邻接 ZG 但 ACC 指向上海（ZS），属未决冲突（unresolved_requires_new_direct_evidence），保持拒绝（projection_allowed=false）；保持模型与 adapter 不变。
 - **R423 缺口闭环复核（已完成）：** 结合最新 r394-r422 细粒度审计复核全量 40 张来源缺口卡（diagnostics/r423-default-gap-cards-closure.json），确认 12 端点、5 航点、10 IAP、13 未分类程序仍 100% 保持 blocked/rejected 状态（all_cards_rejected_or_blocked=true）；保持模型与 adapter 不变。
 - **R424 航路二进制差分（已完成）：** 审计 00_enroute.bgl 头结构与 Section 二进制差异（diagnostics/r424-bgl-binary-diff-enroute.json），确认 7 个 Section 类型与 QMID 瓦片一致，差异集中于 Section 34 航路与 Section 19/23 航点数量（数量差由未决边界端点引起）；保持模型与 adapter 不变。
-- **R425+ 收敛：** 按差异矩阵处理剩余文件；达到 `29/29` 后才进入备份、部署和实机验证。
+- **R425 机场二进制差分（已完成）：** 审计 10 区域机场 BGL 二进制与 Section 结构（diagnostics/r425-bgl-binary-diff-airports.json），确认 10 个 BGL Section 3（机场）基数一致，Section 19/23/34 差异源于 SDK 项目级与 QMID 瓦片级编译组织；保持模型与 adapter 不变。
+- **R426+ 收敛：** 按差异矩阵处理剩余文件；达到 `29/29` 后才进入备份、部署和实机验证。
 
 每个 R 是完整里程碑包（归因/实验或实现/回归/归档），原则上持续 1 至 3 个连续工作日；不为单个命令、缺口卡或重复测试拆分 R。`AGENTS.md` 仅记录里程碑摘要，详细证据放在 `diagnostics/` 和 `output/`。
 
