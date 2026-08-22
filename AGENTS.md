@@ -21,7 +21,7 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - 模型 SHA-256：`7cec24bd4a57545d39aab037abe4125c763ad12f364bd5f8f0073b0e050fdb4b`。
 - 当前候选：`output/candidate-2608-default-r385-frozen-rebuild`。
 - 参考 29 文件，字节一致 `0/29`，`deployable=false`；未部署、未实机验证、未 Release。
-- 最近全量测试：`519 passed`；最新完成 R410 航司航路系统与通用文档元数据审计。
+- 最近全量测试：`519 passed`；最新完成 R411 通用关键点与航点提升边界审计。
 - 40 张缺口卡和 r390-r394 审计均未产生可授权的新投影；模型/adapter 保持不变。
 
 ## 验收门禁
@@ -51,7 +51,8 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - **R408 航路差异（已完成）：** 审计 2,263 条同源航路字段差异（diagnostics/r408-airway-diff-audit.json），确认 2,241 条为纯几何包围盒/坐标量化差异、22 条带最低高度差异，全部为 same_source_airway_and_sequence 同源记录，受编译器量化阻断；保持模型与 adapter 不变。
 - **R409 空域与非指定端点（已完成）：** 审计 424 四类空域（744 主表/6,492 顶点，diagnostics/r409-airspace-source-audit.json）与地名点 **** 航路端点缺口卡（diagnostics/r409-non-designated-*.json），确认空域属证据保留，非指定点禁止跨类型补写区域（projection_allowed=false）；保持模型与 adapter 不变。
 - **R410 航司与通用文档（已完成）：** 审计 424 FLIGHT_AIRLINE（390,659 航线点，100% 匹配 13,907 航线，diagnostics/r410-airline-*.json）与 GENERAL_DOC（132 PDF 100% 匹配，diagnostics/r410-general-*.json），确认航司网络与总览目录属来源证据保留（projection_allowed=false）；保持模型与 adapter 不变。
-- **R411+ 收敛：** 按差异矩阵处理剩余文件；达到 `29/29` 后才进入备份、部署和实机验证。
+- **R411 关键点来源（已完成）：** 审计 ENR 4.4 关键点（2,108 条解析记录）对 6,342 个参考独有航点的来源覆盖（diagnostics/r411-general-doc-keypoint-audit.json），确认 3,007 机场独有、3,216 文本缺失、119 区域不符/越界，可安全提升航点数为 0；保持模型与 adapter 不变。
+- **R412+ 收敛：** 按差异矩阵处理剩余文件；达到 `29/29` 后才进入备份、部署和实机验证。
 
 每个 R 是完整里程碑包（归因/实验或实现/回归/归档），原则上持续 1 至 3 个连续工作日；不为单个命令、缺口卡或重复测试拆分 R。`AGENTS.md` 仅记录里程碑摘要，详细证据放在 `diagnostics/` 和 `output/`。
 
