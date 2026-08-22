@@ -44,6 +44,73 @@ def backup_community(target: Path, backup_root: Path | None = None) -> Path:
     return backup
 
 
+def _package_files(root: Path) -> dict[str, str]:
+    return {
+        path.relative_to(root).as_posix(): sha256(path)
+        for path in root.rglob("*")
+        if path.is_file()
+    }
+
+
+def stage_functional_test(
+    candidate: Path,
+    target: Path,
+    *,
+    backup_root: Path | None = None,
+) -> Path:
+    """Stage a structurally valid test candidate without weakening release deploy gates."""
+    if simulator_running():
+        raise RuntimeError("FlightSimulator2024.exe 正在运行，无法覆盖默认导航数据")
+    candidate, target = candidate.resolve(), target.resolve()
+    validation = validate_candidate(candidate)
+    if not validation["valid"] or not validation.get("local_contract_verified"):
+        raise RuntimeError("候选未通过本地结构与设施索引契约，拒绝进入游戏测试")
+    if not validation.get("test_build"):
+        raise RuntimeError("仅允许 test_build 候选进入功能测试暂存")
+    if validation.get("report_status") not in {"candidate", "functional-test"}:
+        raise RuntimeError("候选状态不是 candidate/functional-test，拒绝进入功能测试暂存")
+    if not target.is_dir():
+        raise FileNotFoundError(f"Community 目录不存在: {target}")
+
+    backup = backup_community(target, backup_root)
+    deployed: dict[str, dict[str, object]] = {}
+    try:
+        for name in (BASE_PACKAGE, JEPP_PACKAGE, NAV_PACKAGE, AIRPORT_PACKAGE):
+            source = candidate / name
+            if not source.is_dir():
+                raise RuntimeError(f"候选缺少包目录: {source}")
+            temporary = target / f".{name}.functional-test-new"
+            if temporary.exists():
+                shutil.rmtree(temporary)
+            shutil.copytree(source, temporary)
+            old = target / name
+            if old.exists():
+                shutil.rmtree(old)
+            temporary.replace(old)
+            deployed[name] = {
+                "path": str(old),
+                "files": _package_files(old),
+            }
+        manifest = {
+            "kind": "functional-test-stage",
+            "candidate": str(candidate),
+            "target": str(target),
+            "staged_at": dt.datetime.now().isoformat(),
+            "validation": validation,
+            "backup": str(backup),
+            "packages": deployed,
+            "restore_command": "fenix-default-navdata restore --backup <backup> --target <Community>",
+        }
+        (backup / "functional-test-stage.json").write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+    except Exception:
+        restore(backup, target)
+        raise
+    return backup
+
+
 def deploy(candidate: Path, target: Path, *, backup_root: Path | None = None) -> Path:
     if simulator_running():
         raise RuntimeError("FlightSimulator2024.exe 正在运行，无法覆盖默认导航数据")

@@ -190,7 +190,7 @@ from .package_metadata_audit import (
 )
 from .status_snapshot import audit_status_snapshot, write_status_snapshot
 from .convert import convert, export_intermediate_model
-from .deployment import deploy, restore
+from .deployment import deploy, restore, stage_functional_test
 from .general_docs import (
     audit_enroute_navaid_ocr_rerun,
     write_enroute_navaid_ocr_rerun_audit,
@@ -1713,6 +1713,13 @@ def build_parser() -> argparse.ArgumentParser:
     deploy_parser = sub.add_parser("deploy", help="备份并覆盖 Community")
     deploy_parser.add_argument("--candidate", required=True)
     deploy_parser.add_argument("--target", help="Community 目录")
+    functional_stage = sub.add_parser(
+        "stage-functional-test",
+        help="备份并暂存测试候选到 Community（不改变正式发布门禁）",
+    )
+    functional_stage.add_argument("--candidate", required=True)
+    functional_stage.add_argument("--target", help="Community 目录")
+    functional_stage.add_argument("--backup-root", help="备份根目录")
     restore_parser = sub.add_parser("restore", help="恢复备份")
     restore_parser.add_argument("--backup", required=True)
     restore_parser.add_argument("--target", help="Community 目录")
@@ -2749,6 +2756,15 @@ def main(argv: list[str] | None = None) -> int:
         if not target:
             raise SystemExit("未找到 Community 目录")
         backup = deploy(Path(args.candidate), target)
+        print(json.dumps({"backup": str(backup), "target": str(target)}, ensure_ascii=False, indent=2))
+        return 0
+    if args.command == "stage-functional-test":
+        detected = detect_paths()
+        target = Path(args.target) if args.target else detected.community_root
+        if not target:
+            raise SystemExit("未找到 Community 目录")
+        backup_root = Path(args.backup_root) if args.backup_root else None
+        backup = stage_functional_test(Path(args.candidate), target, backup_root=backup_root)
         print(json.dumps({"backup": str(backup), "target": str(target)}, ensure_ascii=False, indent=2))
         return 0
     if args.command == "restore":
