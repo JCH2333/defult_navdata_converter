@@ -21,7 +21,7 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - 模型 SHA-256：`7cec24bd4a57545d39aab037abe4125c763ad12f364bd5f8f0073b0e050fdb4b`。
 - 当前候选：`output/candidate-2608-default-r385-frozen-rebuild`。
 - 参考 29 文件，字节一致 `0/29`，`deployable=false`；未部署、未实机验证、未 Release。
-- 最近全量测试：`519 passed`；最新完成 R413 终端程序与未缓存图表覆盖审计。
+- 最近全量测试：`519 passed`；最新完成 R414 终端坐标增量比对审计。
 - 40 张缺口卡和 r390-r394 审计均未产生可授权的新投影；模型/adapter 保持不变。
 
 ## 验收门禁
@@ -54,7 +54,8 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - **R411 关键点来源（已完成）：** 审计 ENR 4.4 关键点（2,108 条解析记录）对 6,342 个参考独有航点的来源覆盖（diagnostics/r411-general-doc-keypoint-audit.json），确认 3,007 机场独有、3,216 文本缺失、119 区域不符/越界，可安全提升航点数为 0；保持模型与 adapter 不变。
 - **R412 终端坐标覆盖（已完成）：** 审计 424 终端坐标图页（12,991 终端点，保留 12,549 点）对 6,342 个参考独有航点的来源覆盖（diagnostics/r412-terminal-coordinate-audit.json），确认 5,649 点未在坐标页出现、347 单机场点、346 未保留点，无新可全局提升航点；保持模型与 adapter 不变。
 - **R413 程序图表覆盖（已完成）：** 审计 424 终端程序（10,409 程序段/53,268 航段，diagnostics/r413-procedure-*.json）与 6 机场 42 个未缓存原始 PDF 直接文本（diagnostics/r413-uncached-*.json），确认全部为 not_directly_relevant，无未读直接证据（no_unread_direct_424_evidence=true）；保持模型与 adapter 不变。
-- **R414+ 收敛：** 按差异矩阵处理剩余文件；达到 `29/29` 后才进入备份、部署和实机验证。
+- **R414 坐标增量比对（已完成）：** 审计 1,604 个同源航点字段差异在终端坐标页的覆盖分布（diagnostics/r414-terminal-coordinate-delta-audit.json），确认 487 机场独有点、612 根节点点有图页支持，10 个多坐标点，495 个完全未出现，属作用域与坐标量化差异；保持模型与 adapter 不变。
+- **R415+ 收敛：** 按差异矩阵处理剩余文件；达到 `29/29` 后才进入备份、部署和实机验证。
 
 每个 R 是完整里程碑包（归因/实验或实现/回归/归档），原则上持续 1 至 3 个连续工作日；不为单个命令、缺口卡或重复测试拆分 R。`AGENTS.md` 仅记录里程碑摘要，详细证据放在 `diagnostics/` 和 `output/`。
 
