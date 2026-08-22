@@ -21,7 +21,7 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - 模型 SHA-256：`7cec24bd4a57545d39aab037abe4125c763ad12f364bd5f8f0073b0e050fdb4b`。
 - 当前候选：`output/candidate-2608-default-r385-frozen-rebuild`。
 - 参考 29 文件，字节一致 `0/29`，`deployable=false`；未部署、未实机验证、未 Release。
-- 最近全量测试：`519 passed`；最新完成 R427 航路 BGL 记录步长与边界闭合审计。
+- 最近全量测试：`519 passed`；最新完成 R428 参考包与官方基线模板来源审计。
 - 40 张缺口卡和 r390-r394 审计均未产生可授权的新投影；模型/adapter 保持不变。
 
 ## 验收门禁
@@ -68,7 +68,8 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - **R425 机场二进制差分（已完成）：** 审计 10 区域机场 BGL 二进制与 Section 结构（diagnostics/r425-bgl-binary-diff-airports.json），确认 10 个 BGL Section 3（机场）基数一致，Section 19/23/34 差异源于 SDK 项目级与 QMID 瓦片级编译组织；保持模型与 adapter 不变。
 - **R426 补丁 BGL 差分（已完成）：** 审计 10 区域机场补丁 BGL 二进制与 Section 结构（diagnostics/r426-bgl-binary-diff-airport-patches.json），确认 10 个补丁 BGL Section 3（机场）基数与主区完全对称（275 个），Section 19/23/34 差异源于编译器瓦片索引分配；保持模型与 adapter 不变。
 - **R427 记录步长审计（已完成）：** 审计 00_enroute.bgl 7 类 Section 内部记录步长与闭合边界（diagnostics/r427-bgl-record-layout-enroute.json），确认 7 个 Section 均为 fixed_stride 闭合结构（candidate_all_sections_closed=true），Section 20 Magvar 前 65,536 项位置精确一致；保持模型与 adapter 不变。
-- **R428+ 收敛：** 按差异矩阵处理剩余文件；达到 `29/29` 后才进入备份、部署和实机验证。
+- **R428 模板来源审计（已完成）：** 审计 29 个参考文件与官方 navigraph-nav-base/jepp 双模板关系（diagnostics/r428-reference-template-source-audit.json），确认 21 个 BGL 无模板匹配（100% 专有生成）、8 个元数据文件仅为同名派生（direct_copy_path_proven=false），禁止直接复制参考数据；保持模型与 adapter 不变。
+- **R429+ 收敛：** 按差异矩阵处理剩余文件；达到 `29/29` 后才进入备份、部署和实机验证。
 
 每个 R 是完整里程碑包（归因/实验或实现/回归/归档），原则上持续 1 至 3 个连续工作日；不为单个命令、缺口卡或重复测试拆分 R。`AGENTS.md` 仅记录里程碑摘要，详细证据放在 `diagnostics/` 和 `output/`。
 
