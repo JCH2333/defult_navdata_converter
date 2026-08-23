@@ -1787,12 +1787,69 @@ def _append_enroute(
     root: ET.Element,
     model: NavModel,
     selected_navaids: tuple[Navaid, ...] | None = None,
+    official_navaid_coordinates: dict[tuple[str, str, str], tuple[float, float]] | None = None,
 ) -> tuple[int, int, int, int, int, int, tuple[dict[str, object], ...]]:
     """Write only enroute records that meet the SDK's required region contract."""
+    baseline_navaids = tuple(selected_navaids or model.navaids)
+    navaid_coordinates = {
+        (navaid.ident.upper(), navaid.country.upper()[:2], _route_point_type(navaid.kind)): (
+            navaid.latitude,
+            navaid.longitude,
+        )
+        for navaid in baseline_navaids
+    }
+    navaid_coordinates.update(
+        {
+            (
+                ident.upper(),
+                region.upper()[:2],
+                _route_point_type(kind),
+            ): coordinates
+            for (ident, region, kind), coordinates in (
+                official_navaid_coordinates or {}
+            ).items()
+        }
+    )
+
+    def normalize_navaid_coordinates(leg):
+        start_coordinates = (
+            leg.start_latitude,
+            leg.start_longitude,
+        )
+        end_coordinates = (
+            leg.end_latitude,
+            leg.end_longitude,
+        )
+        start_key = (
+            leg.start_ident.upper(),
+            leg.start_country.upper()[:2],
+            _route_point_type(leg.start_type),
+        )
+        end_key = (
+            leg.end_ident.upper(),
+            leg.end_country.upper()[:2],
+            _route_point_type(leg.end_type),
+        )
+        if start_key in navaid_coordinates:
+            start_coordinates = navaid_coordinates[start_key]
+        if end_key in navaid_coordinates:
+            end_coordinates = navaid_coordinates[end_key]
+        return replace(
+            leg,
+            start_latitude=start_coordinates[0],
+            start_longitude=start_coordinates[1],
+            end_latitude=end_coordinates[0],
+            end_longitude=end_coordinates[1],
+        )
+
+    normalized_airway_legs = [
+        normalize_navaid_coordinates(leg)
+        for leg in model.airway_legs
+    ]
     points = [point for point in model.waypoints if point.country]
     skipped_waypoints = len(model.waypoints) - len(points)
     resolved_legs = [
-        leg for leg in model.airway_legs
+        leg for leg in normalized_airway_legs
         if None not in {
             leg.start_latitude,
             leg.start_longitude,
@@ -1803,7 +1860,7 @@ def _append_enroute(
         and leg.end_country
     ]
     skipped_legs_detail = []
-    for leg in model.airway_legs:
+    for leg in normalized_airway_legs:
         if leg in resolved_legs:
             continue
         reasons = []
@@ -2000,7 +2057,7 @@ def _append_enroute(
             for direction, attrs in children:
                 ET.SubElement(route, direction, attrs)
     navaids = sorted(
-        model.navaids if selected_navaids is None else selected_navaids,
+        baseline_navaids,
         key=lambda item: (item.kind, item.ident, item.country, item.key),
     )
     for navaid in navaids:
@@ -2059,6 +2116,7 @@ def write_bglcomp_xml(
     airport_prefix: str | None = None,
     duplicate_terminal_waypoints: bool = False,
     selected_navaids: tuple[Navaid, ...] | None = None,
+    official_navaid_coordinates: dict[tuple[str, str, str], tuple[float, float]] | None = None,
 ) -> XmlProjection:
     """把统一中间模型投影为官方 XSD 约束下的 BglComp XML。
 
@@ -2249,7 +2307,12 @@ def write_bglcomp_xml(
             skipped_enroute_waypoints,
             skipped_airway_legs,
             skipped_airway_leg_details,
-        ) = _append_enroute(root, model, selected_navaids)
+        ) = _append_enroute(
+            root,
+            model,
+            selected_navaids,
+            official_navaid_coordinates,
+        )
 
     ET.indent(root, space="  ")
     ET.ElementTree(root).write(output, encoding="utf-8", xml_declaration=True)

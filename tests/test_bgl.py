@@ -2109,6 +2109,47 @@ def test_airport_projection_prefers_global_navaid_identity_over_terminal_duplica
     assert leg.attrib["fixType"] == "NDB"
 
 
+def test_enroute_navaid_endpoints_use_selected_official_coordinates(tmp_path: Path) -> None:
+    model = NavModel(Path("source"))
+    source = SourceRef("RTE_SEG.csv", 1)
+    model.navaids.append(
+        Navaid(
+            "raw-wha", "WHA", "VOR", "WHA", 30.783058, 114.204467,
+            112.2, 0.0, 100, "ZH", source,
+        )
+    )
+    model.airway_legs.append(
+        AirwayLeg(
+            "B213", 1, "OBDON", "WHA", source,
+            start_country="ZH", end_country="ZH",
+            start_latitude=30.773889, start_longitude=114.014167,
+            end_latitude=30.783058, end_longitude=114.204467,
+            start_type="DESIGNATED_POINT", end_type="VORDME",
+        )
+    )
+    official = Navaid(
+        "official-wha", "WHA", "VOR", "WHA", 30.781670, 114.203338,
+        112.2, 0.0, 100, "ZH", source,
+    )
+
+    output = tmp_path / "official-navaid-coordinate.xml"
+    write_bglcomp_xml(
+        model,
+        DEFAULT_CYCLE,
+        output,
+        scope="enroute",
+        selected_navaids=(official,),
+    )
+
+    root = ET.parse(output).getroot()
+    wha = next(
+        node for node in root.findall("Waypoint")
+        if node.attrib.get("waypointIdent") == "WHA"
+    )
+    assert wha.attrib["lat"] == "30.78167"
+    assert wha.attrib["lon"] == "114.203338"
+
+
 def test_airport_projection_keeps_truncated_sid_star_names_unique(tmp_path: Path) -> None:
     model = NavModel(Path("source"))
     source = SourceRef("fixture", 1)

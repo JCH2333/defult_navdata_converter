@@ -233,6 +233,7 @@ def _compile_xml_package(
     package_order_hint: str,
     title: str,
     selected_navaids: tuple = (),
+    official_navaid_coordinates: dict[tuple[str, str, str], tuple[float, float]] | None = None,
     normalize_package_tool_times: bool = True,
 ) -> dict[str, object]:
     work = package_root.parent / "_work" / "sdk-projects" / package_root.name
@@ -249,6 +250,7 @@ def _compile_xml_package(
             xml_path,
             scope="enroute",
             selected_navaids=selected_navaids,
+            official_navaid_coordinates=official_navaid_coordinates,
         ))
         xml_paths.append(xml_path)
     for prefix in airport_prefixes:
@@ -261,6 +263,7 @@ def _compile_xml_package(
             airport_prefix=prefix,
             duplicate_terminal_waypoints=duplicate_terminal_waypoints,
             selected_navaids=selected_navaids,
+            official_navaid_coordinates=official_navaid_coordinates,
         ))
         xml_paths.append(xml_path)
     if compiler.kind == "PackageTool":
@@ -375,6 +378,7 @@ def build_candidate(
     navaid_selection: DefaultNavaidSelection | None = None
     region_resolution: OfficialRegionResolution | None = None
     selected_navaids: tuple = ()
+    official_navaid_coordinates: dict[tuple[str, str, str], tuple[float, float]] = {}
     baseline_error: str | None = None
     region_resolution_report: dict[str, object] = {
         "verified": False,
@@ -404,6 +408,15 @@ def build_candidate(
                 coordinate_tolerance_nm=OFFICIAL_REGION_TOLERANCE_NM,
             )
             baseline_index = official_index.baseline
+            official_navaid_coordinates = {
+                (
+                    item.ident.upper(),
+                    item.region.upper()[:2],
+                    item.kind.upper(),
+                ): (item.latitude, item.longitude)
+                for item in baseline_index.records
+                if item.kind in {"VOR", "NDB"}
+            }
             navaid_selection = select_default_navaids(
                 model.navaids,
                 baseline_index,
@@ -587,6 +600,7 @@ def build_candidate(
                     package_order_hint=package_order_hint,
                     title=title,
                     selected_navaids=selected_navaids,
+                    official_navaid_coordinates=official_navaid_coordinates,
                     normalize_package_tool_times=normalize_package_tool_times,
                 )
             except CompilerUnavailable as error:
