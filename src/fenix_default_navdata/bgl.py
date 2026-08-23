@@ -23,6 +23,7 @@ from .iap_coverage import (
     shared_iap_section_assignments,
 )
 from .model import Navaid, NavModel, Runway, is_china_icao
+from .official_overlay import OfficialOverlayIndex
 from .profile import Cycle
 from .source import romanize_name
 
@@ -73,6 +74,8 @@ class XmlProjection:
     procedure_segments: int
     rejected_records: int
     rejected_procedures: int
+    official_duplicate_navaids: int = 0
+    official_duplicate_airway_legs: int = 0
 
 
 @dataclass(frozen=True)
@@ -1800,9 +1803,15 @@ def _append_enroute(
     model: NavModel,
     selected_navaids: tuple[Navaid, ...] | None = None,
     official_navaid_coordinates: dict[tuple[str, str, str], tuple[float, float]] | None = None,
-) -> tuple[int, int, int, int, int, int, tuple[dict[str, object], ...]]:
+    official_overlay: OfficialOverlayIndex | None = None,
+) -> tuple[int, int, int, int, int, int, tuple[dict[str, object], ...], int, int]:
     """Write only enroute records that meet the SDK's required region contract."""
-    baseline_navaids = tuple(selected_navaids or model.navaids)
+    candidate_navaids = tuple(selected_navaids or model.navaids)
+    baseline_navaids = tuple(
+        navaid for navaid in candidate_navaids
+        if official_overlay is None or not official_overlay.has_official_navaid(navaid)
+    )
+    official_duplicate_navaids = len(candidate_navaids) - len(baseline_navaids)
     navaid_coordinates = {
         (navaid.ident.upper(), navaid.country.upper()[:2], _route_point_type(navaid.kind)): (
             navaid.latitude,
@@ -1858,8 +1867,16 @@ def _append_enroute(
         normalize_navaid_coordinates(leg)
         for leg in model.airway_legs
     ]
-    points = [point for point in model.waypoints if point.country]
-    skipped_waypoints = len(model.waypoints) - len(points)
+    points = (
+        [point for point in model.waypoints if point.country]
+        if official_overlay is None
+        else []
+    )
+    skipped_waypoints = (
+        len(model.waypoints) - len(points)
+        if official_overlay is None
+        else 0
+    )
     resolved_legs = [
         leg for leg in normalized_airway_legs
         if None not in {
@@ -1917,6 +1934,15 @@ def _append_enroute(
         )
     )
     skipped_legs = len(skipped_legs_detail)
+    official_duplicate_airway_legs = 0
+    if official_overlay is not None:
+        retained_legs = []
+        for leg in resolved_legs:
+            if official_overlay.has_official_airway_edge(leg.airway, leg):
+                official_duplicate_airway_legs += 1
+            else:
+                retained_legs.append(leg)
+        resolved_legs = retained_legs
     for leg in resolved_legs:
         if leg.start_latitude is not None and leg.start_longitude is not None:
             points.append(type("_Point", (), {
@@ -1966,6 +1992,11 @@ def _append_enroute(
         )
         for navaid in model.navaids
     )
+    if official_overlay is not None:
+        existing_global_identities.update(
+            (identity[1], identity[2])
+            for identity in official_overlay.waypoint_identities
+        )
     shared_terminal_points = _shared_terminal_enroute_points(
         model,
         existing_identities,
@@ -2116,6 +2147,8 @@ def _append_enroute(
         skipped_waypoints,
         skipped_legs,
         tuple(skipped_legs_detail),
+        official_duplicate_navaids,
+        official_duplicate_airway_legs,
     )
 
 
@@ -2129,6 +2162,7 @@ def write_bglcomp_xml(
     duplicate_terminal_waypoints: bool = False,
     selected_navaids: tuple[Navaid, ...] | None = None,
     official_navaid_coordinates: dict[tuple[str, str, str], tuple[float, float]] | None = None,
+    official_overlay: OfficialOverlayIndex | None = None,
 ) -> XmlProjection:
     """把统一中间模型投影为官方 XSD 约束下的 BglComp XML。
 
@@ -2310,6 +2344,8 @@ def write_bglcomp_xml(
     skipped_enroute_waypoints = 0
     skipped_airway_legs = 0
     skipped_airway_leg_details: tuple[dict[str, object], ...] = ()
+    official_duplicate_navaids = 0
+    official_duplicate_airway_legs = 0
     if scope in {"all", "enroute"}:
         (
             enroute_waypoints,
@@ -2319,11 +2355,14 @@ def write_bglcomp_xml(
             skipped_enroute_waypoints,
             skipped_airway_legs,
             skipped_airway_leg_details,
+            official_duplicate_navaids,
+            official_duplicate_airway_legs,
         ) = _append_enroute(
             root,
             model,
             selected_navaids,
             official_navaid_coordinates,
+            official_overlay,
         )
 
     ET.indent(root, space="  ")
@@ -2353,6 +2392,8 @@ def write_bglcomp_xml(
         procedure_segments=projected_procedures,
         rejected_records=len(model.rejected_records),
         rejected_procedures=len(model.rejected_procedures),
+        official_duplicate_navaids=official_duplicate_navaids,
+        official_duplicate_airway_legs=official_duplicate_airway_legs,
     )
 
 

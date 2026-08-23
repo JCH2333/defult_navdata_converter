@@ -15,17 +15,18 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 -> diff-and-audit -> stage-backup-deploy
 ```
 
-## 当前状态（2026-08-22）
+## 当前状态（2026-08-23）
 
 - 基线模型：`output/intermediate-2608-r187-navaid-label-replay.json.gz`；当前修复模型：`output/intermediate-2608-r394-global-procedure-ils-fix.json.gz`。
 - 模型 SHA-256：`7cec24bd4a57545d39aab037abe4125c763ad12f364bd5f8f0073b0e050fdb4b`。
-- 当前候选：`output/candidate-2608-default-r400-airway-route-type-fix`。
+- 当前候选：`output/candidate-2608-default-r402-official-overlay-navaid-precedence`。
 - 参考 29 文件，字节一致 `0/29`，`deployable=false`；已进入受控功能测试暂存，未实机验证、未 Release。
 - 暂存备份：`F:\games\community\backups\default_navdata_20260822_174608`；官方两个 2608 包原样保留，中国区域两个候选包按哈希核验一致。
-- 最近部署备份：`F:\games\community\backups\default_navdata_20260823_202152`；官方两个 2608 包原样保留，中国区域 r400 两个候选包按哈希核验一致。
-- 最近全量测试：`531 passed`；已完成 R400 NAIP 航路类别映射与部署。
+- 最近部署备份：`F:\games\community\backups\default_navdata_20260823_220322`；官方两个 2608 包原样保留，中国区域 r402 两个候选包已部署。
+- 最近全量测试：`532 passed`；候选 `validate` 通过，仍为 `deployable=false`，等待实机验证。
 - 已生成可转发功能测试包：`output/functional-test-navdata-2608-r385.zip`；仅含两个中国区域包、安装/恢复脚本、SHA-256 清单和游戏内清单，打包后隔离安装/恢复演练通过。
 - 40 张缺口卡和 r390-r394 审计均未产生可授权的新投影；模型/adapter 保持不变。
+- 官方覆盖冲突修复（2026-08-23）：参考成品与官方包均证明 `P396`/中国 `H14` 是官方缺失增量，而 `HO/YHD/WHA`、`W214/W215`、`B213->WHA` 已由官方包提供。r402 使用可复用 `official_overlay` 过滤同身份且 0.25 NM 内的官方重复导航台/航路边，保留 `HO->P396->P339`；过滤 113 个导航台和 1,399 条航路边。证据：`diagnostics/r402-official-overlay-audit.json`、`diagnostics/r402-custom-enroute-reader.sqlite`、`diagnostics/r175-reference-00-enroute-reader.sqlite`。
 
 ## 验收门禁
 
@@ -81,6 +82,7 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - **R399 航路端点官方坐标修复（已完成）：** 使用已验证官方设施索引坐标投影所有 VOR/NDB 航路端点；r399 编译读取结果与参考一致，`P396/WHA/YHD/HO` 身份和坐标对齐，`H14/B213/W215` 连接保留，已部署。
 - **R400 游戏内航路/进近复测（待用户执行）：** 复测 `HO H14 P396`、`B213 WHA`、`YHD W215 SADBU W214` 与 `ZUUU AKDK7U/I02R`；`I02R` 的直接来源主段目前只有 `UU615`，`BHS` 属复飞段。
 - **R400 NAIP 航路类别修复（已完成）：** 目标投影使用 `H/J -> JET`、`V/W -> VICTOR`、其他 RNAV/区域航路保持 `BOTH`；r400 已验证 `H14=JET`、`W214/W215=VICTOR`、`B213=BOTH` 并部署。
+- **官方覆盖冲突修复（已完成构建/部署，待 R432 实机）：** 官方 SQLite 只提供身份与连接冲突判定；自定义包不再重复发布官方已有导航台和航路边，官方缺失的 `P396`/中国 `H14` 仍由自定义包提供。部署备份：`F:\games\community\backups\default_navdata_20260823_220322`。
 - **功能测试交付（已完成）：** `tools/create-functional-test-package.ps1` 可从候选生成可转发 ZIP，`tools/verify-functional-test-package.ps1` 在隔离 Community 演练安装、官方包保留和恢复；模板位于 `packaging/functional-test-2608/`。ZIP 仅携带两个中国区域包，不携带或覆盖官方 2608 包。
 - **R432 游戏内验证（待用户执行）：** 使用当前暂存包测试 ZBCF、ZUNZ、ZUUU 的机场/跑道/出发到达/SID/STAR/IAP、普通航路、VOR/NDB/航点搜索、重启加载和退出稳定性；边界端点仅作负面稳定性测试。完成前保持 `deployable=false`。
 - **R433+ 字节收敛（长期）：** 只有新的直接来源、目标生成器或加载契约证据才继续推进 `29/29`；不得用功能通过替代字节一致。
