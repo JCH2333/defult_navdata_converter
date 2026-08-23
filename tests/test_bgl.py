@@ -76,7 +76,7 @@ def test_bgl_xml_is_deterministic(tmp_path: Path):
     }
     route = root.find("./Waypoint[@waypointIdent='START']/Route")
     assert route is not None
-    assert route.attrib == {"name": "W1", "routeType": "VICTOR"}
+    assert route.attrib == {"name": "W1", "routeType": "BOTH"}
     assert route.find("Next").attrib == {
         "waypointRegion": "ZB",
         "waypointIdent": "END",
@@ -2150,7 +2150,7 @@ def test_enroute_navaid_endpoints_use_selected_official_coordinates(tmp_path: Pa
     assert wha.attrib["lon"] == "114.203338"
 
 
-def test_naip_airway_designators_map_to_sdk_route_types(tmp_path: Path) -> None:
+def test_naip_airway_designators_use_reference_default_route_type(tmp_path: Path) -> None:
     model = NavModel(Path("source"))
     source = SourceRef("RTE_SEG.csv", 1)
     model.airway_legs.extend([
@@ -2184,8 +2184,8 @@ def test_naip_airway_designators_map_to_sdk_route_types(tmp_path: Path) -> None:
         route.attrib["name"]: route.attrib["routeType"]
         for route in root.findall(".//Route")
     }
-    assert route_types["H14"] == "JET"
-    assert route_types["W215"] == "VICTOR"
+    assert route_types["H14"] == "BOTH"
+    assert route_types["W215"] == "BOTH"
     assert route_types["B213"] == "BOTH"
 
 

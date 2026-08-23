@@ -527,14 +527,15 @@ def _route_type(value: str) -> str:
 
 
 def _airway_target_route_type(leg) -> str:
-    """Map standard NAIP airway designators to the SDK route vocabulary."""
+    """Use the default-data airway vocabulary proven by the reference package.
+
+    The source designator (H/J/V/W) describes the published airway class, but
+    the reference Default navdata stores these Chinese airway records as
+    ``airway_type='B'``. Keep an explicit model hint for isolated probes, but
+    do not infer JET/VICTOR from the source name.
+    """
     if (leg.route_type or "").strip():
         return _route_type(leg.route_type)
-    name = (leg.airway or "").strip().upper()
-    if name[:1] in {"H", "J"}:
-        return "JET"
-    if name[:1] in {"V", "W"}:
-        return "VICTOR"
     return "BOTH"
 
 
