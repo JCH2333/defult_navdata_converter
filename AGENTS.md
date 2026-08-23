@@ -25,6 +25,8 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - 最近部署备份：`F:\games\community\backups\default_navdata_20260823_230828`；官方两个 2608 包原样保留，中国区域 r404 两个候选包已部署。
 - 最近全量测试：`532 passed`；候选 `validate` 通过，仍为 `deployable=false`，等待实机验证。
 - 当前 Community 状态：已恢复 r404 两个候选包，逐文件 SHA-256 差异为 `0`；官方两个包保持不变。参考成品临时包已移至 `diagnostics/reference-live-before-restore-001405`；对照备份已移至 `diagnostics/reference-compare-before-ref-001405`。
+- checker 对照阶段（2026-08-23）：使用 `default_navdata_checker` 与 `N航路.txt` 比较候选/参考，新鲜 SQLite 共 34 条航路三元组，28 条一致、6 条不一致；`H14->P396` 两边均通过。候选 ZB/ZG 机场 BGL 被 Navdatareader 拒绝，参考 ZB 可读 59 个 ILS；完整证据：`diagnostics/r407-checker-reference-candidate-audit.json`。
+- 候选测试副本：`output/candidate-2608-default-r404-reference-airway-type-fix/JCH-pmdg-china-navdata` 与 `JCH-pmdg-china-navdata-airport-patch`；仅用于区分候选与成品，不改变 Community 的 canonical 包名。
 - 已生成可转发功能测试包：`output/functional-test-navdata-2608-r385.zip`；仅含两个中国区域包、安装/恢复脚本、SHA-256 清单和游戏内清单，打包后隔离安装/恢复演练通过。
 - 40 张缺口卡和 r390-r394 审计均未产生可授权的新投影；模型/adapter 保持不变。
 - 官方覆盖冲突修复（2026-08-23）：参考成品与官方包均证明 `P396`/中国 `H14` 是官方缺失增量，而 `HO/YHD/WHA`、`W214/W215`、`B213->WHA` 已由官方包提供。r402 使用可复用 `official_overlay` 过滤同身份且 0.25 NM 内的官方重复导航台/航路边，保留 `HO->P396->P339`；过滤 113 个导航台和 1,399 条航路边。证据：`diagnostics/r402-official-overlay-audit.json`、`diagnostics/r402-custom-enroute-reader.sqlite`、`diagnostics/r175-reference-00-enroute-reader.sqlite`。
@@ -90,6 +92,7 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - **功能测试交付（已完成）：** `tools/create-functional-test-package.ps1` 可从候选生成可转发 ZIP，`tools/verify-functional-test-package.ps1` 在隔离 Community 演练安装、官方包保留和恢复；模板位于 `packaging/functional-test-2608/`。ZIP 仅携带两个中国区域包，不携带或覆盖官方 2608 包。
 - **R432 游戏内验证（待用户执行）：** 使用当前暂存包测试 ZBCF、ZUNZ、ZUUU 的机场/跑道/出发到达/SID/STAR/IAP、普通航路、VOR/NDB/航点搜索、重启加载和退出稳定性；边界端点仅作负面稳定性测试。完成前保持 `deployable=false`。
 - **参考成品对照部署（已完成）：** 参考成品可输入 `P396`，证明航路和参考 BGL 正常；Community 已恢复 r404 候选，参考包及对照备份均已移入项目 `diagnostics`，不再放在 Community 或其备份目录。
+- **checker 机场/航路对照（进行中）：** checker 证明 `H14->P396` 候选与参考一致，但候选机场 BGL 在读取器层面失败，暂不能把 iniA330 的程序显示问题归因到单个 Leg；先解决机场 BGL 可读性/索引契约，再做进场、进近和 ILS 逐程序比较。
 - **R433+ 字节收敛（长期）：** 只有新的直接来源、目标生成器或加载契约证据才继续推进 `29/29`；不得用功能通过替代字节一致。
 
 每个 R 是完整里程碑包（归因/实验或实现/回归/归档），原则上持续 1 至 3 个连续工作日；不为单个命令、缺口卡或重复测试拆分 R。`AGENTS.md` 仅记录里程碑摘要，详细证据放在 `diagnostics/` 和 `output/`。
