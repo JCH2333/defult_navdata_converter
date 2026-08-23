@@ -545,7 +545,7 @@ def build_candidate(
                 "pmdg-china-navdata",
                 "China NavData AIRAC 2608",
                 True,
-                True,
+                False,
                 [
                     {"name": BASE_PACKAGE, "package_version": "0.1.0"},
                     {"name": JEPP_PACKAGE, "package_version": "2.26.16"},

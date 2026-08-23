@@ -2070,6 +2070,45 @@ def test_airport_projection_uses_standard_zbcf_sid_star_aliases(tmp_path: Path) 
     ]
 
 
+def test_airport_projection_prefers_global_navaid_identity_over_terminal_duplicate(
+    tmp_path: Path,
+) -> None:
+    model = NavModel(Path("source"))
+    source = SourceRef("fixture", 1)
+    model.airports["a"] = Airport(
+        "a", "ZLIC", "ZLIC", 38.0, 106.0, 1000, 18000, 180, source,
+    )
+    model.navaids.append(
+        Navaid(
+            "navaid-ho", "HO", "NDB", "HO", 35.0, 107.0,
+            300.0, 0.0, 100, "ZL", source,
+        )
+    )
+    model.terminal_waypoints.append(
+        TerminalWaypoint("terminal-ho", "ZLIC", "HO", 35.0001, 107.0001, source, "ZL")
+    )
+    model.procedure_segments.append(
+        ProcedureSegment(
+            "ZLIC", "TEST1", "departure", "03", "", (
+                ChartTerminalLeg(
+                    "TEST1", "03", "TF", "HO", "fixture",
+                    sequence=1, fix_region="ZL",
+                ),
+            ), source,
+        )
+    )
+
+    output = tmp_path / "navaid-identity.xml"
+    write_bglcomp_xml(model, DEFAULT_CYCLE, output, scope="airports")
+
+    airport = ET.parse(output).getroot().find("Airport")
+    assert airport is not None
+    assert airport.find("Waypoint[@waypointIdent='HO']") is None
+    leg = airport.find("Departure/RunwayTransitions/RunwayTransitionLegs/Leg")
+    assert leg is not None
+    assert leg.attrib["fixType"] == "NDB"
+
+
 def test_airport_projection_keeps_truncated_sid_star_names_unique(tmp_path: Path) -> None:
     model = NavModel(Path("source"))
     source = SourceRef("fixture", 1)

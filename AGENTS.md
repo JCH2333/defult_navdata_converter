@@ -19,11 +19,11 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 
 - 基线模型：`output/intermediate-2608-r187-navaid-label-replay.json.gz`；当前修复模型：`output/intermediate-2608-r394-global-procedure-ils-fix.json.gz`。
 - 模型 SHA-256：`7cec24bd4a57545d39aab037abe4125c763ad12f364bd5f8f0073b0e050fdb4b`。
-- 当前候选：`output/candidate-2608-default-r395-global-procedure-ils-fix`。
+- 当前候选：`output/candidate-2608-default-r397-airway-identity-fix`。
 - 参考 29 文件，字节一致 `0/29`，`deployable=false`；已进入受控功能测试暂存，未实机验证、未 Release。
 - 暂存备份：`F:\games\community\backups\default_navdata_20260822_174608`；官方两个 2608 包原样保留，中国区域两个候选包按哈希核验一致。
-- 最近部署备份：`F:\games\community\backups\default_navdata_20260823_032151`；官方两个 2608 包原样保留，中国区域 r395 两个候选包按哈希核验一致。
-- 最近全量测试：`528 passed`；已完成 R392 全局程序名称、ZSHC ILS 与参考运行时对照部署。
+- 最近部署备份：`F:\games\community\backups\default_navdata_20260823_151723`；官方两个 2608 包原样保留，中国区域 r397 两个候选包按哈希核验一致。
+- 最近全量测试：`529 passed`；已完成 R397 航路点/航路身份去重与部署。
 - 已生成可转发功能测试包：`output/functional-test-navdata-2608-r385.zip`；仅含两个中国区域包、安装/恢复脚本、SHA-256 清单和游戏内清单，打包后隔离安装/恢复演练通过。
 - 40 张缺口卡和 r390-r394 审计均未产生可授权的新投影；模型/adapter 保持不变。
 
@@ -77,6 +77,7 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - **R431 功能测试暂存（已完成）：** 新增 `stage-functional-test`，仅接受 `candidate/functional-test` 测试候选；先备份四个 Community 包，原样保留官方 `navigraph-nav-base`/`navigraph-nav-jepp`，只替换中国区域 `zzz-pmdg-china-navdata`/`zzz-pmdg-china-navdata-airport-patch`，并写入 `backup-manifest.json`、`functional-test-stage.json`；部署失败自动恢复。正式 `deploy` 门禁未放宽。备份路径见当前状态。
 - **R391 ZBCF 程序名称修复（已完成）：** `_DATABASE_PROCEDURE` 修正为禁止在 `P528-9ZA/P528-9ZD` 处提前截断，PDF 证据缓存版本升至 44；真实 PDF 验证 `ZA=进场`、`ZD=离场`。r390 模型程序段 `10,466`，r391 候选 XML/BGL 已生成并部署；ZBCF 旧乱码名称消失。
 - **R392 全局程序/ILS/参考对照（已完成）：** 全局 SID/STAR 名称去除错误连字符；参考和候选读取器均含 `SADBU(ZL/WN)`、`YHD(ZL/V)`、`W215`、`H14`。依据 4 张 `RNAV ILS/DME z` 直接图和唯一 RNP 主程序，新增 ZSHC `I06/I24/I07-Z/I25-Z` ILS Approach；r394 模型程序段 `10,624`，r395 候选已部署。
+- **R397 航路点/航路身份修复（已完成）：** 关闭主导航包根级终端航点复制；程序腿优先绑定同区域全局 NDB/VOR；过滤与全局导航台同物理位置的机场局部重复点。r397 XML 中 `SADBU/HO/YHD/DWZ` 各单一身份，`SADBU` 挂载 `W214/W215`，`HO` 挂载 `H14/W214`，已部署。
 - **功能测试交付（已完成）：** `tools/create-functional-test-package.ps1` 可从候选生成可转发 ZIP，`tools/verify-functional-test-package.ps1` 在隔离 Community 演练安装、官方包保留和恢复；模板位于 `packaging/functional-test-2608/`。ZIP 仅携带两个中国区域包，不携带或覆盖官方 2608 包。
 - **R432 游戏内验证（待用户执行）：** 使用当前暂存包测试 ZBCF、ZUNZ、ZUUU 的机场/跑道/出发到达/SID/STAR/IAP、普通航路、VOR/NDB/航点搜索、重启加载和退出稳定性；边界端点仅作负面稳定性测试。完成前保持 `deployable=false`。
 - **R433+ 字节收敛（长期）：** 只有新的直接来源、目标生成器或加载契约证据才继续推进 `29/29`；不得用功能通过替代字节一致。
