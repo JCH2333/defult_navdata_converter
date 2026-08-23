@@ -22,7 +22,7 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - 当前候选：`output/candidate-2608-default-r399-airway-official-navaid-fix`。
 - 参考 29 文件，字节一致 `0/29`，`deployable=false`；已进入受控功能测试暂存，未实机验证、未 Release。
 - 暂存备份：`F:\games\community\backups\default_navdata_20260822_174608`；官方两个 2608 包原样保留，中国区域两个候选包按哈希核验一致。
-- 最近部署备份：`F:\games\community\backups\default_navdata_20260823_180322`；官方两个 2608 包原样保留，中国区域 r399 两个候选包按哈希核验一致。
+- 最近部署备份：`F:\games\community\backups\default_navdata_20260823_190458`；官方两个 2608 包原样保留，中国区域 r399 两个候选包按哈希核验一致。
 - 最近全量测试：`530 passed`；已完成 R399 航路点身份与官方导航台坐标修复部署。
 - 已生成可转发功能测试包：`output/functional-test-navdata-2608-r385.zip`；仅含两个中国区域包、安装/恢复脚本、SHA-256 清单和游戏内清单，打包后隔离安装/恢复演练通过。
 - 40 张缺口卡和 r390-r394 审计均未产生可授权的新投影；模型/adapter 保持不变。
@@ -79,6 +79,7 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - **R392 全局程序/ILS/参考对照（已完成）：** 全局 SID/STAR 名称去除错误连字符；参考和候选读取器均含 `SADBU(ZL/WN)`、`YHD(ZL/V)`、`W215`、`H14`。依据 4 张 `RNAV ILS/DME z` 直接图和唯一 RNP 主程序，新增 ZSHC `I06/I24/I07-Z/I25-Z` ILS Approach；r394 模型程序段 `10,624`，r395 候选已部署。
 - **R397 航路点/航路身份修复（已完成）：** 关闭主导航包根级终端航点复制；程序腿优先绑定同区域全局 NDB/VOR；过滤与全局导航台同物理位置的机场局部重复点。r397 XML 中 `SADBU/HO/YHD/DWZ` 各单一身份，`SADBU` 挂载 `W214/W215`，`HO` 挂载 `H14/W214`，已部署。
 - **R399 航路端点官方坐标修复（已完成）：** 使用已验证官方设施索引坐标投影所有 VOR/NDB 航路端点；r399 编译读取结果与参考一致，`P396/WHA/YHD/HO` 身份和坐标对齐，`H14/B213/W215` 连接保留，已部署。
+- **R400 游戏内航路/进近复测（待用户执行）：** 复测 `HO H14 P396`、`B213 WHA`、`YHD W215 SADBU W214` 与 `ZUUU AKDK7U/I02R`；`I02R` 的直接来源主段目前只有 `UU615`，`BHS` 属复飞段。
 - **功能测试交付（已完成）：** `tools/create-functional-test-package.ps1` 可从候选生成可转发 ZIP，`tools/verify-functional-test-package.ps1` 在隔离 Community 演练安装、官方包保留和恢复；模板位于 `packaging/functional-test-2608/`。ZIP 仅携带两个中国区域包，不携带或覆盖官方 2608 包。
 - **R432 游戏内验证（待用户执行）：** 使用当前暂存包测试 ZBCF、ZUNZ、ZUUU 的机场/跑道/出发到达/SID/STAR/IAP、普通航路、VOR/NDB/航点搜索、重启加载和退出稳定性；边界端点仅作负面稳定性测试。完成前保持 `deployable=false`。
 - **R433+ 字节收敛（长期）：** 只有新的直接来源、目标生成器或加载契约证据才继续推进 `29/29`；不得用功能通过替代字节一致。
