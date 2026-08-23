@@ -9,7 +9,7 @@ from fenix_default_navdata.official_overlay import (
 from fenix_default_navdata.profile import DEFAULT_CYCLE
 
 
-def test_overlay_suppresses_exact_official_records_but_keeps_missing_custom_edge(
+def test_overlay_canonicalizes_facilities_and_retains_custom_airway_edges(
     tmp_path: Path,
 ) -> None:
     source = SourceRef("RTE_SEG.csv", 1)
@@ -128,8 +128,10 @@ def test_overlay_suppresses_exact_official_records_but_keeps_missing_custom_edge
     text = output.read_text(encoding="utf-8")
     assert 'name="H14"' in text
     assert 'waypointIdent="P396"' in text
-    assert 'name="B213"' not in text
-    assert '<Ndb ' not in text
-    assert '<Vor ' not in text
-    assert projection.official_duplicate_navaids == 2
-    assert projection.official_duplicate_airway_legs == 1
+    assert 'name="B213"' in text
+    assert 'lat="35.210003"' in text
+    assert 'lon="107.76831"' in text
+    assert '<Ndb ' in text
+    assert '<Vor ' in text
+    assert projection.official_canonicalized_navaids == 1
+    assert projection.official_overlapping_airway_legs_retained == 1

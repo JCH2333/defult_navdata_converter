@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .official_index import OfficialNavaidIndex
@@ -63,6 +63,44 @@ class OfficialOverlayIndex:
         tuple[str, LogicalIdentity, float, float, LogicalIdentity, float, float],
         ...,
     ]
+
+    def canonicalize_navaid(self, navaid):
+        """Keep the custom endpoint record, but use official facility fields."""
+        kind = (navaid.kind or "").strip().upper()
+        ident = (navaid.ident or "").strip().upper()
+        region = (navaid.country or "").strip().upper()[:2]
+        for item in self.navaids:
+            if (item.kind, item.ident, item.region) != (kind, ident, region):
+                continue
+            if _distance_nm(
+                float(navaid.latitude),
+                float(navaid.longitude),
+                item.latitude,
+                item.longitude,
+            ) > 0.25:
+                continue
+            frequency = (
+                item.frequency_khz / 1000
+                if kind == "VOR"
+                else item.frequency_khz / 100
+            )
+            return replace(
+                navaid,
+                latitude=item.latitude,
+                longitude=item.longitude,
+                frequency=frequency,
+                magnetic_variation=(
+                    item.magnetic_variation
+                    if item.magnetic_variation is not None
+                    else navaid.magnetic_variation
+                ),
+                elevation_ft=(
+                    item.elevation_ft
+                    if item.elevation_ft is not None
+                    else navaid.elevation_ft
+                ),
+            )
+        return navaid
 
     def has_official_navaid(self, navaid) -> bool:
         """Return true when the official package already owns this facility.
