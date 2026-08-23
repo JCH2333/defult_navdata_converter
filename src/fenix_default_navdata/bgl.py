@@ -523,6 +523,18 @@ def _route_type(value: str) -> str:
     return "BOTH"
 
 
+def _airway_target_route_type(leg) -> str:
+    """Map standard NAIP airway designators to the SDK route vocabulary."""
+    if (leg.route_type or "").strip():
+        return _route_type(leg.route_type)
+    name = (leg.airway or "").strip().upper()
+    if name[:1] in {"H", "J"}:
+        return "JET"
+    if name[:1] in {"V", "W"}:
+        return "VICTOR"
+    return "BOTH"
+
+
 def _route_point_type(value: str) -> str:
     normalized = (value or "").strip().upper()
     if "VOR" in normalized:
@@ -1999,7 +2011,7 @@ def _append_enroute(
         )
         route_children.setdefault(start_key, []).append((
             leg.airway,
-            _route_type(leg.route_type),
+            _airway_target_route_type(leg),
             "Next",
             _attrs(
                 waypointRegion=end_key[1],
@@ -2009,7 +2021,7 @@ def _append_enroute(
             )))
         route_children.setdefault(end_key, []).append((
             leg.airway,
-            _route_type(leg.route_type),
+            _airway_target_route_type(leg),
             "Previous",
             _attrs(
                 waypointRegion=start_key[1],

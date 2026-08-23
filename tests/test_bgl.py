@@ -76,7 +76,7 @@ def test_bgl_xml_is_deterministic(tmp_path: Path):
     }
     route = root.find("./Waypoint[@waypointIdent='START']/Route")
     assert route is not None
-    assert route.attrib == {"name": "W1", "routeType": "BOTH"}
+    assert route.attrib == {"name": "W1", "routeType": "VICTOR"}
     assert route.find("Next").attrib == {
         "waypointRegion": "ZB",
         "waypointIdent": "END",
@@ -2148,6 +2148,45 @@ def test_enroute_navaid_endpoints_use_selected_official_coordinates(tmp_path: Pa
     )
     assert wha.attrib["lat"] == "30.78167"
     assert wha.attrib["lon"] == "114.203338"
+
+
+def test_naip_airway_designators_map_to_sdk_route_types(tmp_path: Path) -> None:
+    model = NavModel(Path("source"))
+    source = SourceRef("RTE_SEG.csv", 1)
+    model.airway_legs.extend([
+        AirwayLeg(
+            "H14", 1, "HO", "P396", source,
+            start_country="ZL", end_country="ZL",
+            start_latitude=35.0, start_longitude=107.0,
+            end_latitude=34.5, end_longitude=108.5,
+            start_type="NDB", end_type="DESIGNATED_POINT",
+        ),
+        AirwayLeg(
+            "W215", 1, "YHD", "SADBU", source,
+            start_country="ZL", end_country="ZL",
+            start_latitude=38.0, start_longitude=106.0,
+            end_latitude=35.0, end_longitude=107.5,
+            start_type="VORDME", end_type="DESIGNATED_POINT",
+        ),
+        AirwayLeg(
+            "B213", 1, "OBDON", "WHA", source,
+            start_country="ZH", end_country="ZH",
+            start_latitude=30.7, start_longitude=114.0,
+            end_latitude=30.8, end_longitude=114.2,
+            start_type="DESIGNATED_POINT", end_type="VORDME",
+        ),
+    ])
+
+    output = tmp_path / "airway-route-types.xml"
+    write_bglcomp_xml(model, DEFAULT_CYCLE, output, scope="enroute")
+    root = ET.parse(output).getroot()
+    route_types = {
+        route.attrib["name"]: route.attrib["routeType"]
+        for route in root.findall(".//Route")
+    }
+    assert route_types["H14"] == "JET"
+    assert route_types["W215"] == "VICTOR"
+    assert route_types["B213"] == "BOTH"
 
 
 def test_airport_projection_keeps_truncated_sid_star_names_unique(tmp_path: Path) -> None:
