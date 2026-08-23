@@ -24,6 +24,7 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - 暂存备份：`F:\games\community\backups\default_navdata_20260822_174608`；官方两个 2608 包原样保留，中国区域两个候选包按哈希核验一致。
 - 最近部署备份：`F:\games\community\backups\default_navdata_20260823_230828`；官方两个 2608 包原样保留，中国区域 r404 两个候选包已部署。
 - 最近全量测试：`532 passed`；候选 `validate` 通过，仍为 `deployable=false`，等待实机验证。
+- 当前 Community 对照状态：两个中国区域包已临时替换为 `424源数据\2608\Default navdata 2608R1` 参考成品；参考包逐文件 SHA-256 差异为 `0`，官方两个包保持不变。原 r404 备份：`F:\games\community\backups\reference-compare-before-ref-001405`。
 - 已生成可转发功能测试包：`output/functional-test-navdata-2608-r385.zip`；仅含两个中国区域包、安装/恢复脚本、SHA-256 清单和游戏内清单，打包后隔离安装/恢复演练通过。
 - 40 张缺口卡和 r390-r394 审计均未产生可授权的新投影；模型/adapter 保持不变。
 - 官方覆盖冲突修复（2026-08-23）：参考成品与官方包均证明 `P396`/中国 `H14` 是官方缺失增量，而 `HO/YHD/WHA`、`W214/W215`、`B213->WHA` 已由官方包提供。r402 使用可复用 `official_overlay` 过滤同身份且 0.25 NM 内的官方重复导航台/航路边，保留 `HO->P396->P339`；过滤 113 个导航台和 1,399 条航路边。证据：`diagnostics/r402-official-overlay-audit.json`、`diagnostics/r402-custom-enroute-reader.sqlite`、`diagnostics/r175-reference-00-enroute-reader.sqlite`。
@@ -88,6 +89,7 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - **参考航路类型修复（已完成构建/部署，待 R432 实机）：** r404 取消从 H/J/V/W 名称推断 SDK 类型，真实航路无显式目标提示时输出 `BOTH`；读取确认 `H14/W214/W215/B213` 均为 `airway_type B`，`H14` 保留 `HO->P396`。部署备份：`F:\games\community\backups\default_navdata_20260823_230828`。
 - **功能测试交付（已完成）：** `tools/create-functional-test-package.ps1` 可从候选生成可转发 ZIP，`tools/verify-functional-test-package.ps1` 在隔离 Community 演练安装、官方包保留和恢复；模板位于 `packaging/functional-test-2608/`。ZIP 仅携带两个中国区域包，不携带或覆盖官方 2608 包。
 - **R432 游戏内验证（待用户执行）：** 使用当前暂存包测试 ZBCF、ZUNZ、ZUUU 的机场/跑道/出发到达/SID/STAR/IAP、普通航路、VOR/NDB/航点搜索、重启加载和退出稳定性；边界端点仅作负面稳定性测试。完成前保持 `deployable=false`。
+- **参考成品对照部署（待用户执行）：** Community 当前只加载参考成品两个中国包，官方两个包未改动；用于区分 `P396` 失败是航路 BGL 本身问题还是转换输出问题。完成对照后恢复 r404 前，必须使用 `reference-compare-before-ref-001405` 备份。
 - **R433+ 字节收敛（长期）：** 只有新的直接来源、目标生成器或加载契约证据才继续推进 `29/29`；不得用功能通过替代字节一致。
 
 每个 R 是完整里程碑包（归因/实验或实现/回归/归档），原则上持续 1 至 3 个连续工作日；不为单个命令、缺口卡或重复测试拆分 R。`AGENTS.md` 仅记录里程碑摘要，详细证据放在 `diagnostics/` 和 `output/`。
