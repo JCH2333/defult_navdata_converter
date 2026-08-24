@@ -23,7 +23,7 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - 参考 29 文件，字节一致 `0/29`，`deployable=false`；已进入受控功能测试暂存，未实机验证、未 Release。
 - 暂存备份：`F:\games\community\backups\default_navdata_20260822_174608`；官方两个 2608 包原样保留，中国区域两个候选包按哈希核验一致。
 - 最近部署备份：`F:\games\community\backups\default_navdata_20260823_230828`；官方两个 2608 包原样保留，中国区域 r404 两个候选包已部署。
-- 最近全量测试：`532 passed`；候选 `validate` 通过，仍为 `deployable=false`，等待实机验证。
+- 最近全量测试：`537 passed`；候选 `validate` 通过，仍为 `deployable=false`，等待实机验证。
 - 当前 Community 状态：已恢复 r404 两个候选包，逐文件 SHA-256 差异为 `0`；官方两个包保持不变。参考成品临时包已移至 `diagnostics/reference-live-before-restore-001405`；对照备份已移至 `diagnostics/reference-compare-before-ref-001405`。
 - checker 对照阶段（2026-08-23）：使用 `default_navdata_checker` 与 `N航路.txt` 比较候选/参考，新鲜 SQLite 共 34 条航路三元组，28 条一致、6 条不一致；`H14->P396` 两边均通过。候选 ZB/ZG 机场 BGL 被 Navdatareader 拒绝，参考 ZB 可读 59 个 ILS；完整证据：`diagnostics/r407-checker-reference-candidate-audit.json`。
 - 候选测试副本：`output/candidate-2608-default-r404-reference-airway-type-fix/JCH-pmdg-china-navdata` 与 `JCH-pmdg-china-navdata-airport-patch`；仅用于区分候选与成品，不改变 Community 的 canonical 包名。
@@ -112,4 +112,5 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - AS346/ToLiss 专用加载规则：`docs/aircraft-contracts/as346-toliss.md`。
 - 阶段证据：`diagnostics/`；可复用审计实现：`src/fenix_default_navdata/*_audit.py`。
 
-- **R432 运行时一致性实现（进行中，2026-08-24）：** 新增 `default_navdata_checker` 的多包设施/航路身份模型、FBW 有序航路校验、包冲突报告、终端 ILS/Approach/VIAS/复飞读取和 CLI；checker 15 个测试通过。新增 `runtime_package_audit.py`，候选 JCH 包依赖已修复，旧 zzz 候选副本移入候选 `diagnostics/legacy-zzz-package-copies`，Community canonical zzz 包未修改。新增 `airway_projection_audit.py` 证明当前候选 XML 已保留 `YHD->DWZ`、`HO->P396`、`B213` 等关键源边；BGL/读取器层仍需继续解释 W215/B213 的运行时差异。证据：`diagnostics/r432-airway-xml-projection-audit.json`。
+- **R432 运行时一致性实现（进行中，2026-08-24）：** 新增 `default_navdata_checker` 的多包设施/航路身份模型、FBW 有序航路校验、包冲突报告、终端 ILS/Approach/VIAS/复飞读取和 CLI；checker 当前 19 个测试通过。新增 `runtime_package_audit.py`，候选 JCH 包依赖已修复，旧 zzz 候选副本移入候选 `diagnostics/legacy-zzz-package-copies`，Community canonical zzz 包未修改。新增 `airway_projection_audit.py` 证明当前候选 XML 已保留 `YHD->DWZ`、`HO->P396`、`B213` 等关键源边；BGL/读取器层仍需继续解释 W215/B213 的运行时差异。证据：`diagnostics/r432-airway-xml-projection-audit.json`。
+- **R433 运行时复现与机场 BGL 门禁（进行中，2026-08-24）：** 当前 Community 只读组合扫描确认 `W269->OLPOV` 和 `B213->WHA` 均在同一自制 `00_enroute.bgl` 且 B213 链完整，FBW 首段拒绝暂不能由静态航路记录归因。ZSHC 第三方机场同时发布 `RNAV/ZS/ABVIL`，自制与参考包均发布 `NAMED/ZS/ABVIL`；H24 引用后者，A330 身份冲突不属于候选独有差异。发现主导航包曾重复编译区域机场 BGL，现已改为主包仅含 `00_enroute.bgl`、机场补丁单独含区域 BGL；同时全局终端航点身份去重。Package Tool 对机场包仍返回 `1` 且产生读取器 `Read past file end` 产物，`compile_package` 已改为非零退出硬失败，禁止伪 BGL进入部署。r433 隔离候选不得部署，Community 继续保留 r404。证据：`F:\games\community\_work\r433-live-reader`、`r433-live-abvil-identity.json`。

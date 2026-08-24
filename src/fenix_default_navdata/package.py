@@ -256,19 +256,20 @@ def _compile_xml_package(
             official_overlay=official_overlay,
         ))
         xml_paths.append(xml_path)
-    for prefix in airport_prefixes:
-        xml_path = input_dir / f"{prefix}_airports.xml"
-        projections.append(write_bglcomp_xml(
-            model,
-            cycle,
-            xml_path,
-            scope="airports",
-            airport_prefix=prefix,
-            duplicate_terminal_waypoints=duplicate_terminal_waypoints,
-            selected_navaids=selected_navaids,
-            official_navaid_coordinates=official_navaid_coordinates,
-        ))
-        xml_paths.append(xml_path)
+    if not include_enroute:
+        for prefix in airport_prefixes:
+            xml_path = input_dir / f"{prefix}_airports.xml"
+            projections.append(write_bglcomp_xml(
+                model,
+                cycle,
+                xml_path,
+                scope="airports",
+                airport_prefix=prefix,
+                duplicate_terminal_waypoints=duplicate_terminal_waypoints,
+                selected_navaids=selected_navaids,
+                official_navaid_coordinates=official_navaid_coordinates,
+            ))
+            xml_paths.append(xml_path)
     if compiler.kind == "PackageTool":
         project_path = write_package_project(
             work,
@@ -585,7 +586,7 @@ def build_candidate(
                 "pmdg-china-airport-patch",
                 "China NavData AIRAC 2608 Airport Procedure Patch",
                 False,
-                False,
+                True,
                 [{"name": NAV_PACKAGE, "package_version": "0.1.0"}],
                 "CUSTOM_AIRPORT_PATCH",
             ),

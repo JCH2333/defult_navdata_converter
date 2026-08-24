@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -19,6 +20,7 @@ from fenix_default_navdata.official_index import OfficialNavaidIndex, OfficialWa
 from fenix_default_navdata.package import (
     AIRPORT_PACKAGE,
     NAV_PACKAGE,
+    _compile_xml_package,
     _normalize_package_tool_manifest,
     _normalize_package_tool_time_metadata,
     build_candidate,
@@ -460,6 +462,81 @@ def test_overlay_packages_compile_independently(tmp_path: Path, monkeypatch):
     assert calls == [NAV_PACKAGE, AIRPORT_PACKAGE]
     assert report["packages"][NAV_PACKAGE]["status"] == "failed"
     assert report["packages"][AIRPORT_PACKAGE]["status"] == "compiled"
+
+
+def test_main_and_airport_packages_do_not_compile_each_others_xml(
+    tmp_path: Path,
+    monkeypatch,
+):
+    created_sources = []
+
+    def write_xml(model, cycle, path, **kwargs):
+        path.write_text("<FSData version=\"9.0\"/>", encoding="utf-8")
+        return SimpleNamespace(path=path)
+
+    def write_project(root, **kwargs):
+        created_sources.append([
+            path.name for path in kwargs["source_xmls"]
+        ])
+        project = root / f"{kwargs['package_name']}.xml"
+        project.write_text("<Project/>", encoding="utf-8")
+        return project
+
+    def compile_project(project, compiler, *, package_name):
+        package = project.parent / "_compiled" / package_name
+        (package / "scenery" / package_name).mkdir(parents=True)
+        (package / "manifest.json").write_text("{}", encoding="utf-8")
+        (package / "layout.json").write_text(
+            json.dumps({"content": []}), encoding="utf-8"
+        )
+        (package / "bglIndex.bout").write_bytes(b"index")
+        (package / "scenery" / package_name / "source.bgl").write_bytes(b"bgl")
+        return {"package_root": str(package), "bgls": []}
+
+    monkeypatch.setattr(
+        "fenix_default_navdata.package.write_bglcomp_xml", write_xml
+    )
+    monkeypatch.setattr(
+        "fenix_default_navdata.package.write_package_project", write_project
+    )
+    monkeypatch.setattr(
+        "fenix_default_navdata.package.compile_package", compile_project
+    )
+
+    compiler = CompilerInfo(tmp_path / "fspackagetool.exe", "PackageTool", "test")
+    _compile_xml_package(
+        tmp_path / NAV_PACKAGE,
+        NavModel(tmp_path),
+        DEFAULT_CYCLE,
+        compiler,
+        package_name="navdata",
+        airport_prefixes=("ZB", "ZG"),
+        include_enroute=True,
+        duplicate_terminal_waypoints=False,
+        dependencies=[],
+        package_order_hint="CUSTOM_NAVDATA_PATCH",
+        title="Nav",
+        normalize_package_tool_times=False,
+    )
+    _compile_xml_package(
+        tmp_path / AIRPORT_PACKAGE,
+        NavModel(tmp_path),
+        DEFAULT_CYCLE,
+        compiler,
+        package_name="airport",
+        airport_prefixes=("ZB", "ZG"),
+        include_enroute=False,
+        duplicate_terminal_waypoints=True,
+        dependencies=[],
+        package_order_hint="CUSTOM_AIRPORT_PATCH",
+        title="Airport",
+        normalize_package_tool_times=False,
+    )
+
+    assert created_sources == [
+        ["00_enroute.xml"],
+        ["ZB_airports.xml", "ZG_airports.xml"],
+    ]
 
 
 def test_candidate_restores_verified_official_regions_before_enroute_projection(

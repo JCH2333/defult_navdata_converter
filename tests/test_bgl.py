@@ -1534,7 +1534,9 @@ def test_root_terminal_waypoints_are_deduplicated_across_airports(tmp_path: Path
 
     root = ET.parse(output).getroot()
     assert len(root.findall("Waypoint")) == 1
-    assert len(root.findall("Airport/Waypoint")) == 2
+    assert len(root.findall("Airport/Waypoint")) == 1
+    assert root.find("Waypoint").attrib["waypointIdent"] == "FIX01"
+    assert root.find("Airport/Waypoint").attrib["waypointIdent"] == "FIX01001"
     assert projection.waypoints == 3
 
 
@@ -2016,6 +2018,56 @@ def test_package_tool_keeps_failed_ascii_stage_with_short_async_process_trace(
     assert (stages[0] / "attempt-01-BuilderLogError.txt").read_text(
         encoding="utf-8"
     ) == "after\n"
+
+
+def test_package_tool_rejects_nonzero_exit_even_when_stale_bgl_exists(
+    tmp_path: Path,
+    monkeypatch,
+):
+    source = tmp_path / "source.xml"
+    source.write_text("<FSData version=\"9.0\"/>", encoding="utf-8")
+    project = write_package_project(
+        tmp_path / "project",
+        package_name="test-navdata",
+        title="Test NavData",
+        output_dir=r"scenery\test-navdata",
+        source_xmls=(source,),
+        package_order_hint="CUSTOM_NAVDATA_PATCH",
+    )
+
+    def fake_run(command, **kwargs):
+        staged_project = Path(command[1])
+        package = staged_project.parent / "Packages" / "test-navdata"
+        package.mkdir(parents=True)
+        for name in ("manifest.json", "layout.json", "bglIndex.bout"):
+            (package / name).write_bytes(b"stale")
+        bgl = package / "scenery" / "test-navdata" / "source.bgl"
+        bgl.parent.mkdir(parents=True)
+        bgl.write_bytes(b"stale")
+        return subprocess.CompletedProcess(command, 1, "", "")
+
+    monkeypatch.setattr("fenix_default_navdata.bgl.subprocess.run", fake_run)
+    monkeypatch.setattr("fenix_default_navdata.bgl._simulator_pids", lambda: set())
+    monkeypatch.setattr(
+        "fenix_default_navdata.bgl._wait_for_package_tool_process",
+        lambda previous_pids, **kwargs: PackageToolProcessTrace(
+            simulator_started=True,
+            simulator_completed=True,
+            launched_pids=(1,),
+            observations=(),
+            elapsed_seconds=0.0,
+        ),
+    )
+    try:
+        compile_package(
+            project,
+            CompilerInfo(Path("fspackagetool.exe"), "PackageTool", "test"),
+            package_name="test-navdata",
+        )
+    except RuntimeError as error:
+        assert "退出代码=1" in str(error)
+    else:
+        raise AssertionError("非零 Package Tool 退出码不得接受残留 BGL")
 
 
 def test_unique_limited_ident_preserves_short_names_and_variant_suffixes() -> None:

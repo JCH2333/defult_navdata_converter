@@ -821,26 +821,48 @@ def _terminal_waypoint_identities(points) -> tuple[dict[tuple[str, str, str, str
         )
         representatives.setdefault(key, point)
 
-    grouped: dict[tuple[str, str, str], list[tuple[str, str, str, str, str]]] = {}
-    reserved: set[tuple[str, str, str]] = set()
+    grouped: dict[
+        tuple[str, str],
+        dict[tuple[str, str], list[tuple[str, str, str, str, str]]],
+    ] = {}
+    reserved: set[tuple[str, str]] = set()
     for key in representatives:
-        group_key = key[:3]
-        grouped.setdefault(group_key, []).append(key)
+        group_key = (key[1], key[2])
+        coordinate_key = (key[3], key[4])
+        grouped.setdefault(group_key, {}).setdefault(
+            coordinate_key, []
+        ).append(key)
         reserved.add(group_key)
 
     identities: dict[tuple[str, str, str, str, str], str] = {}
-    for (airport, region, base_ident), keys in sorted(grouped.items()):
-        for index, key in enumerate(sorted(keys)):
+    for (region, base_ident), coordinate_groups in sorted(grouped.items()):
+        ordered_groups = sorted(
+            coordinate_groups.items(),
+            key=lambda item: min(
+                (representatives[key].airport, representatives[key].key)
+                for key in item[1]
+            ),
+        )
+        for index, (_, keys) in enumerate(ordered_groups):
+            key = min(
+                keys,
+                key=lambda item: (
+                    representatives[item].airport,
+                    representatives[item].key,
+                ),
+            )
             if index == 0:
-                identities[key] = base_ident
+                for item in keys:
+                    identities[item] = base_ident
                 continue
             suffix = 1
             while True:
                 candidate = f"{base_ident[:5]}{suffix:03d}"
-                identity = (airport, region, candidate)
+                identity = (region, candidate)
                 if identity not in reserved:
                     reserved.add(identity)
-                    identities[key] = candidate
+                    for item in keys:
+                        identities[item] = candidate
                     break
                 suffix += 1
     return identities, representatives
@@ -1766,7 +1788,7 @@ def _shared_terminal_enroute_points(
     for key, terminal_ident in identities.items():
         point = representatives[key]
         identity = _airway_waypoint_identity(
-            terminal_ident,
+            point.ident,
             point.country or point.airport[:2],
             point.latitude,
             point.longitude,
@@ -2213,6 +2235,63 @@ def write_bglcomp_xml(
     terminal_identities, terminal_representatives = _terminal_waypoint_identities(
         model.terminal_waypoints
     )
+    shared_terminal_keys: set[tuple[str, str, str, str, str]] = set()
+    shared_terminal_representatives: dict[
+        tuple[str, str], tuple[tuple[str, str, str, str, str], object]
+    ] = {}
+    grouped_terminal_points: dict[
+        tuple[str, str], list[tuple[tuple[str, str, str, str, str], object]]
+    ] = {}
+    for point_key, point in terminal_representatives.items():
+        group = (
+            (point.country or point.airport[:2]).upper()[:2],
+            terminal_identities[point_key],
+        )
+        grouped_terminal_points.setdefault(group, []).append((point_key, point))
+    for group, candidates in grouped_terminal_points.items():
+        if len({point.airport for _, point in candidates}) < 2:
+            continue
+        if len({
+            (round(point.latitude, 6), round(point.longitude, 6))
+            for _, point in candidates
+        }) != 1:
+            continue
+        for point_key, _ in candidates:
+            shared_terminal_keys.add(point_key)
+        shared_terminal_representatives[group] = min(
+            candidates,
+            key=lambda item: (item[1].airport, item[1].key),
+        )
+    root_terminal_idents: set[str] = set()
+    if duplicate_terminal_waypoints and scope in {"all", "airports"}:
+        root_seen: set[tuple[str, str]] = set()
+        for point_key, point in sorted(
+            terminal_representatives.items(),
+            key=lambda item: (
+                (item[1].country or item[1].airport[:2]).upper()[:2],
+                _normalized_waypoint_ident(
+                    item[1].ident,
+                    item[1].latitude,
+                    item[1].longitude,
+                ),
+                item[1].airport,
+                item[1].key,
+            ),
+        ):
+            if airport_prefix is not None and not point.airport.startswith(airport_prefix):
+                continue
+            raw_key = (
+                (point.country or point.airport[:2]).upper()[:2],
+                _normalized_waypoint_ident(
+                    point.ident,
+                    point.latitude,
+                    point.longitude,
+                ),
+            )
+            if raw_key in root_seen:
+                continue
+            root_seen.add(raw_key)
+            root_terminal_idents.add(terminal_identities[point_key])
     projected_procedures = 0
     for airport in projected_airports:
         airport_element = ET.SubElement(
@@ -2268,6 +2347,11 @@ def write_bglcomp_xml(
                 (key, point)
                 for key, point in terminal_representatives.items()
                 if point.airport == airport.icao
+                and key not in shared_terminal_keys
+                and (
+                    not duplicate_terminal_waypoints
+                    or terminal_identities[key] not in root_terminal_idents
+                )
                 and not _navaid_matches_terminal_point(
                     point,
                     model.navaids,
@@ -2311,13 +2395,75 @@ def write_bglcomp_xml(
         for key, point in terminal_representatives.items()
         if airport_prefix is None or point.airport.startswith(airport_prefix)
     ] if scope in {"all", "airports"} else []
+    selected_terminal_points = [
+        item for item in selected_terminal_points
+        if item[0] not in shared_terminal_keys
+    ]
     terminal_waypoint_count = len(selected_terminal_points)
     root_terminal_waypoint_count = 0
-    if duplicate_terminal_waypoints and scope in {"all", "airports"}:
+    if scope in {"all", "airports"}:
+        if duplicate_terminal_waypoints:
+            emitted_root_identities: set[tuple[str, str]] = set()
+            for point_key, point in sorted(
+                terminal_representatives.items(),
+                key=lambda item: (
+                    terminal_identities[item[0]],
+                    item[1].latitude,
+                    item[1].longitude,
+                    item[1].airport,
+                    item[1].key,
+                ),
+            ):
+                if airport_prefix is not None and not point.airport.startswith(airport_prefix):
+                    continue
+                if terminal_identities[point_key] not in root_terminal_idents:
+                    continue
+                if _navaid_matches_terminal_point(point, model.navaids):
+                    continue
+                root_identity = (
+                    (point.country or point.airport[:2])[:2],
+                    terminal_identities[point_key],
+                )
+                if root_identity in emitted_root_identities:
+                    continue
+                emitted_root_identities.add(root_identity)
+                ET.SubElement(root, "Waypoint", _attrs(
+                    lat=_float(point.latitude),
+                    lon=_float(point.longitude),
+                    waypointType="NAMED",
+                    waypointRegion=(point.country or point.airport[:2])[:2],
+                    waypointIdent=terminal_identities[point_key],
+                ))
+                root_terminal_waypoint_count += 1
+        else:
+            for (region, ident), (_, point) in sorted(
+                shared_terminal_representatives.items()
+            ):
+                if airport_prefix is not None and not point.airport.startswith(airport_prefix):
+                    continue
+                if _navaid_matches_terminal_point(point, model.navaids):
+                    continue
+                ET.SubElement(root, "Waypoint", _attrs(
+                    lat=_float(point.latitude),
+                    lon=_float(point.longitude),
+                    waypointType="NAMED",
+                    waypointRegion=region,
+                    waypointIdent=ident,
+                ))
+                root_terminal_waypoint_count += 1
+    if (
+        duplicate_terminal_waypoints
+        and scope in {"all", "airports"}
+        and not root_terminal_idents
+    ):
         deduped_terminal_points: dict[tuple[str, str], tuple[tuple[str, str, str, str, str], object]] = {}
         for point_key, point in selected_terminal_points:
             key = (
-                terminal_identities[point_key],
+                _normalized_waypoint_ident(
+                    point.ident,
+                    point.latitude,
+                    point.longitude,
+                ),
                 (point.country or point.airport[:2]).upper()[:2],
             )
             deduped_terminal_points.setdefault(key, (point_key, point))
@@ -2334,6 +2480,8 @@ def write_bglcomp_xml(
                 item[1].key,
             ),
         ):
+            if point_key in shared_terminal_keys:
+                continue
             if _navaid_matches_terminal_point(point, model.navaids):
                 continue
             ET.SubElement(root, "Waypoint", _attrs(
@@ -2665,7 +2813,7 @@ def compile_package(
         )
         missing = [str(path.relative_to(stage_root)) for path in required if not path.is_file()]
         bgls = sorted(staged_package_root.rglob("*.bgl")) if staged_package_root.is_dir() else []
-        if missing or not bgls:
+        if result.returncode != 0 or missing or not bgls:
             details = "\n".join(filter(None, (result.stdout, result.stderr)))
             latest_log = str(attempts[-1]["builder_log"].get("snapshot", ""))
             if latest_log:
