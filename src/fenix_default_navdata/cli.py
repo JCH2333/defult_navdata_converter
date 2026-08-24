@@ -153,6 +153,7 @@ from .unclassified_procedure_card_audit import (
 )
 from .bgl import find_compiler
 from .airway_connection_shape_probe import run_airway_connection_shape_probe
+from .airway_projection_audit import audit_airway_xml_projection
 from .airway_coordinate_precision_probe import (
     run_airway_coordinate_precision_probe,
     write_source_airway_coordinate_precision_audit,
@@ -219,6 +220,10 @@ from .route_fragment_probe import run_route_fragment_probe
 from .route_type_source_audit import (
     audit_route_type_source,
     write_route_type_source_audit,
+)
+from .runtime_package_audit import (
+    audit_runtime_package_set,
+    normalize_candidate_alias,
 )
 from .reader_repeatability_audit import (
     DEFAULT_TABLES,
@@ -409,6 +414,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Default navdata 2608R1 参考包根目录；省略时自动检测",
     )
     bgl_layout.add_argument("--output", help="可选的本地 BGL 布局审计 JSON 输出路径")
+    airway_projection = sub.add_parser(
+        "airway-projection-audit",
+        help="比较 NavModel 航路边与生成 XML 的设施身份和连接",
+    )
+    airway_projection.add_argument("--model", required=True, help="中间模型 JSON/JSON.GZ")
+    airway_projection.add_argument("--xml", required=True, help="生成的 enroute XML")
+    airway_projection.add_argument("--output", required=True, help="审计 JSON 输出路径")
     bgl_binary_diff = sub.add_parser(
         "bgl-binary-diff-audit",
         help="只读比较 BGL 字节、Section 元数据和载荷差异，不导出导航记录",
@@ -1723,6 +1735,21 @@ def build_parser() -> argparse.ArgumentParser:
     restore_parser = sub.add_parser("restore", help="恢复备份")
     restore_parser.add_argument("--backup", required=True)
     restore_parser.add_argument("--target", help="Community 目录")
+    package_audit = sub.add_parser(
+        "runtime-package-audit",
+        help="审计 Community 或候选包集合的目录、manifest 和依赖闭包",
+    )
+    package_audit.add_argument("--root", required=True, help="包集合根目录")
+    package_audit.add_argument(
+        "--candidate-alias",
+        action="store_true",
+        help="按 JCH 候选别名校验，而不是按 Community canonical zzz 名称校验",
+    )
+    package_audit.add_argument(
+        "--normalize-candidate-alias",
+        action="store_true",
+        help="修复生成候选的 JCH manifest、ContentInfo 和 layout 元数据",
+    )
     sub.add_parser("detect", help="显示本机路径")
     return parser
 
@@ -1733,6 +1760,17 @@ def main(argv: list[str] | None = None) -> int:
         detected = detect_paths()
         print(json.dumps(detected.__dict__, ensure_ascii=False, indent=2, default=str))
         return 0
+    if args.command == "runtime-package-audit":
+        report = (
+            normalize_candidate_alias(Path(args.root))
+            if args.normalize_candidate_alias
+            else audit_runtime_package_set(
+                Path(args.root),
+                candidate_alias=args.candidate_alias,
+            )
+        )
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0 if report["valid"] else 1
     if args.command == "build":
         model_path = _path(args.model)
         model = load_model(model_path) if model_path else None
@@ -1852,6 +1890,19 @@ def main(argv: list[str] | None = None) -> int:
             write_bgl_layout_audit(output, report)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
+    if args.command == "airway-projection-audit":
+        output = Path(args.output).expanduser().resolve()
+        report = audit_airway_xml_projection(
+            load_model(Path(args.model)),
+            Path(args.xml),
+        )
+        output.write_text(
+            json.dumps(report, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        report["output"] = str(output)
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0 if report["verified"] else 1
     if args.command == "bgl-binary-diff-audit":
         reference = _path(args.reference) or detect_paths().reference_root
         if not reference:

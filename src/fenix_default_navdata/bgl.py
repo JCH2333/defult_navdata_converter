@@ -22,6 +22,7 @@ from .iap_coverage import (
     matching_iap_charts,
     shared_iap_section_assignments,
 )
+from .airway_projection_audit import audit_airway_xml_projection
 from .model import Navaid, NavModel, Runway, is_china_icao
 from .official_overlay import OfficialOverlayIndex
 from .profile import Cycle
@@ -76,6 +77,7 @@ class XmlProjection:
     rejected_procedures: int
     official_canonicalized_navaids: int = 0
     official_overlapping_airway_legs_retained: int = 0
+    airway_projection_audit: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)
@@ -2372,6 +2374,7 @@ def write_bglcomp_xml(
 
     ET.indent(root, space="  ")
     ET.ElementTree(root).write(output, encoding="utf-8", xml_declaration=True)
+    airway_projection_audit = audit_airway_xml_projection(model, output)
     return XmlProjection(
         path=output,
         airports=len(projected_airports),
@@ -2401,6 +2404,7 @@ def write_bglcomp_xml(
         official_overlapping_airway_legs_retained=(
             official_overlapping_airway_legs_retained
         ),
+        airway_projection_audit=airway_projection_audit,
     )
 
 

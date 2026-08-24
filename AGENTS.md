@@ -111,3 +111,5 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
 - SDK/Package Tool：`docs/sdk-compile-contracts.md`。
 - AS346/ToLiss 专用加载规则：`docs/aircraft-contracts/as346-toliss.md`。
 - 阶段证据：`diagnostics/`；可复用审计实现：`src/fenix_default_navdata/*_audit.py`。
+
+- **R432 运行时一致性实现（进行中，2026-08-24）：** 新增 `default_navdata_checker` 的多包设施/航路身份模型、FBW 有序航路校验、包冲突报告、终端 ILS/Approach/VIAS/复飞读取和 CLI；checker 15 个测试通过。新增 `runtime_package_audit.py`，候选 JCH 包依赖已修复，旧 zzz 候选副本移入候选 `diagnostics/legacy-zzz-package-copies`，Community canonical zzz 包未修改。新增 `airway_projection_audit.py` 证明当前候选 XML 已保留 `YHD->DWZ`、`HO->P396`、`B213` 等关键源边；BGL/读取器层仍需继续解释 W215/B213 的运行时差异。证据：`diagnostics/r432-airway-xml-projection-audit.json`。
