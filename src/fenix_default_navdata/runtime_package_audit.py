@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import argparse
+import re
 from pathlib import Path
 
 
@@ -14,6 +15,7 @@ CANDIDATE_ALIAS_PACKAGES = (
     "JCH-pmdg-china-navdata",
     "JCH-pmdg-china-navdata-airport-patch",
 )
+_AIRPORT_BGL_NAME = re.compile(r"^[A-Z]{2}_airports\.bgl$", re.IGNORECASE)
 
 
 def _manifest(package_root: Path) -> dict[str, object]:
@@ -35,6 +37,13 @@ def _dependency_names(payload: dict[str, object]) -> set[str]:
         for item in dependencies
         if isinstance(item, dict) and str(item.get("name") or "").strip()
     }
+
+
+def _bgl_paths(package_root: Path) -> list[str]:
+    return sorted(
+        path.relative_to(package_root).as_posix()
+        for path in package_root.rglob("*.bgl")
+    )
 
 
 def audit_runtime_package_set(
@@ -64,6 +73,7 @@ def audit_runtime_package_set(
     ]
     manifest_reports: dict[str, object] = {}
     dependency_errors: list[dict[str, object]] = []
+    content_errors: list[dict[str, object]] = []
     for name in expected:
         if name not in present:
             continue
@@ -82,6 +92,7 @@ def audit_runtime_package_set(
             "dependencies": dependencies,
             "package_order_hint": payload.get("package_order_hint"),
             "package_version": payload.get("package_version"),
+            "bgl_paths": _bgl_paths(present[name]),
         }
     canonical_patch = (
         CANDIDATE_ALIAS_PACKAGES[1]
@@ -102,6 +113,32 @@ def audit_runtime_package_set(
                 "expected_dependency": canonical_nav,
                 "actual_dependencies": dependencies,
             })
+    nav_report = manifest_reports.get(canonical_nav)
+    if isinstance(nav_report, dict):
+        nav_bgls = nav_report.get("bgl_paths", [])
+        expected_enroute = "scenery/pmdg-china-navdata/00_enroute.bgl"
+        if nav_bgls != [expected_enroute]:
+            content_errors.append({
+                "package": canonical_nav,
+                "expected_bgl_paths": [expected_enroute],
+                "actual_bgl_paths": nav_bgls,
+                "reason": "navigation_package_must_contain_enroute_only",
+            })
+    if isinstance(patch_report, dict):
+        patch_bgls = patch_report.get("bgl_paths", [])
+        invalid_patch_bgls = [
+            path
+            for path in patch_bgls
+            if not _AIRPORT_BGL_NAME.fullmatch(Path(path).name)
+        ]
+        if len(patch_bgls) != 10 or invalid_patch_bgls:
+            content_errors.append({
+                "package": canonical_patch,
+                "expected_bgl_count": 10,
+                "actual_bgl_paths": patch_bgls,
+                "invalid_bgl_paths": invalid_patch_bgls,
+                "reason": "airport_patch_must_contain_region_airport_bgls_only",
+            })
     return {
         "root": str(root),
         "candidate_alias": candidate_alias,
@@ -110,8 +147,14 @@ def audit_runtime_package_set(
         "missing_packages": missing,
         "unexpected_custom_packages": unexpected_custom,
         "dependency_errors": dependency_errors,
+        "content_errors": content_errors,
         "manifests": manifest_reports,
-        "valid": not missing and not unexpected_custom and not dependency_errors,
+        "valid": (
+            not missing
+            and not unexpected_custom
+            and not dependency_errors
+            and not content_errors
+        ),
     }
 
 
