@@ -203,7 +203,7 @@ from .iap_ocr_consensus import (
     write_iap_ocr_role_consensus,
 )
 from .iap_ocr_recheck import audit_iap_ocr_role_recheck, write_iap_ocr_role_recheck
-from .model_io import load_model
+from .model_io import dump_model, load_model
 from .model_replay_audit import (
     audit_model_replay,
     load_difference_allowlist,
@@ -242,6 +242,7 @@ from .source import (
     audit_enroute_key_point_ocr_rerun,
     audit_enroute_navaid_ocr_source,
     load_naip,
+    refresh_database_procedure_airports,
 )
 from .source_gap import (
     audit_general_document_key_point_reference_coverage,
@@ -345,6 +346,21 @@ def build_parser() -> argparse.ArgumentParser:
         default=[],
         help="至少三份完全一致的 IAP OCR 缓存；仅用于多图进近页的受限消歧",
     )
+    refresh_database = sub.add_parser(
+        "refresh-database-procedures",
+        help="从指定机场的 424 数据库图刷新冻结模型中的程序段",
+    )
+    refresh_database.add_argument("--model", required=True)
+    refresh_database.add_argument(
+        "--airport",
+        action="append",
+        dest="airports",
+        required=True,
+        help="要刷新的 ICAO；可重复传入",
+    )
+    refresh_database.add_argument("--output", required=True)
+    refresh_database.add_argument("--report", required=True)
+    refresh_database.add_argument("--pdf-cache")
     index = sub.add_parser("index", help="从当前官方双包生成并验证 VOR/NDB 设施索引")
     index.add_argument("--nav-base", help="官方 navigraph-nav-base 目录")
     index.add_argument("--nav-jepp", help="官方 navigraph-nav-jepp 目录")
@@ -1833,6 +1849,23 @@ def main(argv: list[str] | None = None) -> int:
                 Path(value) for value in args.iap_ocr_cache_roots
             ),
         )
+        print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if args.command == "refresh-database-procedures":
+        model = load_model(Path(args.model))
+        report = refresh_database_procedure_airports(
+            model,
+            args.airports,
+            pdf_cache=_path(args.pdf_cache),
+        )
+        report["model"] = dump_model(model, Path(args.output))
+        report_path = Path(args.report).expanduser().resolve()
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(
+            json.dumps(report, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        report["report"] = str(report_path)
         print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
         return 0
     if args.command == "index":

@@ -2161,6 +2161,42 @@ def test_airport_projection_prefers_global_navaid_identity_over_terminal_duplica
     assert leg.attrib["fixType"] == "NDB"
 
 
+def test_airport_projection_prefers_global_waypoint_identity_over_terminal_duplicate(
+    tmp_path: Path,
+) -> None:
+    model = NavModel(Path("source"))
+    source = SourceRef("fixture", 1)
+    model.airports["a"] = Airport(
+        "a", "ZSHC", "ZSHC", 30.0, 120.0, 1000, 18000, 180, source,
+    )
+    model.waypoints.append(
+        Waypoint("wp-abvil", "ABVIL", "ABVIL", 29.641667, 119.315, source, "ZS")
+    )
+    model.terminal_waypoints.append(
+        TerminalWaypoint("terminal-abvil", "ZSHC", "ABVIL", 29.641667, 119.315, source, "ZS")
+    )
+    model.procedure_segments.append(
+        ProcedureSegment(
+            "ZSHC", "ABVL9D", "departure", "06", "", (
+                ChartTerminalLeg(
+                    "ABVL9D", "06", "TF", "ABVIL", "fixture",
+                    sequence=1, fix_region="ZS",
+                ),
+            ), source,
+        )
+    )
+
+    output = tmp_path / "waypoint-identity.xml"
+    write_bglcomp_xml(model, DEFAULT_CYCLE, output, scope="airports")
+
+    airport = ET.parse(output).getroot().find("Airport")
+    assert airport is not None
+    assert airport.find("Waypoint[@waypointIdent='ABVIL']") is None
+    leg = airport.find("Departure/RunwayTransitions/RunwayTransitionLegs/Leg")
+    assert leg is not None
+    assert leg.attrib["fixType"] == "WAYPOINT"
+
+
 def test_enroute_navaid_endpoints_use_selected_official_coordinates(tmp_path: Path) -> None:
     model = NavModel(Path("source"))
     source = SourceRef("RTE_SEG.csv", 1)

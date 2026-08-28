@@ -351,3 +351,43 @@ def test_database_trailing_family_and_variant_are_not_misread_as_a_transition():
         ("I02-X", "\u8fdb\u8fd1", "", "ILS", "RF", "LJ510"),
         ("I02-X", "\u8fdb\u8fd1", "", "ILS", "CF", "LJ662"),
     ]
+
+
+def test_database_departure_runway_transitions_and_common_section():
+    text = """
+    RWY01L/01R 离场 ESLI1A (by ATC)
+    RWY01L跑道过渡
+    CF GY420 Y 012 RNAV1
+    TF GY401 Y 1580 RNAV1
+    DF LIDMA R RNAV1
+    RWY01R跑道过渡
+    CF GY421 Y 012 RNAV1
+    TF GY411 Y 1580 RNAV1
+    DF LIDMA R RNAV1
+    公共段
+    IF LIDMA RNAV1
+    TF ESLIR RNAV1
+    """
+
+    legs = extract_terminal_leg_evidence(text)
+
+    assert [
+        (
+            leg.procedure_label,
+            leg.procedure_kind,
+            leg.runway,
+            leg.transition,
+            leg.leg_type,
+            leg.fix_ident,
+        )
+        for leg in legs
+    ] == [
+        ("ESLI-1A", "离场", "01L", "", "CF", "GY420"),
+        ("ESLI-1A", "离场", "01L", "", "TF", "GY401"),
+        ("ESLI-1A", "离场", "01L", "", "DF", "LIDMA"),
+        ("ESLI-1A", "离场", "01R", "", "CF", "GY421"),
+        ("ESLI-1A", "离场", "01R", "", "TF", "GY411"),
+        ("ESLI-1A", "离场", "01R", "", "DF", "LIDMA"),
+        ("ESLI-1A", "离场", "", "", "IF", "LIDMA"),
+        ("ESLI-1A", "离场", "", "", "TF", "ESLIR"),
+    ]

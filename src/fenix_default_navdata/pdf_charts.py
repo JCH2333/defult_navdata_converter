@@ -102,6 +102,12 @@ _DATABASE_LEG_TYPES = frozenset({
 _DATABASE_LEG = re.compile(r"\b(?P<leg_type>CF|DF|TF|CA|IF|HM|RF|AF|FA|FC|FD|FM|HA|HF|PI|VI|VM)\b(?:\s+(?P<fix>[A-Z][A-Z0-9]{0,5}))?")
 _DATABASE_RF_LEG = re.compile(r"\bRF\s*\[\s*(?P<center>[A-Z][A-Z0-9]{0,5})\s*,\s*\d+(?:\.\d+)?\s*\]\s*(?P<fix>[A-Z][A-Z0-9]{0,5})?")
 _DATABASE_SPEED = re.compile(r"^MAX(?P<speed>\d{2,3})$", re.IGNORECASE)
+_DATABASE_RUNWAY_TRANSITION = re.compile(
+    r"RWY\s*(?P<runways>\d{2}[LRC]?(?:\s*/\s*(?:RWY\s*)?\d{2}[LRC]?)*)\s*跑道过渡",
+    re.IGNORECASE,
+)
+_DATABASE_COMMON_SECTION = re.compile(r"公共段|公用段", re.IGNORECASE)
+_DATABASE_ENROUTE_TRANSITION = re.compile(r"(?P<trans>[A-Z][A-Z0-9]{0,5})\s*航路过渡", re.IGNORECASE)
 _STANDARD_ROUTE = re.compile(
     r"\b(?P<label>[A-Z][A-Z0-9]{1,5}-(?:\d{1,2}[A-Z]{1,2}|[A-Z]{1,2}\d{1,2}))\s+"
     r"(?P<code>[A-Z][A-Z0-9]{2,5})\s+"
@@ -824,6 +830,30 @@ def extract_terminal_leg_evidence(text: str) -> tuple[ChartTerminalLeg, ...]:
             pending_rows = []
             split_combined_approach_missed = False
             holding_active = True
+            continue
+        rwy_trans = _DATABASE_RUNWAY_TRANSITION.search(line)
+        if rwy_trans and active_label and active_kind in {"离场", "进场"}:
+            flush()
+            active_runways = _database_heading_runways(rwy_trans.group(0))
+            active_transition = ""
+            active_rows = pending_rows
+            pending_rows = []
+            continue
+        common_sec = _DATABASE_COMMON_SECTION.search(line)
+        if common_sec and active_label and active_kind in {"离场", "进场"}:
+            flush()
+            active_runways = ("",)
+            active_transition = ""
+            active_rows = []
+            pending_rows = []
+            continue
+        enr_trans = _DATABASE_ENROUTE_TRANSITION.search(line)
+        if enr_trans and active_label and active_kind in {"离场", "进场"}:
+            flush()
+            active_runways = ("",)
+            active_transition = enr_trans["trans"].upper()
+            active_rows = []
+            pending_rows = []
             continue
         compound_heading = _DATABASE_COMPOUND_PROCEDURE.search(line)
         heading = compound_heading or _DATABASE_PROCEDURE.search(line) or _DATABASE_NUMERIC_PROCEDURE.search(line)

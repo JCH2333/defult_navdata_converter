@@ -15,6 +15,7 @@ from fenix_default_navdata.source import (
     audit_enroute_navaid_ocr_source,
     load_naip,
     navaid_country,
+    refresh_database_procedure_airports,
     summarize_airway_source_metadata,
     waypoint_country,
 )
@@ -252,6 +253,75 @@ def test_shared_terminal_coordinate_waypoint_rejects_coordinate_conflicts() -> N
     assert model.terminal_coordinate_waypoint_promotion["rejected"][
         "multiple_coordinates"
     ] == 1
+
+
+def test_refresh_database_procedures_replaces_only_selected_airport(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path / "raw"
+    (root / "Terminal" / "ZUGY").mkdir(parents=True)
+    old_source = SourceRef("Terminal/ZUGY/ZUGY-0C-01.pdf", 1, 1, "old")
+    other_source = SourceRef("Terminal/ZUUU/ZUUU-0C-10.pdf", 1, 1, "other")
+    old_chart = ProcedureChart(
+        "ZUGY", "ZUGY-0C-01.pdf", 1, "terminal-database-coding",
+        "old", "old-text", ("AVBO-1A",), ("01R",), (), (
+            ChartTerminalLeg("AVBO-1A", "01R", "TF", "GY401", "old"),
+        ), (), old_source,
+    )
+    other_chart = ProcedureChart(
+        "ZUUU", "ZUUU-0C-10.pdf", 1, "terminal-database-coding",
+        "other", "other-text", ("I02R",), ("02R",), (), (
+            ChartTerminalLeg("I02R", "02R", "IF", "UU615", "other"),
+        ), (), other_source,
+    )
+    fresh_chart = ProcedureChart(
+        "ZUGY", "ZUGY-0C-01.pdf", 1, "terminal-database-coding",
+        "fresh", "fresh-text", ("AVBO-1A",), ("01R",), (), (
+            ChartTerminalLeg("AVBO-1A", "01R", "CF", "GY421", "fresh"),
+            ChartTerminalLeg("AVBO-1A", "01R", "TF", "GY411", "fresh"),
+            ChartTerminalLeg("AVBO-1A", "01R", "DF", "MASRO", "fresh"),
+        ), (), SourceRef("Terminal/ZUGY/ZUGY-0C-01.pdf", 1, 1, "fresh"),
+    )
+    model = NavModel(root=root)
+    model.procedure_charts.extend((old_chart, other_chart))
+    model.procedure_segments.extend((
+        ProcedureSegment(
+            "ZUGY", "AVBO-1A", "departure", "01R", "", old_chart.terminal_legs,
+            old_source,
+        ),
+        ProcedureSegment(
+            "ZUUU", "I02R", "approach", "02R", "", other_chart.terminal_legs,
+            other_source,
+        ),
+    ))
+    iap_evidence = object()
+    model.iap_ocr_role_evidence = iap_evidence
+    monkeypatch.setattr(
+        "fenix_default_navdata.source.extract_airport_database_charts",
+        lambda directory: [fresh_chart],
+    )
+
+    report = refresh_database_procedure_airports(model, ["zugy"])
+
+    assert report == {
+        "airports": ["ZUGY"],
+        "procedure_charts": {"removed": 1, "added": 1},
+        "procedure_segments": {"removed": 1, "added": 1},
+    }
+    assert [
+        (
+            segment.airport,
+            segment.label,
+            segment.runway,
+            [leg.fix_ident for leg in segment.legs],
+        )
+        for segment in model.procedure_segments
+    ] == [
+        ("ZUGY", "AVBO-1A", "01R", ["GY421", "GY411", "MASRO"]),
+        ("ZUUU", "I02R", "02R", ["UU615"]),
+    ]
+    assert model.iap_ocr_role_evidence is iap_evidence
 
 
 def test_direct_iap_role_alone_does_not_retain_terminal_coordinate_waypoint() -> None:

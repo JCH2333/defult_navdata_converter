@@ -1020,6 +1020,21 @@ def _navaid_matches_terminal_point(point, navaids: list) -> bool:
     )
 
 
+def _waypoint_matches_terminal_point(point, waypoints: list) -> bool:
+    region = (point.country or point.airport[:2]).upper()[:2]
+    return any(
+        wp.ident.upper() == point.ident.upper()
+        and (not wp.country or wp.country.upper()[:2] == region)
+        and _great_circle_distance_nm(
+            point.latitude,
+            point.longitude,
+            wp.latitude,
+            wp.longitude,
+        ) <= 0.05
+        for wp in waypoints
+    )
+
+
 def _resolve_source_fix(
     terminal_points_by_ident: dict[tuple[str, str], list],
     global_points_by_ident: dict[str, list],
@@ -1038,16 +1053,19 @@ def _resolve_source_fix(
         or navaid.country.upper()[:2] == region.upper()[:2]
     ):
         return navaid.kind, navaid
+    waypoint = _global_point_for_leg(
+        global_points_by_ident, airport, ident, latitude, longitude,
+    )
+    if waypoint is not None and (
+        not region
+        or waypoint.country.upper()[:2] == region.upper()[:2]
+    ):
+        return "WAYPOINT", waypoint
     terminal = _terminal_point_for_leg(
         terminal_points_by_ident, airport, ident, region, latitude, longitude,
     )
     if terminal is not None:
         return "TERMINAL_WAYPOINT", terminal
-    waypoint = _global_point_for_leg(
-        global_points_by_ident, airport, ident, latitude, longitude,
-    )
-    if waypoint is not None:
-        return "WAYPOINT", waypoint
     return "", None
 
 
@@ -2356,6 +2374,10 @@ def write_bglcomp_xml(
                     point,
                     model.navaids,
                 )
+                and not _waypoint_matches_terminal_point(
+                    point,
+                    model.waypoints,
+                )
             ),
             key=lambda item: (
                 terminal_identities[item[0]],
@@ -2418,7 +2440,7 @@ def write_bglcomp_xml(
                     continue
                 if terminal_identities[point_key] not in root_terminal_idents:
                     continue
-                if _navaid_matches_terminal_point(point, model.navaids):
+                if _navaid_matches_terminal_point(point, model.navaids) or _waypoint_matches_terminal_point(point, model.waypoints):
                     continue
                 root_identity = (
                     (point.country or point.airport[:2])[:2],
@@ -2441,7 +2463,7 @@ def write_bglcomp_xml(
             ):
                 if airport_prefix is not None and not point.airport.startswith(airport_prefix):
                     continue
-                if _navaid_matches_terminal_point(point, model.navaids):
+                if _navaid_matches_terminal_point(point, model.navaids) or _waypoint_matches_terminal_point(point, model.waypoints):
                     continue
                 ET.SubElement(root, "Waypoint", _attrs(
                     lat=_float(point.latitude),
@@ -2468,7 +2490,7 @@ def write_bglcomp_xml(
             )
             deduped_terminal_points.setdefault(key, (point_key, point))
         root_terminal_waypoint_count = sum(
-            not _navaid_matches_terminal_point(point, model.navaids)
+            not _navaid_matches_terminal_point(point, model.navaids) and not _waypoint_matches_terminal_point(point, model.waypoints)
             for _, point in deduped_terminal_points.values()
         )
         for point_key, point in sorted(
@@ -2482,7 +2504,7 @@ def write_bglcomp_xml(
         ):
             if point_key in shared_terminal_keys:
                 continue
-            if _navaid_matches_terminal_point(point, model.navaids):
+            if _navaid_matches_terminal_point(point, model.navaids) or _waypoint_matches_terminal_point(point, model.waypoints):
                 continue
             ET.SubElement(root, "Waypoint", _attrs(
                 lat=_float(point.latitude),

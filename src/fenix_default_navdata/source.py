@@ -2029,10 +2029,10 @@ def _retain_database_referenced_terminal_waypoints(model: NavModel) -> None:
     ]
 
 
-def _build_database_procedure_segments(model: NavModel) -> None:
-    """Group consecutive database-coded rows without inventing route geometry."""
-    model.procedure_segments.clear()
-    for chart in model.procedure_charts:
+def _database_procedure_segments(charts) -> list[ProcedureSegment]:
+    """Group database-coded chart rows without inventing route geometry."""
+    segments: list[ProcedureSegment] = []
+    for chart in charts:
         if chart.chart_type != "terminal-database-coding":
             continue
         active_key: tuple[str, str, str, str, str] | None = None
@@ -2042,7 +2042,7 @@ def _build_database_procedure_segments(model: NavModel) -> None:
             if active_key is None or not active_legs:
                 return
             label, kind, runway, transition, approach_family = active_key
-            model.procedure_segments.append(ProcedureSegment(
+            segments.append(ProcedureSegment(
                 chart.airport,
                 label,
                 kind,
@@ -2067,6 +2067,109 @@ def _build_database_procedure_segments(model: NavModel) -> None:
             active_key = key
             active_legs.append(leg)
         flush()
+    return segments
+
+
+def _replace_selected_items(items: list, selected, replacements: list) -> list:
+    """Replace one source subset while preserving the surrounding item order."""
+    result = []
+    inserted = False
+    for item in items:
+        if selected(item):
+            if not inserted:
+                result.extend(replacements)
+                inserted = True
+            continue
+        result.append(item)
+    if not inserted:
+        result.extend(replacements)
+    return result
+
+
+def refresh_database_procedure_airports(
+    model: NavModel,
+    airports: tuple[str, ...] | list[str],
+    *,
+    pdf_cache: Path | None = None,
+) -> dict[str, object]:
+    """Refresh selected airports' direct database chart procedures in a snapshot.
+
+    All non-selected airports, including their frozen IAP OCR source choices,
+    remain unchanged.
+    """
+    requested = tuple(sorted({
+        airport.strip().upper() for airport in airports if airport.strip()
+    }))
+    if not requested:
+        raise ValueError("至少需要指定一个机场")
+    terminal = model.root / "Terminal"
+    if not terminal.is_dir():
+        raise ValueError(f"缺少终端程序目录: {terminal}")
+    missing = [
+        airport for airport in requested
+        if not (terminal / airport).is_dir()
+    ]
+    if missing:
+        raise ValueError(f"缺少机场终端程序目录: {', '.join(missing)}")
+
+    requested_set = set(requested)
+    old_charts = [
+        chart for chart in model.procedure_charts
+        if chart.airport in requested_set
+        and chart.chart_type == "terminal-database-coding"
+    ]
+    refreshed_charts = []
+    for airport in requested:
+        directory = terminal / airport
+        extractor = extract_airport_database_charts
+        charts = extractor(directory) if pdf_cache is None else extractor(directory, pdf_cache)
+        if any(
+            chart.airport != airport
+            or chart.chart_type != "terminal-database-coding"
+            for chart in charts
+        ):
+            raise ValueError(f"{airport} 数据库图提取结果不属于该机场")
+        refreshed_charts.extend(charts)
+
+    old_sources = {chart.source.file for chart in old_charts}
+    old_segments = [
+        segment for segment in model.procedure_segments
+        if segment.airport in requested_set
+        and segment.source.file in old_sources
+    ]
+    refreshed_segments = _database_procedure_segments(refreshed_charts)
+    model.procedure_charts[:] = _replace_selected_items(
+        model.procedure_charts,
+        lambda chart: (
+            chart.airport in requested_set
+            and chart.chart_type == "terminal-database-coding"
+        ),
+        refreshed_charts,
+    )
+    model.procedure_segments[:] = _replace_selected_items(
+        model.procedure_segments,
+        lambda segment: (
+            segment.airport in requested_set
+            and segment.source.file in old_sources
+        ),
+        refreshed_segments,
+    )
+    return {
+        "airports": list(requested),
+        "procedure_charts": {
+            "removed": len(old_charts),
+            "added": len(refreshed_charts),
+        },
+        "procedure_segments": {
+            "removed": len(old_segments),
+            "added": len(refreshed_segments),
+        },
+    }
+
+
+def _build_database_procedure_segments(model: NavModel) -> None:
+    """Rebuild all database-coded procedures during a full source ingest."""
+    model.procedure_segments[:] = _database_procedure_segments(model.procedure_charts)
 
     _replace_standard_p_arrivals(model)
 

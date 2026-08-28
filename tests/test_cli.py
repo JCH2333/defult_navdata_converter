@@ -722,6 +722,59 @@ def test_export_model_command_passes_source_and_output(monkeypatch) -> None:
     assert captured["pdf_cache"] == Path("pdf-cache")
 
 
+def test_refresh_database_procedures_writes_refreshed_model_and_report(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    model = NavModel(tmp_path / "raw")
+    received: dict[str, object] = {}
+
+    def load(path: Path) -> NavModel:
+        received["loaded"] = path
+        return model
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cli, "load_model", load)
+    monkeypatch.setattr(
+        cli,
+        "refresh_database_procedure_airports",
+        lambda received_model, airports, **kwargs: received.update(
+            model=received_model,
+            airports=airports,
+            **kwargs,
+        ) or {"airports": ["ZUGY"]},
+    )
+    monkeypatch.setattr(
+        cli,
+        "dump_model",
+        lambda received_model, output: received.update(
+            dumped_model=received_model,
+            output=output,
+        ) or {"output": str(output)},
+    )
+
+    result = cli.main([
+        "refresh-database-procedures",
+        "--model", "output/frozen.json.gz",
+        "--airport", "ZUGY",
+        "--output", "output/refreshed.json.gz",
+        "--report", "diagnostics/refresh.json",
+        "--pdf-cache", "pdf-cache",
+    ])
+
+    assert result == 0
+    assert received["loaded"] == Path("output/frozen.json.gz")
+    assert received["model"] is model
+    assert received["airports"] == ["ZUGY"]
+    assert received["pdf_cache"] == Path("pdf-cache")
+    assert received["output"] == Path("output/refreshed.json.gz")
+    report = json.loads(
+        (tmp_path / "diagnostics" / "refresh.json").read_text(encoding="utf-8")
+    )
+    assert report["airports"] == ["ZUGY"]
+    assert Path(report["model"]["output"]) == Path("output/refreshed.json.gz")
+
+
 def test_build_command_loads_intermediate_model_and_skips_raw_requirement(
     tmp_path: Path,
     monkeypatch,
