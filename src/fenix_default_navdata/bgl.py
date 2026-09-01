@@ -615,15 +615,15 @@ def _runway_ilses(runway: Runway, ilses: list) -> list:
 
 
 def _append_ils(
-    runway_element: ET.Element,
+    airport_element: ET.Element,
     runway: Runway,
     ilses: list,
     *,
-    end: str,
+    end: str | None = None,
 ) -> None:
     for ils in sorted(ilses, key=lambda item: (item.ident, item.frequency_mhz)):
         heading = ils.localizer_course_magnetic
-        ils_element = ET.SubElement(runway_element, "Ils", _attrs(
+        ils_element = ET.SubElement(airport_element, "Ils", _attrs(
             lat=_float(ils.localizer_latitude),
             lon=_float(ils.localizer_longitude),
             alt=_feet(runway.elevation_ft),
@@ -2330,35 +2330,21 @@ def write_bglcomp_xml(
             ils for ils in model.ilses if ils.airport == airport.icao
         ]
         for runway in airport_runways:
-            runway_element = ET.SubElement(airport_element, "Runway", _attrs(
-                lat=_float(runway.latitude),
-                lon=_float(runway.longitude),
-                alt=_feet(runway.elevation_ft),
-                surface=_surface(runway.surface),
-                heading=_float(runway.true_heading, 3),
-                length=_feet(runway.length_ft),
-                width=_feet(runway.width_ft),
-                number=runway.number,
-                primaryDesignator=runway.primary_designator,
-                secondaryDesignator=runway.secondary_designator,
-                primaryTakeoff="TRUE",
-                primaryLanding="TRUE",
-                secondaryTakeoff="TRUE",
-                secondaryLanding="TRUE",
-            ))
+            # 424 supplies runway navigation geometry but no source-authorized
+            # visual markings or lighting. Re-emitting Runway replaces the
+            # simulator's visual runway, so keep the existing airport runway
+            # and add only airport-level navigation facilities.
             if runway.primary is not None:
                 _append_ils(
-                    runway_element,
+                    airport_element,
                     runway.primary,
                     _runway_ilses(runway.primary, airport_ilses),
-                    end="PRIMARY",
                 )
             if runway.secondary is not None:
                 _append_ils(
-                    runway_element,
+                    airport_element,
                     runway.secondary,
                     _runway_ilses(runway.secondary, airport_ilses),
-                    end="SECONDARY",
                 )
         terminal_points = sorted(
             (
@@ -2548,14 +2534,7 @@ def write_bglcomp_xml(
     return XmlProjection(
         path=output,
         airports=len(projected_airports),
-        runways=sum(
-            len(_physical_runways([
-                runway
-                for runway in projected_runways
-                if runway.airport_key == airport.key
-            ]))
-            for airport in projected_airports
-        ),
+        runways=0,
         waypoints=(
             enroute_waypoints
             + terminal_waypoint_count

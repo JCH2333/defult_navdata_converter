@@ -122,3 +122,8 @@ lock-inputs -> ingest-424 -> evidence-audit -> normalize-model
   3. 新增可复用 `refresh-database-procedures`：从指定机场的 424 数据库图刷新冻结模型的数据库程序段，不重跑或改写其他机场的 IAP/OCR 选择。r436 从 r394 仅刷新 ZUGY，替换 12 张图、106 个程序段为 111 个；`AVBO-1A/01R` 已验证为 `GY421 -> GY411 -> MASRO`，公共段独立。
   4. 新增相关测试，转换器 `542 passed`、checker `22 passed`。r436 的 `I02R/02R` 模型仍包含 `UU615` 主段、ILS `ICR` 与 02R 跑道。
   5. r436 的 Package Tool 对主包和机场包均返回 `1`，硬门禁拒绝复制临时 BGL，候选 `local_contract_verified=false`，未部署。保留式读取证明 r433 与 r436 的机场包均只登记 `1/10` BGL，`airport/runway/approach=0`，十个分区均 `Read past file end`；这不是本轮回归而是机场 BGL 编译表达的持续阻塞。Community 保持 r435 暂存。证据：`diagnostics/r436-zugy-database-procedure-refresh.json`、`diagnostics/r436-temp-airport-reader-failure/`、`diagnostics/r433-temp-airport-reader-failure/`。
+- **R437 跑道外观保留（代码完成，候选构建阻塞，2026-09-01）：**
+  1. 424 `RWY.csv`/`RWY_DIRECTION.csv` 只提供长度、宽度、材质、方向和位移，不含跑道灯光或标线；AIP 原始 PDF 未有已缓存的对应文本，当前 OCR 服务不可用，禁止虚构视觉字段。
+  2. SDK XSD 确认 `Markings`、`Lights`、`ApproachLights` 是 `Runway` 子对象，而当前 `DeleteAirport` 不删除跑道。参考包读取包含 454 个机场关联 ILS、无可解码 Runway 记录；ZBAA/ZUGY/ZUUU 的参考 ILS 均不绑定 `runway_end`。
+  3. 默认投影停止输出 `Runway`，保留 424 跑道仅作程序和 ILS 选择；ILS 改为 `Airport` 直属对象，省略可选 `end`。r437 XML 全局 `Runway=0`，ZUUU 保留 4 个直属 ILS，避免覆盖游戏/机场场景原有的跑道灯光和标线。
+  4. 回归 `542 passed`。r437 Package Tool 仍返回 `1`，保留式读取仍为 `1/10 BGL`、`airport/runway/approach=0`、十区 `Read past file end`，未解除既有机场 BGL 阻塞，未部署 Community。证据：`diagnostics/r437-reference-*-reader.sqlite`、`diagnostics/r437-temp-airport-reader-failure/`。

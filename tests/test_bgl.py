@@ -68,7 +68,7 @@ def test_bgl_xml_is_deterministic(tmp_path: Path):
     assert root.tag == "FSData"
     assert root.find("AiracCycle").attrib["cycleNumber"] == "08"
     assert root.find("Airport").attrib["magvar"] == "-9.1"
-    assert root.find("Airport/Runway").attrib["number"] == "03"
+    assert root.findall("Airport/Runway") == []
     assert root.find("Airport/DeleteAirport").attrib == {
         "deleteAllApproaches": "TRUE",
         "deleteAllDepartures": "TRUE",
@@ -450,8 +450,10 @@ def test_airport_projection_filters_prefix_and_emits_ils_and_procedure(tmp_path:
     )
     root = ET.parse(output).getroot()
     assert [airport.attrib["ident"] for airport in root.findall("Airport")] == ["ZBCF"]
-    assert root.find("Airport/Runway/Ils/GlideSlope") is not None
-    assert root.find("Airport/Runway/Ils/Dme") is not None
+    assert root.findall("Airport/Runway") == []
+    assert root.find("Airport/Ils/GlideSlope") is not None
+    assert root.find("Airport/Ils/Dme") is not None
+    assert "end" not in root.find("Airport/Ils").attrib
     leg_attributes = root.find(
         "Airport/Departure/RunwayTransitions/RunwayTransitionLegs/Leg"
     ).attrib
@@ -1457,7 +1459,9 @@ def test_global_designated_waypoint_fills_cross_airport_procedure_leg(
     assert leg.attrib["fixIdent"] == "P105"
 
 
-def test_reciprocal_runway_ends_become_one_physical_runway(tmp_path: Path):
+def test_reciprocal_runway_ends_select_airport_level_ils_without_replacing_runway(
+    tmp_path: Path,
+):
     model = NavModel(Path("source"))
     source = SourceRef("fixture", 1)
     model.airports["a"] = Airport(
@@ -1493,19 +1497,13 @@ def test_reciprocal_runway_ends_become_one_physical_runway(tmp_path: Path):
 
     root = ET.parse(output).getroot()
     runways = root.findall("Airport/Runway")
-    assert len(runways) == 1
-    assert projection.runways == 1
-    assert runways[0].attrib["number"] == "03"
-    assert runways[0].attrib["primaryDesignator"] == "L"
-    assert runways[0].attrib["secondaryDesignator"] == "R"
-    assert "designator" not in runways[0].attrib
-    assert 35.0 < float(runways[0].attrib["lat"]) < 35.02
-    assert 105.0 < float(runways[0].attrib["lon"]) < 105.02
-    assert runways[0].attrib["alt"] == "1010F"
+    assert runways == []
+    assert projection.runways == 0
     assert [
-        (ils.attrib["ident"], ils.attrib["end"])
-        for ils in runways[0].findall("Ils")
-    ] == [("IPRI", "PRIMARY"), ("ISEC", "SECONDARY")]
+        ils.attrib["ident"]
+        for ils in root.findall("Airport/Ils")
+    ] == ["IPRI", "ISEC"]
+    assert all("end" not in ils.attrib for ils in root.findall("Airport/Ils"))
 
 
 def test_root_terminal_waypoints_are_deduplicated_across_airports(tmp_path: Path):
